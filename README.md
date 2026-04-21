@@ -91,9 +91,53 @@ After each submission, it allows you to set additional properties in Notion, suc
 
 ---
 
+### 📚 NeetCode Enrichment
+
+Problem previews can now include NeetCode metadata when bundled data is available:
+
+- NeetCode article content
+- NeetCode hints
+- YouTube walkthrough link
+- Pattern and sheet badges like `NeetCode 150` and `Blind 75`
+
+This enrichment is additive to the existing preview and does not change the solve, test, or submit workflow.
+
+---
+
+### ⏰ Review Queue
+
+LeetNotion now includes a dedicated `Reviews` tree in the sidebar for problems that already have a Notion `Review Date`.
+
+- `Due` and `Upcoming` sections
+- `Preview Problem` and `Open Problem` actions
+- `Mark Reviewed` sets `Reviewed = true`
+- `Snooze` moves the review date forward and resets `Reviewed = false`
+
+---
+
 ### 📌 Full Template Update
 
 You can automatically add new problems and update information on all problems in your Notion template with a single command, keeping your tracker organized and up-to-date.
+
+---
+
+## NeetCode Data Sync
+
+NeetCode enrichment is generated from a local clone of the `neetcode-gh/leetcode` repository and bundled into `data/neetcode-enrichment.json`.
+
+Run the sync command from the extension repo root:
+
+```bash
+npm run sync:neetcode
+```
+
+By default the script reads from a sibling checkout at `../leetcode`. You can also pass a custom source path:
+
+```bash
+npm run sync:neetcode -- ../path-to-your-neetcode-clone
+```
+
+The sync is exact-match first and currently includes a very small alias map for known safe filename mismatches, which keeps the generated data easy to review and update when the NeetCode repo changes.
 
 ---
 

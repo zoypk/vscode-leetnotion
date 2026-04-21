@@ -60,6 +60,12 @@
                 "icon": "$(refresh)"
             },
             {
+                "command": "leetnotion.refreshReviews",
+                "title": "Refresh Reviews",
+                "category": "Leetnotion",
+                "icon": "$(refresh)"
+            },
+            {
                 "command": "leetnotion.pickOne",
                 "title": "Pick One",
                 "category": "Leetnotion"
@@ -72,6 +78,16 @@
             {
                 "command": "leetnotion.previewProblem",
                 "title": "Preview Problem",
+                "category": "Leetnotion"
+            },
+            {
+                "command": "leetnotion.previewReviewProblem",
+                "title": "Preview Problem",
+                "category": "Leetnotion"
+            },
+            {
+                "command": "leetnotion.openReviewProblem",
+                "title": "Open Problem",
                 "category": "Leetnotion"
             },
             {
@@ -178,6 +194,18 @@
                 "command": "leetnotion.addSubmissions",
                 "title": "Add existing submissions to template",
                 "category": "LeetNotion"
+            },
+            {
+                "command": "leetnotion.markReviewReviewed",
+                "title": "Mark Reviewed",
+                "category": "Leetnotion",
+                "icon": "$(check)"
+            },
+            {
+                "command": "leetnotion.snoozeReview",
+                "title": "Snooze",
+                "category": "Leetnotion",
+                "icon": "$(clock)"
             }
         ],
         "viewsContainers": {
@@ -194,6 +222,10 @@
                 {
                     "id": "leetnotionExplorer",
                     "name": "Problems"
+                },
+                {
+                    "id": "leetnotionReviews",
+                    "name": "Reviews"
                 }
             ]
         },
@@ -233,6 +265,11 @@
                     "command": "leetnotion.problems.sort",
                     "when": "view == leetnotionExplorer",
                     "group": "overflow@3"
+                },
+                {
+                    "command": "leetnotion.refreshReviews",
+                    "when": "view == leetnotionReviews",
+                    "group": "navigation@1"
                 }
             ],
             "view/item/context": [
@@ -285,6 +322,26 @@
                     "command": "leetnotion.searchContests",
                     "when": "view == leetnotionExplorer && viewItem == contests",
                     "group": "inline"
+                },
+                {
+                    "command": "leetnotion.previewReviewProblem",
+                    "when": "view == leetnotionReviews && viewItem == review-problem",
+                    "group": "leetnotion@1"
+                },
+                {
+                    "command": "leetnotion.openReviewProblem",
+                    "when": "view == leetnotionReviews && viewItem == review-problem",
+                    "group": "leetnotion@2"
+                },
+                {
+                    "command": "leetnotion.markReviewReviewed",
+                    "when": "view == leetnotionReviews && viewItem == review-problem",
+                    "group": "inline"
+                },
+                {
+                    "command": "leetnotion.snoozeReview",
+                    "when": "view == leetnotionReviews && viewItem == review-problem",
+                    "group": "inline"
                 }
             ],
             "commandPalette": [
@@ -306,6 +363,22 @@
                 },
                 {
                     "command": "leetnotion.removeFavorite",
+                    "when": "never"
+                },
+                {
+                    "command": "leetnotion.previewReviewProblem",
+                    "when": "never"
+                },
+                {
+                    "command": "leetnotion.openReviewProblem",
+                    "when": "never"
+                },
+                {
+                    "command": "leetnotion.markReviewReviewed",
+                    "when": "never"
+                },
+                {
+                    "command": "leetnotion.snoozeReview",
                     "when": "never"
                 }
             ],
@@ -815,6 +888,7 @@
         "compile": "node ./esbuild.js",
         "watch": "tsc -watch -p ./",
         "lint": "tslint --project tsconfig.json -e src/*.d.ts -t verbose",
+        "sync:neetcode": "tsc --module Node16 --moduleResolution Node16 --target ES2020 --esModuleInterop --skipLibCheck --outDir ./out ./scripts/sync-neetcode-data.ts && node ./out/sync-neetcode-data.js",
         "build": "vsce package",
         "vs-publish": "vsce publish"
     },
