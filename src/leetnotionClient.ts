@@ -13,6 +13,7 @@ import Bottleneck from "bottleneck";
 
 const QuestionsDatabaseKey = "Questions Database";
 const SubmissionsDatabaseKey = "Submissions Database";
+const noop = () => undefined;
 
 class LeetnotionClient {
     private notion: AdvancedNotionClient | undefined;
@@ -60,11 +61,11 @@ class LeetnotionClient {
         globalState.setSubmissionsDatabaseId(submissionsDatabaseId);
     }
 
-    public async updateTemplateInformation(callbackFn: () => void = () => { }) {
+    public async updateTemplateInformation(callbackFn: () => void = noop) {
         if (!this.isSignedIn) return;
         const questionsDatabaseId = globalState.getQuestionsDatabaseId();
         if (!questionsDatabaseId) return;
-        let pages: ProblemPageResponse[] = await this.notion?.getAllPages(questionsDatabaseId as string, callbackFn) as ProblemPageResponse[];
+        const pages: ProblemPageResponse[] = await this.notion?.getAllPages(questionsDatabaseId as string, callbackFn) as ProblemPageResponse[];
 
         const questionNumberPageIdMapping: Mapping = {}
         pages.filter(page => page.properties['Question Number'].number !== null)
@@ -283,7 +284,65 @@ class LeetnotionClient {
         return selectTags;
     }
 
-    public async addProblems(problems: LeetcodeProblem[], callbackFn: (response: ProblemPageResponse) => void = () => { }): Promise<ProblemPageResponse[]> {
+    public async getQuestionPages(callbackFn: () => void = noop): Promise<ProblemPageResponse[]> {
+        try {
+            if (!this.isSignedIn || !this.notion) {
+                throw new Error(`notion-integration-not-enabled`);
+            }
+            const databaseId = globalState.getQuestionsDatabaseId();
+            if (!databaseId) {
+                throw new Error(`questions-database-id-not-found`);
+            }
+            return await this.notion.getAllPages(databaseId, callbackFn) as ProblemPageResponse[];
+        } catch (error) {
+            throw new Error(`Failed to get question pages: ${error}`);
+        }
+    }
+
+    public async markQuestionReviewed(pageId: string): Promise<void> {
+        try {
+            if (!this.isSignedIn || !this.notion) {
+                throw new Error(`notion-integration-not-enabled`);
+            }
+
+            await this.notion.pages.update({
+                page_id: pageId,
+                properties: {
+                    Reviewed: {
+                        checkbox: true,
+                    },
+                },
+            });
+        } catch (error) {
+            throw new Error(`Failed to mark question as reviewed: ${error}`);
+        }
+    }
+
+    public async snoozeQuestionReview(pageId: string, reviewDate: string): Promise<void> {
+        try {
+            if (!this.isSignedIn || !this.notion) {
+                throw new Error(`notion-integration-not-enabled`);
+            }
+
+            await this.notion.pages.update({
+                page_id: pageId,
+                properties: {
+                    'Review Date': {
+                        date: {
+                            start: reviewDate,
+                        },
+                    },
+                    'Reviewed': {
+                        checkbox: false,
+                    },
+                },
+            });
+        } catch (error) {
+            throw new Error(`Failed to snooze question review: ${error}`);
+        }
+    }
+
+    public async addProblems(problems: LeetcodeProblem[], callbackFn: (response: ProblemPageResponse) => void = noop): Promise<ProblemPageResponse[]> {
         try {
             if (!this.isSignedIn || !this.notion) {
                 throw new Error(`notion-integration-not-enabled`);
@@ -299,7 +358,7 @@ class LeetnotionClient {
         }
     }
 
-    public async updateProblems(problems: LeetcodeProblem[], callbackFn: (response: ProblemPageResponse) => void = () => { }): Promise<ProblemPageResponse[]> {
+    public async updateProblems(problems: LeetcodeProblem[], callbackFn: (response: ProblemPageResponse) => void = noop): Promise<ProblemPageResponse[]> {
         try {
             if (!this.isSignedIn || !this.notion) {
                 throw new Error(`notion-integration-not-enabled`);
@@ -322,7 +381,7 @@ class LeetnotionClient {
         }
     }
 
-    public async getSubmissionPages(callbackFn: (response: QueryDatabaseResponse) => void = () => { }) {
+    public async getSubmissionPages(callbackFn: (response: QueryDatabaseResponse) => void = noop) {
         try {
             if (!this.isSignedIn || !this.notion) {
                 throw new Error(`notion-integration-not-enabled`);
@@ -337,7 +396,7 @@ class LeetnotionClient {
         }
     }
 
-    public async addSubmissions(submissions: LeetcodeSubmission[], callbackFn: () => void = () => { }) {
+    public async addSubmissions(submissions: LeetcodeSubmission[], callbackFn: () => void = noop) {
         try {
             if (!this.isSignedIn || !this.notion) {
                 throw new Error(`notion-integration-not-enabled`);

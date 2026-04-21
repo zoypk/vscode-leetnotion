@@ -3,6 +3,7 @@
 
 import * as fsExtra from 'fs-extra';
 import * as path from 'path';
+import { NeetCodeDataset } from '../integrations/neetcode/types';
 import { leetcodeClient } from '../leetCodeClient';
 import { globalState } from '../globalState';
 import { leetCodeChannel } from '../leetCodeChannel';
@@ -13,6 +14,7 @@ import axios from 'axios';
 const sheetsPath = '../../data/sheets.json';
 const companyTagsPath = '../../data/companyTags.json';
 const questionCompanyTagsPath = '../../data/questionCompanyTags.json';
+const neetCodeDatasetPath = '../../data/neetcode-enrichment.json';
 
 export function getSheets(): Sheets {
     const sheets = fsExtra.readJSONSync(path.join(__dirname, sheetsPath)) as Sheets;
@@ -26,6 +28,18 @@ export function getCompanyTags(): CompanyTags {
 
 export function getQuestionCompanyTags(): QuestionCompanyTags {
     return fsExtra.readJSONSync(path.join(__dirname, questionCompanyTagsPath)) as QuestionCompanyTags;
+}
+
+export function getNeetCodeDataset(): NeetCodeDataset {
+    try {
+        return fsExtra.readJSONSync(path.join(__dirname, neetCodeDatasetPath)) as NeetCodeDataset;
+    } catch (_error) {
+        return {
+            generatedAt: '',
+            sourceRepo: '',
+            problems: {},
+        };
+    }
 }
 
 export async function getContests(): Promise<Record<string, string[]>> {

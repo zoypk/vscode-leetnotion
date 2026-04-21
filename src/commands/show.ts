@@ -89,6 +89,10 @@ export async function showProblem(node?: LeetCodeNode): Promise<void> {
     await showProblemInternal(node);
 }
 
+export async function openProblem(problem: IProblem): Promise<void> {
+    await showProblemInternal(problem);
+}
+
 export async function searchProblem(): Promise<void> {
     if (!leetCodeManager.getUser()) {
         promptForSignIn();

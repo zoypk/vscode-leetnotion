@@ -3,10 +3,10 @@
 
 import { commands, ViewColumn } from "vscode";
 import { getLeetCodeEndpoint } from "../commands/plugin";
+import { neetCodeService } from "../integrations/neetcode/service";
 import { Category, Endpoint, IProblem } from "../shared";
 import { ILeetCodeWebviewOption, LeetCodeWebview } from "./LeetCodeWebview";
 import { markdownEngine } from "./markdownEngine";
-import * as _ from "lodash"
 import { explorerNodeManager } from "@/explorer/explorerNodeManager";
 
 class LeetCodePreviewProvider extends LeetCodeWebview {
@@ -68,6 +68,7 @@ class LeetCodePreviewProvider extends LeetCodeWebview {
                 </style>`,
         };
         const { title, url, category, difficulty, likes, dislikes, body } = this.description;
+        const neetCodeSection: string = this.getNeetCodeSection();
         const head: string = markdownEngine.render(`# [${title}](${url})`);
         let info: string;
         if(!this.node.rating) {
@@ -121,6 +122,7 @@ class LeetCodePreviewProvider extends LeetCodeWebview {
                 ${tags}
                 ${companies}
                 ${body}
+                ${neetCodeSection}
                 <hr />
                 ${links}
                 ${!this.sideMode ? button.element : ""}
@@ -197,6 +199,63 @@ class LeetCodePreviewProvider extends LeetCodeWebview {
             dislikes: dislikes.split(": ")[1].trim(),
             body: body.join("\n").replace(/<pre>[\r\n]*([^]+?)[\r\n]*<\/pre>/g, "<pre><code>$1</code></pre>"),
         };
+    }
+
+    private getNeetCodeSection(): string {
+        const problem = neetCodeService.getProblemMetadata(this.node);
+        if (!problem) {
+            return "";
+        }
+
+        const metadata: string[] = [];
+        if (problem.pattern) {
+            metadata.push(`<code>${problem.pattern}</code>`);
+        }
+        if (problem.neetcode150) {
+            metadata.push(`<code>NeetCode 150</code>`);
+        }
+        if (problem.blind75) {
+            metadata.push(`<code>Blind 75</code>`);
+        }
+
+        const links: string[] = [];
+        if (problem.problemUrl) {
+            links.push(`[Open on NeetCode](${problem.problemUrl})`);
+        }
+        if (problem.videoUrl) {
+            links.push(`[Watch Video](${problem.videoUrl})`);
+        }
+
+        const hasContent = metadata.length > 0 || links.length > 0 || Boolean(problem.hintMarkdown) || Boolean(problem.articleMarkdown);
+        if (!hasContent) {
+            return "";
+        }
+
+        const sections: string[] = ["<hr />", "<h2>NeetCode</h2>"];
+        if (metadata.length > 0) {
+            sections.push(`<p>${metadata.join(" ")}</p>`);
+        }
+        if (links.length > 0) {
+            sections.push(markdownEngine.render(links.join(" | ")));
+        }
+        if (problem.hintMarkdown) {
+            sections.push([
+                `<details>`,
+                `<summary><strong>Hints</strong></summary>`,
+                markdownEngine.render(problem.hintMarkdown),
+                `</details>`,
+            ].join("\n"));
+        }
+        if (problem.articleMarkdown) {
+            sections.push([
+                `<details>`,
+                `<summary><strong>Article</strong></summary>`,
+                markdownEngine.render(problem.articleMarkdown),
+                `</details>`,
+            ].join("\n"));
+        }
+
+        return sections.join("\n");
     }
 
     private getTagLink(tag: string): string {

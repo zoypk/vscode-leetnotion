@@ -32,6 +32,8 @@ interface EnrichedProblem {
     pattern?: string;
     difficulty?: string;
     problemUrl?: string;
+    solutionSlug?: string;
+    solutionUrl?: string;
     videoUrl?: string;
     articleMarkdown?: string;
     hintMarkdown?: string;
@@ -107,6 +109,7 @@ for (const problem of siteData) {
 
     const articleMarkdown = articleMatch.slug ? readMarkdown(path.join(articlesPath, `${articleMatch.slug}.md`)) : undefined;
     const hintMarkdown = hintMatch.slug ? readMarkdown(path.join(hintsPath, `${hintMatch.slug}.md`)) : undefined;
+    const solutionSlug = articleMatch.slug || hintMatch.slug || titleSlug;
     const videoUrl = problem.video ? `https://www.youtube.com/watch?v=${problem.video}` : undefined;
 
     if (articleMarkdown) {
@@ -133,6 +136,8 @@ for (const problem of siteData) {
         pattern: problem.pattern || undefined,
         difficulty: problem.difficulty || undefined,
         problemUrl: titleSlug ? `https://neetcode.io/problems/${titleSlug}` : undefined,
+        solutionSlug,
+        solutionUrl: buildSolutionUrl(solutionSlug, Boolean(problem.neetcode150), Boolean(problem.blind75)),
         videoUrl,
         articleMarkdown,
         hintMarkdown,
@@ -227,6 +232,19 @@ function slugify(value?: string): string {
 
 function readMarkdown(filePath: string): string {
     return fs.readFileSync(filePath, "utf8");
+}
+
+function buildSolutionUrl(solutionSlug: string | undefined, neetcode150: boolean, blind75: boolean): string | undefined {
+    if (!solutionSlug) {
+        return undefined;
+    }
+
+    const list = neetcode150 ? "neetcode150" : blind75 ? "blind75" : undefined;
+    if (!list) {
+        return `https://neetcode.io/problems/${solutionSlug}/question`;
+    }
+
+    return `https://neetcode.io/problems/${solutionSlug}/question?list=${list}`;
 }
 
 function unique<T>(values: T[]): T[] {

@@ -7,6 +7,7 @@ import * as os from "os";
 import * as path from "path";
 import { ExtensionContext } from "vscode";
 import { ConfigurationChangeEvent, Disposable, MessageItem, window, workspace, WorkspaceConfiguration } from "vscode";
+import { neetCodeService } from "./integrations/neetcode/service";
 import { Endpoint, IProblem, leetcodeHasInited, supportedPlugins } from "./shared";
 import { executeCommand, executeCommandWithProgress } from "./utils/cpUtils";
 import { DialogOptions, openUrl } from "./utils/uiUtils";
@@ -113,7 +114,8 @@ class LeetCodeExecutor implements Disposable {
             const codeTemplate: string = await this.executeCommandWithProgressEx("Fetching problem data...", this.nodeExecutable, cmd);
             const codeHeader: string = getCodeHeader(language);
             const codeFooter: string = getCodeFooter(language);
-            await fse.writeFile(filePath, codeHeader + codeTemplate + codeFooter);
+            const hydratedTemplate: string = this.injectNeetCodeHeader(codeTemplate, problemNode, language);
+            await fse.writeFile(filePath, codeHeader + hydratedTemplate + codeFooter);
         }
     }
 
@@ -146,6 +148,69 @@ class LeetCodeExecutor implements Disposable {
             cmd.push("-T");
         }
         return await this.executeCommandWithProgressEx("Fetching problem description...", this.nodeExecutable, cmd);
+    }
+
+    private injectNeetCodeHeader(template: string, problemNode: IProblem, language: string): string {
+        const neetCodeHeader = this.getNeetCodeHeader(problemNode, language);
+        if (!neetCodeHeader) {
+            return template;
+        }
+
+        const codeStartMarker = "@lc code=start";
+        const markerIndex = template.indexOf(codeStartMarker);
+        if (markerIndex < 0) {
+            return neetCodeHeader + template;
+        }
+
+        const markerLineStart = template.lastIndexOf("\n", markerIndex);
+        const insertAt = markerLineStart >= 0 ? markerLineStart + 1 : 0;
+        return template.slice(0, insertAt) + neetCodeHeader + template.slice(insertAt);
+    }
+
+    private getNeetCodeHeader(problemNode: IProblem, language: string): string {
+        const metadata = neetCodeService.getProblemMetadata(problemNode);
+        if (!metadata || (!metadata.solutionUrl && !metadata.videoUrl)) {
+            return "";
+        }
+
+        const commentPrefix = this.getCommentPrefix(language);
+        if (!commentPrefix) {
+            return "";
+        }
+
+        const lines = [`${commentPrefix} NeetCode`];
+        if (metadata.solutionUrl) {
+            lines.push(`${commentPrefix} Solution: ${metadata.solutionUrl}`);
+        }
+        if (metadata.videoUrl) {
+            lines.push(`${commentPrefix} Video: ${metadata.videoUrl}`);
+        }
+        lines.push("");
+        return lines.join(os.EOL);
+    }
+
+    private getCommentPrefix(language: string): string {
+        const lineCommentPrefixes: Record<string, string> = {
+            bash: "#",
+            c: "//",
+            cpp: "//",
+            csharp: "//",
+            golang: "//",
+            java: "//",
+            javascript: "//",
+            kotlin: "//",
+            mysql: "--",
+            php: "//",
+            python: "#",
+            python3: "#",
+            ruby: "#",
+            rust: "//",
+            scala: "//",
+            swift: "//",
+            typescript: "//",
+        };
+
+        return lineCommentPrefixes[language] ?? "";
     }
 
     public async submitSolution(filePath: string): Promise<string> {

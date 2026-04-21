@@ -17,6 +17,9 @@ import { leetCodeTreeItemDecorationProvider } from "./explorer/LeetCodeTreeItemD
 import { leetCodeChannel } from "./leetCodeChannel";
 import { leetCodeExecutor } from "./leetCodeExecutor";
 import { leetCodeManager } from "./leetCodeManager";
+import * as reviewCommands from "./reviews/commands";
+import { ReviewNode } from "./reviews/reviewNode";
+import { reviewTreeDataProvider } from "./reviews/reviewTreeDataProvider";
 import { leetCodeStatusBarController } from "./statusbar/leetCodeStatusBarController";
 import { DialogType, promptForOpenOutputChannel } from "./utils/uiUtils";
 import { leetCodePreviewProvider } from "./webview/leetCodePreviewProvider";
@@ -35,6 +38,7 @@ import { UserStatus } from "./shared";
 
 let intervals: NodeJS.Timeout[] = [];
 export let leetcodeTreeView: vscode.TreeView<LeetCodeNode> | undefined;
+let reviewTreeView: vscode.TreeView<ReviewNode> | undefined;
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
     try {
@@ -47,10 +51,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
             leetCodeTreeDataProvider.refresh();
             leetcodeClient.initialize();
 
-            const status = leetCodeManager.getStatus();
-            if (status === UserStatus.SignedIn && intervals.length === 0) {
+            const nextStatus = leetCodeManager.getStatus();
+            if (nextStatus === UserStatus.SignedIn && intervals.length === 0) {
                 startRecurringTasks();
-            } else if (status === UserStatus.SignedOut) {
+            } else if (nextStatus === UserStatus.SignedOut) {
                 intervals = clearIntervals(intervals);
             }
         });
@@ -67,10 +71,14 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
         leetcodeClient.setTitleSlugQuestionNumberMapping();
         if (globalState.getNotionIntegrationStatus() === "pending") {
-            leetnotionManager.updateNotionInfo().then(() => globalState.setNotionIntegrationStatus("done"));
+            leetnotionManager.updateNotionInfo().then(async () => {
+                globalState.setNotionIntegrationStatus("done");
+                await reviewTreeDataProvider.refresh();
+            });
         }
 
         leetcodeTreeView = vscode.window.createTreeView("leetnotionExplorer", { treeDataProvider: leetCodeTreeDataProvider, showCollapseAll: true });
+        reviewTreeView = vscode.window.createTreeView("leetnotionReviews", { treeDataProvider: reviewTreeDataProvider, showCollapseAll: true });
 
         context.subscriptions.push(
             leetCodeStatusBarController,
@@ -84,11 +92,16 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
             explorerNodeManager,
             vscode.window.registerFileDecorationProvider(leetCodeTreeItemDecorationProvider),
             leetcodeTreeView,
+            reviewTreeView,
             vscode.commands.registerCommand("leetnotion.deleteCache", () => cache.deleteCache()),
             vscode.commands.registerCommand("leetnotion.toggleLeetCodeCn", () => plugin.switchEndpoint()),
             vscode.commands.registerCommand("leetnotion.signin", () => leetCodeManager.signIn()),
             vscode.commands.registerCommand("leetnotion.signout", () => leetCodeManager.signOut()),
             vscode.commands.registerCommand("leetnotion.previewProblem", (node: vscode.Uri) => show.previewProblem(node)),
+            vscode.commands.registerCommand("leetnotion.previewReviewProblem", (review) => reviewCommands.previewReviewProblem(review)),
+            vscode.commands.registerCommand("leetnotion.openReviewProblem", (review) => reviewCommands.openReviewProblem(review)),
+            vscode.commands.registerCommand("leetnotion.markReviewReviewed", (review) => reviewCommands.markReviewReviewed(review)),
+            vscode.commands.registerCommand("leetnotion.snoozeReview", (review) => reviewCommands.snoozeReview(review)),
             vscode.commands.registerCommand("leetnotion.showProblem", (node: LeetCodeNode) => show.showProblem(node)),
             vscode.commands.registerCommand("leetnotion.pickOne", () => show.pickOne()),
             vscode.commands.registerCommand("leetnotion.searchProblem", () => show.searchProblem()),
@@ -99,6 +112,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
             vscode.commands.registerCommand("leetnotion.searchList", () => show.searchLists()),
             vscode.commands.registerCommand("leetnotion.showSolution", (input: LeetCodeNode | vscode.Uri) => show.showSolution(input)),
             vscode.commands.registerCommand("leetnotion.refreshExplorer", () => leetCodeTreeDataProvider.refresh()),
+            vscode.commands.registerCommand("leetnotion.refreshReviews", () => reviewTreeDataProvider.refresh()),
             vscode.commands.registerCommand("leetnotion.testSolution", (uri?: vscode.Uri) => {
                 TrackData.report({
                     event_key: `vscode_runCode`,
@@ -123,9 +137,18 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
             vscode.commands.registerCommand("leetnotion.addFavorite", (node: LeetCodeNode) => star.addFavorite(node)),
             vscode.commands.registerCommand("leetnotion.removeFavorite", (node: LeetCodeNode) => star.removeFavorite(node)),
             vscode.commands.registerCommand("leetnotion.problems.sort", () => plugin.switchSortingStrategy()),
-            vscode.commands.registerCommand("leetnotion.clearAllData", () => leetnotionManager.clearAllData()),
-            vscode.commands.registerCommand("leetnotion.updateTemplateInfo", () => leetnotionManager.updateNotionInfo()),
-            vscode.commands.registerCommand("leetnotion.integrateNotion", () => leetnotionManager.enableNotionIntegration()),
+            vscode.commands.registerCommand("leetnotion.clearAllData", async () => {
+                await leetnotionManager.clearAllData();
+                await reviewTreeDataProvider.refresh();
+            }),
+            vscode.commands.registerCommand("leetnotion.updateTemplateInfo", async () => {
+                await leetnotionManager.updateNotionInfo();
+                await reviewTreeDataProvider.refresh();
+            }),
+            vscode.commands.registerCommand("leetnotion.integrateNotion", async () => {
+                await leetnotionManager.enableNotionIntegration();
+                await reviewTreeDataProvider.refresh();
+            }),
             vscode.commands.registerCommand("leetnotion.updateTemplate", () => templateUpdater.updateTemplate()),
             vscode.commands.registerCommand("leetnotion.addSubmissions", () => leetnotionManager.uploadSubmissions()),
             {
