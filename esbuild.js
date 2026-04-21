@@ -21,7 +21,7 @@ const webviewConfig = {
     ...baseConfig,
     target: "es2020",
     format: "esm",
-    entryPoints: ["./src/webview/vscode-components.ts"],
+    entryPoints: ["./src/webview/vscode-components.mts"],
     outfile: "./public/scripts/vscode-components.js",
 };
 
