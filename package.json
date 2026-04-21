@@ -66,6 +66,18 @@
                 "icon": "$(refresh)"
             },
             {
+                "command": "leetnotion.refreshHome",
+                "title": "Refresh Home",
+                "category": "Leetnotion",
+                "icon": "$(refresh)"
+            },
+            {
+                "command": "leetnotion.lookupProfile",
+                "title": "Lookup Profile",
+                "category": "Leetnotion",
+                "icon": "$(search)"
+            },
+            {
                 "command": "leetnotion.pickOne",
                 "title": "Pick One",
                 "category": "Leetnotion"
@@ -89,6 +101,18 @@
                 "command": "leetnotion.openReviewProblem",
                 "title": "Open Problem",
                 "category": "Leetnotion"
+            },
+            {
+                "command": "leetnotion.addToReview",
+                "title": "Add to Review",
+                "category": "Leetnotion",
+                "icon": "$(calendar)"
+            },
+            {
+                "command": "leetnotion.startReviewSession",
+                "title": "Start Review Session",
+                "category": "Leetnotion",
+                "icon": "$(play)"
             },
             {
                 "command": "leetnotion.searchProblem",
@@ -197,7 +221,7 @@
             },
             {
                 "command": "leetnotion.markReviewReviewed",
-                "title": "Mark Reviewed",
+                "title": "Review Again",
                 "category": "Leetnotion",
                 "icon": "$(check)"
             },
@@ -226,11 +250,26 @@
                 {
                     "id": "leetnotionReviews",
                     "name": "Reviews"
+                },
+                {
+                    "id": "leetnotionHome",
+                    "name": "Home",
+                    "type": "webview"
                 }
             ]
         },
         "menus": {
             "view/title": [
+                {
+                    "command": "leetnotion.lookupProfile",
+                    "when": "view == leetnotionHome",
+                    "group": "navigation@0"
+                },
+                {
+                    "command": "leetnotion.refreshHome",
+                    "when": "view == leetnotionHome",
+                    "group": "navigation@1"
+                },
                 {
                     "command": "leetnotion.toggleLeetCodeCn",
                     "when": "view == leetnotionExplorer",
@@ -267,6 +306,11 @@
                     "group": "overflow@3"
                 },
                 {
+                    "command": "leetnotion.startReviewSession",
+                    "when": "view == leetnotionReviews",
+                    "group": "navigation@0"
+                },
+                {
                     "command": "leetnotion.refreshReviews",
                     "when": "view == leetnotionReviews",
                     "group": "navigation@1"
@@ -292,6 +336,11 @@
                     "command": "leetnotion.addFavorite",
                     "when": "view == leetnotionExplorer && viewItem == problem",
                     "group": "inline"
+                },
+                {
+                    "command": "leetnotion.addToReview",
+                    "when": "view == leetnotionExplorer && viewItem =~ /problem*/",
+                    "group": "inline@2"
                 },
                 {
                     "command": "leetnotion.removeFavorite",
@@ -366,6 +415,10 @@
                     "when": "never"
                 },
                 {
+                    "command": "leetnotion.addToReview",
+                    "when": "never"
+                },
+                {
                     "command": "leetnotion.previewReviewProblem",
                     "when": "never"
                 },
@@ -392,6 +445,11 @@
                     "command": "leetnotion.submitSolution",
                     "when": "explorerResourceIsFolder == false",
                     "group": "leetnotion@2"
+                },
+                {
+                    "command": "leetnotion.addToReview",
+                    "when": "explorerResourceIsFolder == false",
+                    "group": "leetnotion@3"
                 }
             ],
             "editor/context": [
@@ -409,12 +467,16 @@
                     "group": "leetnotion@2"
                 },
                 {
-                    "command": "leetnotion.showSolution",
+                    "command": "leetnotion.addToReview",
                     "group": "leetnotion@3"
                 },
                 {
-                    "command": "leetnotion.previewProblem",
+                    "command": "leetnotion.showSolution",
                     "group": "leetnotion@4"
+                },
+                {
+                    "command": "leetnotion.previewProblem",
+                    "group": "leetnotion@5"
                 }
             ]
         },
@@ -893,28 +955,28 @@
         "vs-publish": "vsce publish"
     },
     "devDependencies": {
-        "@types/fs-extra": "^9.0.11",
-        "@types/lodash": "^4.14.170",
-        "@types/markdown-it": "0.0.7",
-        "@types/mocha": "^2.2.42",
+        "@types/fs-extra": "^11.0.4",
+        "@types/lodash": "^4.17.24",
+        "@types/markdown-it": "^14.1.2",
+        "@types/mocha": "^10.0.10",
         "@types/node": "^14.14.33",
-        "@types/require-from-string": "^1.2.0",
+        "@types/require-from-string": "^1.2.3",
         "@types/vscode": "1.57.0",
         "tslint": "^6.1.3",
-        "typescript": "^5.6.3"
+        "typescript": "^5.9.3"
     },
     "dependencies": {
-        "@leetnotion/leetcode-api": "^1.10.0",
+        "@leetnotion/leetcode-api": "^3.0.0",
         "@leetnotion/notion-api": "^0.0.2",
         "@vscode/webview-ui-toolkit": "^1.4.0",
-        "axios": "^1.6.8",
+        "axios": "^1.15.1",
         "bottleneck": "^2.19.5",
-        "esbuild": "^0.24.0",
-        "fs-extra": "^10.0.0",
-        "highlight.js": "^10.7.2",
-        "lodash": "^4.17.21",
-        "markdown-it": "^8.4.2",
-        "mixpanel": "^0.18.1",
+        "esbuild": "^0.28.0",
+        "fs-extra": "^11.3.4",
+        "highlight.js": "^11.11.1",
+        "lodash": "^4.18.1",
+        "markdown-it": "^14.1.1",
+        "mixpanel": "^0.21.0",
         "require-from-string": "^2.0.2",
         "unescape-js": "^1.1.4",
         "vsc-leetcode-cli": "2.8.1"

@@ -1,7 +1,7 @@
 // Copyright (c) leetnotion. All rights reserved.
 // Licensed under the MIT license.
 
-import { Credential, LeetCodeAdvanced } from "@leetnotion/leetcode-api";
+import { Credential, LeetCodeAdvanced, type UserContestInfo, type UserProfile, type UserSubmission } from "@leetnotion/leetcode-api";
 import { globalState } from "./globalState";
 import { extractCookie } from "./utils/toolUtils";
 import { DialogType, promptForOpenOutputChannel } from "./utils/uiUtils";
@@ -86,15 +86,27 @@ class LeetcodeClient {
         return await this.leetcode.recentSubmission();
     }
 
+    public async getUserProfile(username: string): Promise<UserProfile> {
+        return await this.leetcode.user(username);
+    }
+
+    public async getUserContestInfo(username: string): Promise<UserContestInfo> {
+        return await this.leetcode.user_contest_info(username);
+    }
+
+    public async getRecentUserSubmissions(username: string, limit: number = 20): Promise<UserSubmission[]> {
+        return await this.leetcode.recent_user_submissions(username, limit);
+    }
+
     public async getLeetcodeProblems(progressCallback: (problems: LeetcodeProblem[]) => void = () => { }): Promise<LeetcodeProblem[]> {
         try {
             if (!this.isSignedIn) throw new Error(`not-signed-in-to-leetcode`);
-            const problems = await this.leetcode.getLeetcodeProblems(500, progressCallback);
+            const problems = await this.leetcode.getLeetcodeProblems({ limit: 500, callbackFn: progressCallback });
             const problemTypes = await this.leetcode.getProblemTypes();
             const typedProblems = problems.map(problem => ({
                 ...problem,
-                type: problemTypes[problem.questionFrontendId]
-            }))
+                type: problemTypes[problem.questionFrontendId] ? [problemTypes[problem.questionFrontendId]] : [],
+            }));
             return typedProblems;
         } catch (error) {
             throw new Error(`Error getting leetcode problems: ${error}`);

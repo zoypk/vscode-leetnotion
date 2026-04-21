@@ -24,6 +24,11 @@ interface MarkdownMatch {
     fromAlias: boolean;
 }
 
+interface FallbackCandidate {
+    slug: string;
+    distance: number;
+}
+
 interface EnrichedProblem {
     questionId: string;
     title: string;
@@ -53,6 +58,8 @@ const CONTENT_ALIASES: Record<string, ContentAlias> = {
         hint: "two-integer-sum",
     },
 };
+
+const SLUG_STOP_WORDS = new Set(["a", "an", "and", "for", "from", "in", "of", "the", "to"]);
 
 const extensionRoot = process.cwd();
 const sourceRoot = path.resolve(extensionRoot, process.argv[2] || "../leetcode");
@@ -196,7 +203,72 @@ function resolveMarkdownMatch(problem: SiteProblem, questionId: string, knownFil
         }
     }
 
+    const fallbackSlug = resolveFallbackMarkdownSlug(candidates, knownFiles);
+    if (fallbackSlug) {
+        return { slug: fallbackSlug, fromAlias: false };
+    }
+
     return { slug: undefined, fromAlias: false };
+}
+
+function resolveFallbackMarkdownSlug(candidates: string[], knownFiles: Set<string>): string | undefined {
+    const matches: FallbackCandidate[] = [];
+
+    for (const knownFile of knownFiles) {
+        const distances = candidates
+            .map((candidate) => getFallbackSlugDistance(candidate, knownFile))
+            .filter((distance): distance is number => distance !== undefined);
+
+        if (distances.length === 0) {
+            continue;
+        }
+
+        matches.push({
+            slug: knownFile,
+            distance: Math.min(...distances),
+        });
+    }
+
+    if (matches.length === 0) {
+        return undefined;
+    }
+
+    matches.sort((left, right) => left.distance - right.distance || left.slug.localeCompare(right.slug));
+    if (matches.length > 1 && matches[0].distance === matches[1].distance) {
+        return undefined;
+    }
+
+    return matches[0].slug;
+}
+
+function getFallbackSlugDistance(left: string, right: string): number | undefined {
+    const leftTokens = tokenizeSlug(left);
+    const rightTokens = tokenizeSlug(right);
+    if (leftTokens.length === 0 || rightTokens.length === 0) {
+        return undefined;
+    }
+
+    const leftSet = new Set(leftTokens);
+    const rightSet = new Set(rightTokens);
+    const sharedCount = leftTokens.filter((token) => rightSet.has(token)).length;
+    if (sharedCount < 2) {
+        return undefined;
+    }
+
+    const leftContainsRight = rightTokens.every((token) => leftSet.has(token));
+    const rightContainsLeft = leftTokens.every((token) => rightSet.has(token));
+    if (!leftContainsRight && !rightContainsLeft) {
+        return undefined;
+    }
+
+    return Math.abs(leftTokens.length - rightTokens.length);
+}
+
+function tokenizeSlug(value: string): string[] {
+    return value
+        .split("-")
+        .map((token) => token.trim())
+        .filter((token) => token.length > 0 && !SLUG_STOP_WORDS.has(token));
 }
 
 function extractQuestionId(problemCode?: string): string | undefined {

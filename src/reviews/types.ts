@@ -6,7 +6,11 @@ export interface ReviewItem {
     url: string;
     reviewDate: string;
     reviewed: boolean;
+    status: ReviewStatus;
+    overdueDays: number;
 }
+
+export type ReviewStatus = "overdue" | "due-today" | "upcoming";
 
 export enum ReviewSectionId {
     Due = "due",
@@ -18,4 +22,5 @@ export interface ReviewSection {
     label: string;
     emptyLabel: string;
     items: ReviewItem[];
+    overdueCount: number;
 }

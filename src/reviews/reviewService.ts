@@ -2,7 +2,7 @@ import { globalState } from "../globalState";
 import { leetnotionClient } from "../leetnotionClient";
 import { ProblemPageResponse } from "../types";
 import { hasNotionIntegrationEnabled } from "../utils/settingUtils";
-import { ReviewItem, ReviewSection, ReviewSectionId } from "./types";
+import { ReviewItem, ReviewSection, ReviewSectionId, ReviewStatus } from "./types";
 
 class ReviewService {
     public isConfigured(): boolean {
@@ -12,21 +12,29 @@ class ReviewService {
     }
 
     public async getSections(): Promise<ReviewSection[]> {
+        return (await this.getReviewData()).sections;
+    }
+
+    public async getDueItems(): Promise<ReviewItem[]> {
+        return (await this.getReviewData()).dueItems;
+    }
+
+    private async getReviewData(): Promise<{ dueItems: ReviewItem[]; sections: ReviewSection[] }> {
         const pages = await leetnotionClient.getQuestionPages();
         const dueItems: ReviewItem[] = [];
         const upcomingItems: ReviewItem[] = [];
         const today = this.formatDate(new Date());
 
         for (const page of pages) {
-            const review = this.toReviewItem(page);
-            if (!review || review.reviewed) {
+            const review = this.toReviewItem(page, today);
+            if (!review || this.isCompletedUntilFuture(review, today)) {
                 continue;
             }
 
-            if (review.reviewDate <= today) {
-                dueItems.push(review);
-            } else {
+            if (review.status === "upcoming") {
                 upcomingItems.push(review);
+            } else {
+                dueItems.push(review);
             }
         }
 
@@ -41,29 +49,40 @@ class ReviewService {
         dueItems.sort(sortByDate);
         upcomingItems.sort(sortByDate);
 
-        return [
-            {
-                id: ReviewSectionId.Due,
-                label: "Due",
-                emptyLabel: "No due reviews",
-                items: dueItems,
-            },
-            {
-                id: ReviewSectionId.Upcoming,
-                label: "Upcoming",
-                emptyLabel: "No upcoming reviews",
-                items: upcomingItems,
-            },
-        ];
+        return {
+            dueItems,
+            sections: [
+                {
+                    id: ReviewSectionId.Due,
+                    label: "Due",
+                    emptyLabel: "No due reviews",
+                    items: dueItems,
+                    overdueCount: dueItems.filter(review => review.status === "overdue").length,
+                },
+                {
+                    id: ReviewSectionId.Upcoming,
+                    label: "Upcoming",
+                    emptyLabel: "No upcoming reviews",
+                    items: upcomingItems,
+                    overdueCount: 0,
+                },
+            ],
+        };
     }
 
-    private toReviewItem(page: ProblemPageResponse): ReviewItem | undefined {
+    private isCompletedUntilFuture(review: ReviewItem, today: string): boolean {
+        return review.reviewed && review.reviewDate > today;
+    }
+
+    private toReviewItem(page: ProblemPageResponse, today: string): ReviewItem | undefined {
         const questionNumber = page.properties["Question Number"].number;
         const reviewDate = page.properties["Review Date"].date?.start;
         const url = page.properties.URL.url;
         if (questionNumber === null || !reviewDate || !url) {
             return undefined;
         }
+
+        const status = this.getStatus(reviewDate, today);
 
         return {
             pageId: page.id,
@@ -73,7 +92,31 @@ class ReviewService {
             url,
             reviewDate,
             reviewed: page.properties.Reviewed.checkbox,
+            status,
+            overdueDays: status === "overdue" ? this.getDayDifference(reviewDate, today) : 0,
         };
+    }
+
+    private getStatus(reviewDate: string, today: string): ReviewStatus {
+        if (reviewDate < today) {
+            return "overdue";
+        }
+
+        if (reviewDate === today) {
+            return "due-today";
+        }
+
+        return "upcoming";
+    }
+
+    private getDayDifference(startDate: string, endDate: string): number {
+        const millisecondsPerDay = 24 * 60 * 60 * 1000;
+        return Math.round((this.parseDate(endDate).getTime() - this.parseDate(startDate).getTime()) / millisecondsPerDay);
+    }
+
+    private parseDate(value: string): Date {
+        const [year, month, day] = value.split("-").map(Number);
+        return new Date(year, month - 1, day);
     }
 
     private formatDate(date: Date): string {

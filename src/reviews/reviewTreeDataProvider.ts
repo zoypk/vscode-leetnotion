@@ -43,7 +43,7 @@ export class ReviewTreeDataProvider implements vscode.TreeDataProvider<ReviewNod
                 break;
             case "problem":
                 item.contextValue = "review-problem";
-                item.iconPath = new vscode.ThemeIcon(element.sectionId === ReviewSectionId.Due ? "warning" : "calendar");
+                item.iconPath = new vscode.ThemeIcon(this.getProblemIcon(element));
                 break;
             default:
                 item.contextValue = "review-message";
@@ -99,8 +99,8 @@ export class ReviewTreeDataProvider implements vscode.TreeDataProvider<ReviewNod
                     section.label,
                     "section",
                     vscode.TreeItemCollapsibleState.Expanded,
-                    `${section.items.length}`,
-                    `${section.items.length} review${section.items.length === 1 ? "" : "s"}`,
+                    this.getSectionDescription(section),
+                    this.getSectionTooltip(section),
                     undefined,
                     section.id,
                 ));
@@ -129,8 +129,12 @@ export class ReviewTreeDataProvider implements vscode.TreeDataProvider<ReviewNod
             `[${review.questionNumber}] ${review.name}`,
             "problem",
             vscode.TreeItemCollapsibleState.None,
-            review.reviewDate,
-            [`Difficulty: ${review.difficulty || "Unknown"}`, `Review Date: ${review.reviewDate}`].join("\n"),
+            this.getProblemDescription(review),
+            [
+                `Difficulty: ${review.difficulty || "Unknown"}`,
+                `Review Date: ${review.reviewDate}`,
+                `Status: ${this.getProblemStatusLabel(review)}`,
+            ].join("\n"),
             review,
             sectionGroup.id,
             {
@@ -139,6 +143,62 @@ export class ReviewTreeDataProvider implements vscode.TreeDataProvider<ReviewNod
                 arguments: [review],
             },
         ));
+    }
+
+    private getProblemIcon(element: ReviewNode): string {
+        if (element.review?.status === "overdue") {
+            return "warning";
+        }
+
+        if (element.review?.status === "due-today") {
+            return "history";
+        }
+
+        return "calendar";
+    }
+
+    private getSectionDescription(section: ReviewSection): string {
+        if (section.id === ReviewSectionId.Due && section.overdueCount > 0) {
+            return `${section.items.length} (${section.overdueCount} overdue)`;
+        }
+
+        return `${section.items.length}`;
+    }
+
+    private getSectionTooltip(section: ReviewSection): string {
+        if (section.id === ReviewSectionId.Due) {
+            return `${section.items.length} due review${section.items.length === 1 ? "" : "s"}${section.overdueCount > 0 ? `\n${section.overdueCount} overdue` : ""}`;
+        }
+
+        return `${section.items.length} upcoming review${section.items.length === 1 ? "" : "s"}`;
+    }
+
+    private getProblemDescription(review: ReviewNode["review"]): string {
+        if (!review) {
+            return "";
+        }
+
+        if (review.status === "overdue") {
+            return `${review.overdueDays}d overdue`;
+        }
+
+        if (review.status === "due-today") {
+            return "Today";
+        }
+
+        return review.reviewDate;
+    }
+
+    private getProblemStatusLabel(review: NonNullable<ReviewNode["review"]>): string {
+        if (review.status === "overdue") {
+            return `Overdue by ${review.overdueDays} day${review.overdueDays === 1 ? "" : "s"}`;
+        }
+
+        if (review.status === "due-today") {
+            return "Due today";
+        }
+
+        return `Upcoming on ${review.reviewDate}`;
     }
 }
 

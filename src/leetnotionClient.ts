@@ -78,11 +78,12 @@ class LeetnotionClient {
     }
 
     public getPageIdOfQuestion(questionNumber: string): string | null {
+        const normalizedQuestionNumber = this.normalizeQuestionNumber(questionNumber);
         const mapping: Mapping | undefined = globalState.getQuestionNumberPageIdMapping();
-        if (!mapping || !mapping[questionNumber]) {
+        if (!mapping || !mapping[normalizedQuestionNumber]) {
             return null;
         }
-        return mapping[questionNumber];
+        return mapping[normalizedQuestionNumber];
     }
 
     public async submitSolution(questionNumber: string) {
@@ -299,23 +300,78 @@ class LeetnotionClient {
         }
     }
 
-    public async markQuestionReviewed(pageId: string): Promise<void> {
+    public async markQuestionReviewed(pageId: string, reviewDate?: string): Promise<void> {
         try {
             if (!this.isSignedIn || !this.notion) {
                 throw new Error(`notion-integration-not-enabled`);
             }
 
+            const properties: UpdatePageProperties = {
+                Reviewed: {
+                    checkbox: true,
+                },
+            };
+
+            if (reviewDate) {
+                properties['Review Date'] = {
+                    date: {
+                        start: reviewDate,
+                    },
+                };
+            }
+
             await this.notion.pages.update({
                 page_id: pageId,
-                properties: {
-                    Reviewed: {
-                        checkbox: true,
-                    },
-                },
+                properties,
             });
         } catch (error) {
             throw new Error(`Failed to mark question as reviewed: ${error}`);
         }
+    }
+
+    public async scheduleQuestionReview(questionNumber: string, reviewDate: string): Promise<void> {
+        try {
+            if (!this.isSignedIn || !this.notion) {
+                throw new Error(`notion-integration-not-enabled`);
+            }
+
+            const pageId = await this.getOrRefreshQuestionPageId(questionNumber);
+            if (!pageId) {
+                throw new Error(`question-page-not-found`);
+            }
+
+            await this.notion.pages.update({
+                page_id: pageId,
+                properties: {
+                    'Review Date': {
+                        date: {
+                            start: reviewDate,
+                        },
+                    },
+                    Reviewed: {
+                        checkbox: false,
+                    },
+                },
+            });
+        } catch (error) {
+            throw new Error(`Failed to schedule question review: ${error}`);
+        }
+    }
+
+    private async getOrRefreshQuestionPageId(questionNumber: string): Promise<string | null> {
+        const normalizedQuestionNumber = this.normalizeQuestionNumber(questionNumber);
+        const cachedPageId = this.getPageIdOfQuestion(normalizedQuestionNumber);
+        if (cachedPageId) {
+            return cachedPageId;
+        }
+
+        await this.updateTemplateInformation();
+        return this.getPageIdOfQuestion(normalizedQuestionNumber);
+    }
+
+    private normalizeQuestionNumber(questionNumber: string): string {
+        const normalizedQuestionNumber = questionNumber.replace(/^0+/, "");
+        return normalizedQuestionNumber.length > 0 ? normalizedQuestionNumber : "0";
     }
 
     public async snoozeQuestionReview(pageId: string, reviewDate: string): Promise<void> {

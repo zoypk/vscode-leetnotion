@@ -109,9 +109,12 @@ This enrichment is additive to the existing preview and does not change the solv
 LeetNotion now includes a dedicated `Reviews` tree in the sidebar for problems that already have a Notion `Review Date`.
 
 - `Due` and `Upcoming` sections
+- Overdue counts in the `Due` section
 - `Preview Problem` and `Open Problem` actions
-- `Mark Reviewed` sets `Reviewed = true`
-- `Snooze` moves the review date forward and resets `Reviewed = false`
+- `Review Again` schedules the next review with presets: Tomorrow, 3d, 7d, 14d, or 30d
+- `Snooze` moves the review date forward with the same presets and keeps `Reviewed = false`
+- `Start Review Session` opens the oldest due item and advances through the queue as you reschedule reviews
+- `Add to Review` lets you schedule a problem from the Problems tree or the current solution file without submitting
 
 ---
 

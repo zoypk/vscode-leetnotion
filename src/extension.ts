@@ -35,6 +35,7 @@ import { leetnotionClient } from "./leetnotionClient";
 import { templateUpdater } from "./modules/leetnotion/template-updater";
 import { setLists, setProblemRatingMap, setQuestionsOfAllLists } from "./utils/dataUtils";
 import { UserStatus } from "./shared";
+import { profileDashboardProvider } from "./home/profileDashboardProvider";
 
 let intervals: NodeJS.Timeout[] = [];
 export let leetcodeTreeView: vscode.TreeView<LeetCodeNode> | undefined;
@@ -50,6 +51,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
             leetCodeStatusBarController.updateStatusBar(leetCodeManager.getStatus(), leetCodeManager.getUser());
             leetCodeTreeDataProvider.refresh();
             leetcodeClient.initialize();
+            void profileDashboardProvider.refresh();
 
             const nextStatus = leetCodeManager.getStatus();
             if (nextStatus === UserStatus.SignedIn && intervals.length === 0) {
@@ -89,17 +91,23 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
             leetCodeExecutor,
             markdownEngine,
             codeLensController,
+            profileDashboardProvider,
             explorerNodeManager,
             vscode.window.registerFileDecorationProvider(leetCodeTreeItemDecorationProvider),
+            vscode.window.registerWebviewViewProvider("leetnotionHome", profileDashboardProvider, { webviewOptions: { retainContextWhenHidden: true } }),
             leetcodeTreeView,
             reviewTreeView,
             vscode.commands.registerCommand("leetnotion.deleteCache", () => cache.deleteCache()),
             vscode.commands.registerCommand("leetnotion.toggleLeetCodeCn", () => plugin.switchEndpoint()),
             vscode.commands.registerCommand("leetnotion.signin", () => leetCodeManager.signIn()),
             vscode.commands.registerCommand("leetnotion.signout", () => leetCodeManager.signOut()),
+            vscode.commands.registerCommand("leetnotion.refreshHome", () => profileDashboardProvider.refresh()),
+            vscode.commands.registerCommand("leetnotion.lookupProfile", () => profileDashboardProvider.promptForUsername()),
             vscode.commands.registerCommand("leetnotion.previewProblem", (node: vscode.Uri) => show.previewProblem(node)),
             vscode.commands.registerCommand("leetnotion.previewReviewProblem", (review) => reviewCommands.previewReviewProblem(review)),
             vscode.commands.registerCommand("leetnotion.openReviewProblem", (review) => reviewCommands.openReviewProblem(review)),
+            vscode.commands.registerCommand("leetnotion.addToReview", (input?: LeetCodeNode | vscode.Uri) => reviewCommands.addProblemToReview(input)),
+            vscode.commands.registerCommand("leetnotion.startReviewSession", () => reviewCommands.startReviewSession()),
             vscode.commands.registerCommand("leetnotion.markReviewReviewed", (review) => reviewCommands.markReviewReviewed(review)),
             vscode.commands.registerCommand("leetnotion.snoozeReview", (review) => reviewCommands.snoozeReview(review)),
             vscode.commands.registerCommand("leetnotion.showProblem", (node: LeetCodeNode) => show.showProblem(node)),
