@@ -17,6 +17,8 @@ type ReviewPreset = {
     days: number;
 };
 
+type ReviewTarget = Pick<ReviewItem, "questionNumber" | "name">;
+
 const reviewPresets: ReviewPreset[] = [
     { label: "Tomorrow", description: "Review again in 1 day", days: 1 },
     { label: "In 3 days", description: "Review again in 3 days", days: 3 },
@@ -140,7 +142,7 @@ function addDays(date: Date, days: number): Date {
     return nextDate;
 }
 
-async function pickReviewPreset(review: ReviewItem, action: string): Promise<ReviewPreset | undefined> {
+async function pickReviewPreset(review: ReviewTarget, action: string): Promise<ReviewPreset | undefined> {
     return vscode.window.showQuickPick(reviewPresets.map(preset => ({
         ...preset,
         detail: preset.description,

@@ -27,11 +27,11 @@ class ReviewService {
 
         for (const page of pages) {
             const review = this.toReviewItem(page, today);
-            if (!review || this.isCompletedUntilFuture(review, today)) {
+            if (!review) {
                 continue;
             }
 
-            if (review.status === "upcoming") {
+            if (review.status === "upcoming" || review.status === "completed") {
                 upcomingItems.push(review);
             } else {
                 dueItems.push(review);
@@ -70,10 +70,6 @@ class ReviewService {
         };
     }
 
-    private isCompletedUntilFuture(review: ReviewItem, today: string): boolean {
-        return review.reviewed && review.reviewDate > today;
-    }
-
     private toReviewItem(page: ProblemPageResponse, today: string): ReviewItem | undefined {
         const questionNumber = page.properties["Question Number"].number;
         const reviewDate = page.properties["Review Date"].date?.start;
@@ -82,7 +78,8 @@ class ReviewService {
             return undefined;
         }
 
-        const status = this.getStatus(reviewDate, today);
+        const reviewed = page.properties.Reviewed.checkbox;
+        const status = this.getStatus(reviewDate, reviewed, today);
 
         return {
             pageId: page.id,
@@ -91,13 +88,13 @@ class ReviewService {
             difficulty: page.properties.Difficulty.select?.name ?? "",
             url,
             reviewDate,
-            reviewed: page.properties.Reviewed.checkbox,
+            reviewed,
             status,
             overdueDays: status === "overdue" ? this.getDayDifference(reviewDate, today) : 0,
         };
     }
 
-    private getStatus(reviewDate: string, today: string): ReviewStatus {
+    private getStatus(reviewDate: string, reviewed: boolean, today: string): ReviewStatus {
         if (reviewDate < today) {
             return "overdue";
         }
@@ -106,7 +103,7 @@ class ReviewService {
             return "due-today";
         }
 
-        return "upcoming";
+        return reviewed ? "completed" : "upcoming";
     }
 
     private getDayDifference(startDate: string, endDate: string): number {

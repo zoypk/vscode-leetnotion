@@ -10,7 +10,7 @@ export interface ReviewItem {
     overdueDays: number;
 }
 
-export type ReviewStatus = "overdue" | "due-today" | "upcoming";
+export type ReviewStatus = "overdue" | "due-today" | "upcoming" | "completed";
 
 export enum ReviewSectionId {
     Due = "due",

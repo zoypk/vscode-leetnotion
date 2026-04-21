@@ -154,6 +154,10 @@ export class ReviewTreeDataProvider implements vscode.TreeDataProvider<ReviewNod
             return "history";
         }
 
+        if (element.review?.status === "completed") {
+            return "check";
+        }
+
         return "calendar";
     }
 
@@ -186,6 +190,10 @@ export class ReviewTreeDataProvider implements vscode.TreeDataProvider<ReviewNod
             return "Today";
         }
 
+        if (review.status === "completed") {
+            return `Done until ${review.reviewDate}`;
+        }
+
         return review.reviewDate;
     }
 
@@ -196,6 +204,10 @@ export class ReviewTreeDataProvider implements vscode.TreeDataProvider<ReviewNod
 
         if (review.status === "due-today") {
             return "Due today";
+        }
+
+        if (review.status === "completed") {
+            return `Completed for this cycle until ${review.reviewDate}`;
         }
 
         return `Upcoming on ${review.reviewDate}`;

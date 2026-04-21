@@ -309,6 +309,22 @@ class ProfileDashboardProvider implements vscode.WebviewViewProvider, vscode.Dis
                 <style>
                     :root {
                         color-scheme: light dark;
+                        --heatmap-level-0: var(--vscode-editor-background);
+                        --heatmap-level-1: #0e4429;
+                        --heatmap-level-2: #006d32;
+                        --heatmap-level-3: #26a641;
+                        --heatmap-level-4: #39d353;
+                    }
+                    body.vscode-light,
+                    body.vscode-high-contrast-light {
+                        --heatmap-level-1: #9be9a8;
+                        --heatmap-level-2: #40c463;
+                        --heatmap-level-3: #30a14e;
+                        --heatmap-level-4: #216e39;
+                    }
+                    body.vscode-high-contrast,
+                    body.vscode-high-contrast-light {
+                        --heatmap-level-0: transparent;
                     }
                     * {
                         box-sizing: border-box;
@@ -463,19 +479,19 @@ class ProfileDashboardProvider implements vscode.WebviewViewProvider, vscode.Dis
                         width: 100%;
                         height: 9px;
                         border-radius: 2px;
-                        background: var(--vscode-editor-background);
+                        background: var(--heatmap-level-0);
                     }
                     .heatmap-cell.level-1 {
-                        background: color-mix(in srgb, var(--vscode-textLink-foreground) 35%, var(--vscode-editor-background));
+                        background: var(--heatmap-level-1);
                     }
                     .heatmap-cell.level-2 {
-                        background: color-mix(in srgb, var(--vscode-textLink-foreground) 55%, var(--vscode-editor-background));
+                        background: var(--heatmap-level-2);
                     }
                     .heatmap-cell.level-3 {
-                        background: color-mix(in srgb, var(--vscode-textLink-foreground) 75%, var(--vscode-editor-background));
+                        background: var(--heatmap-level-3);
                     }
                     .heatmap-cell.level-4 {
-                        background: var(--vscode-textLink-foreground);
+                        background: var(--heatmap-level-4);
                     }
                     .heatmap-legend {
                         display: flex;
