@@ -8,6 +8,7 @@ import { Category, Endpoint, IProblem } from "../shared";
 import { ILeetCodeWebviewOption, LeetCodeWebview } from "./LeetCodeWebview";
 import { markdownEngine } from "./markdownEngine";
 import { explorerNodeManager } from "@/explorer/explorerNodeManager";
+import { extractArrayElements, getSheets } from "@/utils/dataUtils";
 
 class LeetCodePreviewProvider extends LeetCodeWebview {
     protected readonly viewType: string = "leetnotion.preview";
@@ -97,14 +98,20 @@ class LeetCodePreviewProvider extends LeetCodeWebview {
             `</details>`,
         ].join("\n");
         const companies: string = [
-            `<details>`,
             `<summary><strong>Companies</strong></summary>`,
             this.description.companies.map((c: string) =>
                 `<a href="#" onclick="onCompanyClick('${c}')"><code>${c}</code></a>`
             ).join(" | "),
-            `</details>`,
         ].join("\n");
-        const links: string = markdownEngine.render(`[Submissions](${this.getSubmissionsLink(url)}) | [Solution](${this.getSolutionsLink(url)})`);
+        const sheets: string = this.description.sheets.length > 0 ? [
+            `<details>`,
+            `<summary><strong>Sheets</strong></summary>`,
+            this.description.sheets.map((sheet: string) =>
+                `<a href="#" onclick="onSheetClick('${sheet}')"><code>${sheet}</code></a>`
+            ).join(" | "),
+            `</details>`,
+        ].join("\n") : "";
+        const links: string = markdownEngine.render(`[Submissions](${this.getSubmissionsLink(url)}) | [Solution](${this.getSolutionsLink(url)})`) + ` | <a href="#" onclick="showPastSubmissions()">Past Submissions</a>`;
         return `
             <!DOCTYPE html>
             <html>
@@ -121,6 +128,8 @@ class LeetCodePreviewProvider extends LeetCodeWebview {
                 ${info}
                 ${tags}
                 ${companies}
+                ${sheets}
+                <hr />
                 ${body}
                 ${neetCodeSection}
                 <hr />
@@ -134,6 +143,12 @@ class LeetCodePreviewProvider extends LeetCodeWebview {
                     }
                     function onCompanyClick(company) {
                         vscode.postMessage({ command: 'CompanyClick', company });
+                    }
+                    function onSheetClick(sheet) {
+                        vscode.postMessage({ command: 'SheetClick', sheet });
+                    }
+                    function showPastSubmissions() {
+                        vscode.postMessage({ command: 'ShowPastSubmissions' });
                     }
                 </script>
             </body>
@@ -160,6 +175,14 @@ class LeetCodePreviewProvider extends LeetCodeWebview {
                 explorerNodeManager.revealNode(`${Category.Company}#${message.company}`);
                 break;
             }
+            case "SheetClick": {
+                explorerNodeManager.revealNode(`${Category.Sheets}#${message.sheet}`);
+                break;
+            }
+            case "ShowPastSubmissions": {
+                await commands.executeCommand("leetnotion.showPastSubmissions", this.node);
+                break;
+            }
         }
     }
 
@@ -169,6 +192,10 @@ class LeetCodePreviewProvider extends LeetCodeWebview {
     // }
 
     private parseDescription(descString: string, problem: IProblem): IDescription {
+        const sheetsData = getSheets();
+        const sheets = Object.keys(sheetsData).filter((sheetName: string) =>
+            extractArrayElements(sheetsData[sheetName]).includes(problem.id)
+        );
         const [
             ,
             ,
@@ -193,6 +220,7 @@ class LeetCodePreviewProvider extends LeetCodeWebview {
             url,
             tags: problem.tags,
             companies: problem.companies,
+            sheets,
             category: category.slice(2),
             difficulty: difficulty.slice(2),
             likes: likes.split(": ")[1].trim(),
@@ -242,7 +270,7 @@ class LeetCodePreviewProvider extends LeetCodeWebview {
             sections.push([
                 `<details>`,
                 `<summary><strong>Hints</strong></summary>`,
-                markdownEngine.render(problem.hintMarkdown),
+                `${problem.hintMarkdown}`,
                 `</details>`,
             ].join("\n"));
         }
@@ -282,6 +310,7 @@ interface IDescription {
     url: string;
     tags: string[];
     companies: string[];
+    sheets: string[];
     category: string;
     difficulty: string;
     likes: string;
@@ -293,6 +322,7 @@ interface IWebViewMessage {
     command: string;
     tag?: string;
     company?: string;
+    sheet?: string;
 }
 
 export const leetCodePreviewProvider: LeetCodePreviewProvider = new LeetCodePreviewProvider();

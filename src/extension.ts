@@ -23,6 +23,7 @@ import { reviewTreeDataProvider } from "./reviews/reviewTreeDataProvider";
 import { leetCodeStatusBarController } from "./statusbar/leetCodeStatusBarController";
 import { DialogType, promptForOpenOutputChannel } from "./utils/uiUtils";
 import { leetCodePreviewProvider } from "./webview/leetCodePreviewProvider";
+import { leetCodePastSubmissionsProvider } from "./webview/leetCodePastSubmissionsProvider";
 import { leetCodeSolutionProvider } from "./webview/leetCodeSolutionProvider";
 import { leetCodeSubmissionProvider } from "./webview/leetCodeSubmissionProvider";
 import { markdownEngine } from "./webview/markdownEngine";
@@ -86,6 +87,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
             leetCodeStatusBarController,
             leetCodeChannel,
             leetCodePreviewProvider,
+            leetCodePastSubmissionsProvider,
             leetCodeSubmissionProvider,
             leetCodeSolutionProvider,
             leetCodeExecutor,
@@ -108,6 +110,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
             vscode.commands.registerCommand("leetnotion.openReviewProblem", (review) => reviewCommands.openReviewProblem(review)),
             vscode.commands.registerCommand("leetnotion.addToReview", (input?: LeetCodeNode | vscode.Uri) => reviewCommands.addProblemToReview(input)),
             vscode.commands.registerCommand("leetnotion.startReviewSession", () => reviewCommands.startReviewSession()),
+            vscode.commands.registerCommand("leetnotion.setReviewFilters", () => reviewCommands.setReviewFilters()),
             vscode.commands.registerCommand("leetnotion.markReviewReviewed", (review) => reviewCommands.markReviewReviewed(review)),
             vscode.commands.registerCommand("leetnotion.snoozeReview", (review) => reviewCommands.snoozeReview(review)),
             vscode.commands.registerCommand("leetnotion.showProblem", (node: LeetCodeNode) => show.showProblem(node)),
@@ -119,6 +122,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
             vscode.commands.registerCommand("leetnotion.searchContests", () => show.searchContests()),
             vscode.commands.registerCommand("leetnotion.searchList", () => show.searchLists()),
             vscode.commands.registerCommand("leetnotion.showSolution", (input: LeetCodeNode | vscode.Uri) => show.showSolution(input)),
+            vscode.commands.registerCommand("leetnotion.showPastSubmissions", (input?: LeetCodeNode | vscode.Uri) => show.showPastSubmissions(input)),
             vscode.commands.registerCommand("leetnotion.refreshExplorer", () => leetCodeTreeDataProvider.refresh()),
             vscode.commands.registerCommand("leetnotion.refreshReviews", () => reviewTreeDataProvider.refresh()),
             vscode.commands.registerCommand("leetnotion.testSolution", (uri?: vscode.Uri) => {

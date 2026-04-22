@@ -2,14 +2,15 @@ import * as vscode from "vscode";
 import * as show from "../commands/show";
 import { LeetCodeNode } from "../explorer/LeetCodeNode";
 import { explorerNodeManager } from "../explorer/explorerNodeManager";
-import { leetnotionClient } from "../leetnotionClient";
 import { defaultProblem, IProblem } from "../shared";
+import { extractArrayElements, getSheets } from "../utils/dataUtils";
+import { getReviewSheetFilters, setReviewSheetFilters } from "../utils/settingUtils";
 import { getQuestionNumber } from "../utils/toolUtils";
 import { DialogType, promptForOpenOutputChannel } from "../utils/uiUtils";
-import { getActiveFilePath } from "../utils/workspaceUtils";
+import { getActiveFilePath, selectWorkspaceFolder } from "../utils/workspaceUtils";
 import { reviewService } from "./reviewService";
 import { reviewTreeDataProvider } from "./reviewTreeDataProvider";
-import { ReviewItem } from "./types";
+import { ReviewItem, ReviewProblemSnapshot, ReviewSchedulingOption } from "./types";
 
 type ReviewPreset = {
     label: string;
@@ -19,6 +20,10 @@ type ReviewPreset = {
 
 type ReviewTarget = Pick<ReviewItem, "questionNumber" | "name">;
 
+type ReviewFilterQuickPickItem = vscode.QuickPickItem & {
+    value: string;
+};
+
 const reviewPresets: ReviewPreset[] = [
     { label: "Tomorrow", description: "Review again in 1 day", days: 1 },
     { label: "In 3 days", description: "Review again in 3 days", days: 3 },
@@ -26,6 +31,8 @@ const reviewPresets: ReviewPreset[] = [
     { label: "In 2 weeks", description: "Review again in 14 days", days: 14 },
     { label: "In 1 month", description: "Review again in 30 days", days: 30 },
 ];
+
+const allProblemsFilterValue = "__all_problems__";
 
 let reviewSessionActive = false;
 
@@ -38,17 +45,17 @@ export async function openReviewProblem(review: ReviewItem): Promise<void> {
 }
 
 export async function markReviewReviewed(review: ReviewItem): Promise<void> {
-    const preset = await pickReviewPreset(review, "Review again");
-    if (!preset) {
+    const option = await pickReviewOption(review);
+    if (!option) {
         return;
     }
 
     try {
-        await leetnotionClient.markQuestionReviewed(review.pageId, formatDate(addDays(new Date(), preset.days)));
+        await reviewService.applyRating(review.questionNumber, option.rating);
         await reviewTreeDataProvider.refresh();
         await continueReviewSession();
     } catch (error) {
-        await promptForOpenOutputChannel(`Failed to schedule next review: ${error}`, DialogType.error);
+        await promptForOpenOutputChannel(`Failed to update review: ${error}`, DialogType.error);
     }
 }
 
@@ -59,7 +66,7 @@ export async function snoozeReview(review: ReviewItem): Promise<void> {
     }
 
     try {
-        await leetnotionClient.snoozeQuestionReview(review.pageId, formatDate(addDays(new Date(), preset.days)));
+        await reviewService.snoozeReview(review.questionNumber, addDays(new Date(), preset.days));
         await reviewTreeDataProvider.refresh();
         await continueReviewSession();
     } catch (error) {
@@ -68,8 +75,7 @@ export async function snoozeReview(review: ReviewItem): Promise<void> {
 }
 
 export async function startReviewSession(): Promise<void> {
-    if (!reviewService.isConfigured()) {
-        void vscode.window.showInformationMessage("Integrate Notion to start a review session.");
+    if (!await ensureReviewWorkspaceConfigured()) {
         return;
     }
 
@@ -90,8 +96,7 @@ export async function startReviewSession(): Promise<void> {
 }
 
 export async function addProblemToReview(input?: LeetCodeNode | vscode.Uri): Promise<void> {
-    if (!reviewService.isConfigured()) {
-        void vscode.window.showInformationMessage("Integrate Notion to add problems to reviews.");
+    if (!await ensureReviewWorkspaceConfigured()) {
         return;
     }
 
@@ -107,19 +112,65 @@ export async function addProblemToReview(input?: LeetCodeNode | vscode.Uri): Pro
         name: problem?.name ?? "Problem",
     };
 
-    const preset = await pickReviewPreset(reviewTarget, "Add to review");
-    if (!preset) {
-        return;
-    }
-
     try {
-        const reviewDate = formatDate(addDays(new Date(), preset.days));
-        await leetnotionClient.scheduleQuestionReview(questionNumber, reviewDate);
+        const snapshot: Partial<ReviewProblemSnapshot> = {
+            name: problem?.name,
+            difficulty: problem?.difficulty,
+        };
+        const result = await reviewService.addProblem(questionNumber, snapshot);
         await reviewTreeDataProvider.refresh();
-        await vscode.window.showInformationMessage(`Added [${questionNumber}] ${reviewTarget.name} to review for ${reviewDate}.`);
+        const message = result === "added"
+            ? `Added [${questionNumber}] ${reviewTarget.name} to the review queue.`
+            : `Moved [${questionNumber}] ${reviewTarget.name} back into the review queue.`;
+        await vscode.window.showInformationMessage(message);
     } catch (error) {
         await promptForOpenOutputChannel(`Failed to add problem to review: ${error}`, DialogType.error);
     }
+}
+
+export async function setReviewFilters(): Promise<void> {
+    const sheets = getSheets();
+    const activeFilters = new Set(reviewService.getActiveReviewFilters());
+    const picks: ReviewFilterQuickPickItem[] = [
+        {
+            label: "All Problems",
+            description: "Disable review filtering",
+            detail: "Include every problem in the review queue",
+            picked: activeFilters.size === 0,
+            value: allProblemsFilterValue,
+        },
+        ...Object.keys(sheets).map((sheetName) => ({
+            label: sheetName,
+            description: `${extractArrayElements(sheets[sheetName]).length} problems`,
+            detail: activeFilters.size === 0 ? undefined : activeFilters.has(sheetName) ? "Currently enabled" : undefined,
+            picked: activeFilters.has(sheetName),
+            value: sheetName,
+        })),
+    ];
+
+    const selection = await vscode.window.showQuickPick(picks, {
+        canPickMany: true,
+        ignoreFocusOut: true,
+        matchOnDescription: true,
+        matchOnDetail: true,
+        placeHolder: "Select review filters. Choose All Problems to clear filtering.",
+    });
+    if (!selection) {
+        return;
+    }
+
+    const selectedValues = selection.map((item) => item.value);
+    const nextFilters = selectedValues.includes(allProblemsFilterValue)
+        ? []
+        : selectedValues;
+
+    await setReviewSheetFilters(nextFilters);
+    await reviewTreeDataProvider.refresh();
+
+    const message = nextFilters.length === 0
+        ? "Review filter cleared. All problems are included."
+        : `Review filter updated: ${nextFilters.join(", ")}.`;
+    void vscode.window.showInformationMessage(message);
 }
 
 function getProblem(review: ReviewItem): IProblem {
@@ -153,6 +204,16 @@ async function pickReviewPreset(review: ReviewTarget, action: string): Promise<R
     });
 }
 
+async function pickReviewOption(review: ReviewTarget): Promise<ReviewSchedulingOption | undefined> {
+    const options = await reviewService.getSchedulingOptions(review.questionNumber);
+    return vscode.window.showQuickPick(options, {
+        placeHolder: `Rate review [${review.questionNumber}] ${review.name}`,
+        ignoreFocusOut: true,
+        matchOnDescription: true,
+        matchOnDetail: true,
+    });
+}
+
 async function continueReviewSession(): Promise<void> {
     if (!reviewSessionActive) {
         return;
@@ -177,9 +238,11 @@ async function resolveQuestionNumber(input?: LeetCodeNode | vscode.Uri): Promise
     return filePath ? getQuestionNumber(filePath) ?? undefined : undefined;
 }
 
-function formatDate(date: Date): string {
-    const year = date.getFullYear();
-    const month = `${date.getMonth() + 1}`.padStart(2, "0");
-    const day = `${date.getDate()}`.padStart(2, "0");
-    return `${year}-${month}-${day}`;
+async function ensureReviewWorkspaceConfigured(): Promise<boolean> {
+    if (reviewService.isConfigured()) {
+        return true;
+    }
+
+    const workspaceFolder = await selectWorkspaceFolder();
+    return workspaceFolder !== "" && reviewService.isConfigured();
 }

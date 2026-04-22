@@ -8,6 +8,7 @@ import * as vscode from "vscode";
 import { explorerNodeManager } from "../explorer/explorerNodeManager";
 import { LeetCodeNode } from "../explorer/LeetCodeNode";
 import { leetCodeChannel } from "../leetCodeChannel";
+import { leetcodeClient } from "../leetCodeClient";
 import { leetCodeExecutor } from "../leetCodeExecutor";
 import { leetCodeManager } from "../leetCodeManager";
 import { ALL_TIME, Category, Endpoint, IProblem, IQuickItemEx, languages, PREMIUM_URL_CN, PREMIUM_URL_GLOBAL, ProblemState } from "../shared";
@@ -25,6 +26,7 @@ import {
 } from "../utils/uiUtils";
 import { getActiveFilePath, selectWorkspaceFolder } from "../utils/workspaceUtils";
 import * as wsl from "../utils/wslUtils";
+import { leetCodePastSubmissionsProvider } from "../webview/leetCodePastSubmissionsProvider";
 import { leetCodePreviewProvider } from "../webview/leetCodePreviewProvider";
 import { leetCodeSolutionProvider } from "../webview/leetCodeSolutionProvider";
 import * as list from "./list";
@@ -224,6 +226,37 @@ export async function showSolution(input: LeetCodeNode | vscode.Uri): Promise<vo
     }
 }
 
+export async function showPastSubmissions(input?: LeetCodeNode | IProblem | vscode.Uri): Promise<void> {
+    if (!leetCodeManager.getUser()) {
+        await promptForSignIn();
+        return;
+    }
+
+    try {
+        const { questionNumber, title } = await resolveProblemForSubmissionHistory(input);
+        if (!questionNumber) {
+            vscode.window.showErrorMessage("Invalid input to fetch past submissions.");
+            return;
+        }
+
+        await vscode.window.withProgress(
+            {
+                location: vscode.ProgressLocation.Notification,
+                cancellable: false,
+                title: `Loading past submissions for ${title || `problem ${questionNumber}`}`,
+            },
+            async () => {
+                const submissions = await leetcodeClient.getProblemSubmissions(questionNumber);
+                const problemTitle = title || submissions[0]?.title || `Problem ${questionNumber}`;
+                leetCodePastSubmissionsProvider.show(problemTitle, questionNumber, submissions);
+            }
+        );
+    } catch (error) {
+        leetCodeChannel.appendLine(`Failed to fetch past submissions: ${error}`);
+        await promptForOpenOutputChannel("Failed to fetch past submissions. Please open the output channel for details.", DialogType.error);
+    }
+}
+
 async function fetchProblemLanguage(): Promise<string | undefined> {
     const leetCodeConfig: vscode.WorkspaceConfiguration = vscode.workspace.getConfiguration("leetnotion");
     let defaultLanguage: string | undefined = leetCodeConfig.get<string>("defaultLanguage");
@@ -321,6 +354,31 @@ async function showProblemInternal(node: IProblem): Promise<void> {
 
 async function showDescriptionView(node: IProblem): Promise<void> {
     return previewProblem(node, vscode.workspace.getConfiguration("leetnotion").get<boolean>("enableSideMode", true));
+}
+
+async function resolveProblemForSubmissionHistory(input?: LeetCodeNode | IProblem | vscode.Uri): Promise<{ questionNumber?: string; title?: string }> {
+    if (input instanceof LeetCodeNode) {
+        return { questionNumber: input.id, title: input.name };
+    }
+
+    if (input instanceof vscode.Uri || !input) {
+        const activeFilePath = await getActiveFilePath(input instanceof vscode.Uri ? input : undefined);
+        if (!activeFilePath) {
+            return {};
+        }
+
+        const questionNumber = await getNodeIdFromFile(activeFilePath);
+        const node = questionNumber ? explorerNodeManager.getNodeById(questionNumber) : undefined;
+        return {
+            questionNumber,
+            title: node?.name,
+        };
+    }
+
+    return {
+        questionNumber: input.id,
+        title: input.name,
+    };
 }
 async function parseProblemsToPicks(p: Promise<IProblem[]>): Promise<Array<IQuickItemEx<IProblem>>> {
     return new Promise(async (resolve: (res: Array<IQuickItemEx<IProblem>>) => void): Promise<void> => {

@@ -106,15 +106,17 @@ This enrichment is additive to the existing preview and does not change the solv
 
 ### ⏰ Review Queue
 
-LeetNotion now includes a dedicated `Reviews` tree in the sidebar for problems that already have a Notion `Review Date`.
+LeetNotion includes a dedicated `Reviews` tree in the sidebar backed by a local `.leetnotion/reviews.json` file inside your configured `leetnotion.workspaceFolder`.
 
 - `Due` and `Upcoming` sections
 - Overdue counts in the `Due` section
 - `Preview Problem` and `Open Problem` actions
-- `Review Again` schedules the next review with presets: Tomorrow, 3d, 7d, 14d, or 30d
-- `Snooze` moves the review date forward with the same presets and keeps `Reviewed = false`
-- `Start Review Session` opens the oldest due item and advances through the queue as you reschedule reviews
-- `Add to Review` lets you schedule a problem from the Problems tree or the current solution file without submitting
+- `Rate Review` uses Anki-style `Again`, `Hard`, `Good`, and `Easy` grades powered by FSRS scheduling
+- `Snooze` manually moves the next review date without recording an FSRS answer
+- `Start Review Session` opens the oldest due item and advances until nothing is currently due
+- `Add to Review` lets you queue a problem from the Problems tree or the current solution file without submitting
+- `Set Review Filters` lets you limit the queue to bundled sheets such as `Blind 75` or `Neetcode 150`
+- Commit `.leetnotion/reviews.json` if you want your review state synced across machines
 
 ---
 

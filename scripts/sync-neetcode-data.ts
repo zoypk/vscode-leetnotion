@@ -313,7 +313,7 @@ function buildSolutionUrl(solutionSlug: string | undefined, neetcode150: boolean
 
     const list = neetcode150 ? "neetcode150" : blind75 ? "blind75" : undefined;
     if (!list) {
-        return `https://neetcode.io/problems/${solutionSlug}/question`;
+        return `https://neetcode.io/problems/${solutionSlug}/question/solution`;
     }
 
     return `https://neetcode.io/problems/${solutionSlug}/question?list=${list}`;

@@ -709,8 +709,7 @@ function createProgressRow(label: string, solved: number, total: number): Progre
 
 function summarizeActivity(calendar: string): ActivitySummary {
     const parsed = parseCalendar(calendar);
-    const dayKeys = Object.keys(parsed).map((key: string) => Number(key)).filter((key: number) => !Number.isNaN(key) && parsed[key] > 0);
-    const activeDays = new Set(dayKeys.map((timestamp: number) => Math.floor(timestamp / 86400)));
+    const activeDays = new Set(Object.keys(parsed).map((key: string) => Number(key)).filter((key: number) => !Number.isNaN(key) && parsed[key] > 0));
     const today = Math.floor(Date.now() / 1000 / 86400);
 
     let currentStreak = 0;
@@ -735,10 +734,10 @@ function summarizeActivity(calendar: string): ActivitySummary {
 function buildActivityGraph(calendar: string): ActivityGraph {
     const parsed = parseCalendar(calendar);
     const today = new Date();
-    const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    const startOfToday = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
     const start = new Date(startOfToday);
-    start.setDate(start.getDate() - 125);
-    start.setDate(start.getDate() - start.getDay());
+    start.setUTCDate(start.getUTCDate() - 125);
+    start.setUTCDate(start.getUTCDate() - start.getUTCDay());
 
     const weeks: ActivityCell[][] = [];
     let cursor = new Date(start);
@@ -748,14 +747,14 @@ function buildActivityGraph(calendar: string): ActivityGraph {
         const week: ActivityCell[] = [];
         for (let dayIndex = 0; dayIndex < 7; dayIndex += 1) {
             const timestamp = Math.floor(cursor.getTime() / 1000);
-            const count = parsed[String(timestamp)] ?? 0;
+            const count = parsed[Math.floor(timestamp / 86400)] ?? 0;
             maxCount = Math.max(maxCount, count);
             week.push({
-                dateLabel: cursor.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }),
+                dateLabel: cursor.toLocaleDateString(undefined, { timeZone: "UTC", month: "short", day: "numeric", year: "numeric" }),
                 count,
                 level: 0,
             });
-            cursor.setDate(cursor.getDate() + 1);
+            cursor.setUTCDate(cursor.getUTCDate() + 1);
         }
         weeks.push(week);
     }
@@ -840,13 +839,25 @@ function summarizeContest(contestInfo: UserContestInfo | undefined): ContestSumm
     };
 }
 
-function parseCalendar(calendar: string): Record<string, number> {
+function parseCalendar(calendar: string): Record<number, number> {
     if (!calendar) {
         return {};
     }
 
     try {
-        return JSON.parse(calendar) as Record<string, number>;
+        const parsed = JSON.parse(calendar) as Record<string, number>;
+        const normalized: Record<number, number> = {};
+
+        for (const [timestamp, count] of Object.entries(parsed)) {
+            const unixTimestamp = Number(timestamp);
+            if (Number.isNaN(unixTimestamp)) {
+                continue;
+            }
+
+            normalized[Math.floor(unixTimestamp / 86400)] = count;
+        }
+
+        return normalized;
     } catch {
         return {};
     }

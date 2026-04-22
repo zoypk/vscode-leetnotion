@@ -7,6 +7,7 @@ import { getWorkspaceConfiguration, hasNotionIntegrationEnabled } from "./utils/
 import { leetnotionClient } from "./leetnotionClient";
 import { leetcodeClient } from "./leetCodeClient";
 import { leetCodeManager } from "./leetCodeManager";
+import { UserStatus } from "./shared";
 import { LeetcodeSubmission } from "./types";
 import { PageObjectResponse, QueryRichText } from '@leetnotion/notion-api';
 import { templateUpdateSession } from './modules/leetnotion/session';
@@ -100,7 +101,12 @@ class LeetnotionManager {
                 promptForOpenOutputChannel(`Notion integration not enabled.`, DialogType.error);
                 return;
             }
+            await leetcodeClient.ensureTitleSlugQuestionNumberMapping();
             const submissions = await this.getLeetcodeSubmissions();
+            if (submissions.length === 0) {
+                promptForOpenOutputChannel(`No submissions found to upload.`, DialogType.completed);
+                return;
+            }
             let notionSubmissionPages: PageObjectResponse[] = [];
             let notionSubmissionsCount = 0;
             await window.withProgress(
@@ -128,6 +134,10 @@ class LeetnotionManager {
                 existingSubmissions.add(submissionId);
             });
             const newSubmissions = submissions.filter(submission => !existingSubmissions.has(submission.id.toString()));
+            if (newSubmissions.length === 0) {
+                promptForOpenOutputChannel(`No new submissions to add.`, DialogType.completed);
+                return;
+            }
             await window.withProgress(
                 {
                     location: ProgressLocation.Notification,
@@ -147,7 +157,8 @@ class LeetnotionManager {
                         }
                     });
                 }
-            )
+            );
+            promptForOpenOutputChannel(`Added ${newSubmissions.length} submissions to notion.`, DialogType.completed);
         } catch (error) {
             if(error.message.includes("adding-submissions-cancelled")) {
                 promptForOpenOutputChannel(`Adding submissions cancelled`, DialogType.completed);
@@ -159,6 +170,32 @@ class LeetnotionManager {
     }
 
     public async getLeetcodeSubmissions() {
+        if (leetCodeManager.getStatus() === UserStatus.SignedIn) {
+            try {
+                return await window.withProgress(
+                    {
+                        location: ProgressLocation.Notification,
+                        cancellable: false,
+                        title: "Fetching submissions from LeetCode...",
+                    },
+                    async (progress) => {
+                        return await leetcodeClient.getAllSubmissions((submissionCount) => {
+                            progress.report({
+                                message: `${submissionCount} fetched`,
+                            });
+                        });
+                    }
+                );
+            } catch (error) {
+                leetCodeChannel.appendLine(`Failed to fetch submissions from LeetCode API, falling back to file import: ${error}`);
+                window.showWarningMessage("Failed to fetch submissions from LeetCode. Falling back to submissions.json import.");
+            }
+        }
+
+        return await this.getLeetcodeSubmissionsFromFile();
+    }
+
+    private async getLeetcodeSubmissionsFromFile() {
         const defaultUri: Uri | undefined = getBelongingWorkspaceFolderUri(undefined);
         const options: OpenDialogOptions = {
             defaultUri,

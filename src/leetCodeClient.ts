@@ -1,15 +1,36 @@
 // Copyright (c) leetnotion. All rights reserved.
 // Licensed under the MIT license.
 
-import { Credential, LeetCodeAdvanced, type UserContestInfo, type UserProfile, type UserSubmission } from "@leetnotion/leetcode-api";
+import {
+    Credential,
+    LeetCodeAdvanced,
+    type Submission,
+    type UserContestInfo,
+    type UserProfile,
+    type UserSubmission,
+} from "@leetnotion/leetcode-api";
 import { globalState } from "./globalState";
+import { getUrl } from "./shared";
 import { extractCookie } from "./utils/toolUtils";
 import { DialogType, promptForOpenOutputChannel } from "./utils/uiUtils";
 import { leetCodeChannel } from "./leetCodeChannel";
-import { LeetcodeProblem, ProblemRatingMap } from "./types";
+import { LeetcodeProblem, LeetcodeSubmission, ProblemRatingMap } from "./types";
 import axios from "axios";
 import { ProblemRating } from "./shared";
 import _ from "lodash";
+
+type ProblemSubmissionsApiResponse = {
+    submissions_dump: Array<{
+        id?: string | number;
+        url: string;
+        status_display: string;
+        lang: string;
+        title: string;
+        timestamp: number;
+        runtime: string;
+        memory: string;
+    }>;
+};
 
 class LeetcodeClient {
     private leetcode: LeetCodeAdvanced;
@@ -39,6 +60,21 @@ class LeetcodeClient {
     public async setTitleSlugQuestionNumberMapping() {
         const mapping = await this.leetcode.getTitleSlugQuestionNumberMapping();
         globalState.setTitleSlugQuestionNumberMapping(mapping);
+        return mapping;
+    }
+
+    public async ensureTitleSlugQuestionNumberMapping() {
+        const existingMapping = globalState.getTitleSlugQuestionNumberMapping();
+        if (existingMapping && Object.keys(existingMapping).length > 0) {
+            return existingMapping;
+        }
+
+        return await this.setTitleSlugQuestionNumberMapping();
+    }
+
+    public async getTitleSlugByQuestionNumber(questionNumber: string): Promise<string | undefined> {
+        const mapping = await this.ensureTitleSlugQuestionNumberMapping();
+        return Object.keys(mapping).find((titleSlug) => mapping[titleSlug] === questionNumber);
     }
 
     public async collectEasterEgg() {
@@ -84,6 +120,35 @@ class LeetcodeClient {
             return null;
         }
         return await this.leetcode.recentSubmission();
+    }
+
+    public async getAllSubmissions(progressCallback: (submissionCount: number) => void = () => { }): Promise<LeetcodeSubmission[]> {
+        const batchSize = 100;
+        const allSubmissions: LeetcodeSubmission[] = [];
+
+        for (let offset = 0; ; offset += batchSize) {
+            const submissions = await this.getSubmissions({ limit: batchSize, offset });
+            allSubmissions.push(...submissions);
+            progressCallback(allSubmissions.length);
+
+            if (submissions.length < batchSize) {
+                return allSubmissions;
+            }
+        }
+    }
+
+    public async getProblemSubmissions(questionNumber: string): Promise<LeetcodeSubmission[]> {
+        const titleSlug = await this.getTitleSlugByQuestionNumber(questionNumber);
+        if (!titleSlug) {
+            throw new Error(`Failed to resolve title slug for problem ${questionNumber}`);
+        }
+
+        if (!this.isSignedIn) {
+            throw new Error("not-signed-in-to-leetcode");
+        }
+
+        const submissions = await this.getProblemSubmissionsBySlug(titleSlug);
+        return submissions.map((submission) => this.normalizeProblemSubmission(submission, titleSlug));
     }
 
     public async getUserProfile(username: string): Promise<UserProfile> {
@@ -146,6 +211,85 @@ class LeetcodeClient {
         } catch (error) {
             throw new Error(`Error getting problem ratings: ${error}`);
         }
+    }
+
+    private async getSubmissions(options: { limit?: number; offset?: number; slug?: string } = {}): Promise<LeetcodeSubmission[]> {
+        if (!this.isSignedIn) {
+            throw new Error("not-signed-in-to-leetcode");
+        }
+
+        const submissions = await this.leetcode.submissions(options);
+        return submissions.map((submission) => this.normalizeSubmission(submission));
+    }
+
+    private normalizeSubmission(submission: Submission): LeetcodeSubmission {
+        return {
+            code: submission.code || "",
+            compare_result: submission.compare_result || "",
+            flag_type: submission.flat_type || 0,
+            has_notes: submission.has_notes,
+            id: submission.id,
+            is_pending: submission.is_pending.toString(),
+            lang: submission.lang,
+            lang_name: submission.lang_name,
+            memory: String(submission.memory || ""),
+            question_id: submission.question_id,
+            runtime: submission.runtime,
+            status: submission.status,
+            status_display: submission.status_display,
+            time: submission.time,
+            timestamp: submission.timestamp,
+            title: submission.title,
+            title_slug: submission.title_slug,
+            url: new URL(submission.url, getUrl("base")).toString(),
+        };
+    }
+
+    private async getProblemSubmissionsBySlug(titleSlug: string): Promise<ProblemSubmissionsApiResponse["submissions_dump"]> {
+        const cookie = globalState.getCookie();
+        if (!cookie) {
+            throw new Error("not-signed-in-to-leetcode");
+        }
+
+        const { csrf, session } = extractCookie(cookie);
+        const baseUrl = getUrl("base");
+        const response = await axios.get<ProblemSubmissionsApiResponse>(`${baseUrl}/api/submissions/${titleSlug}`, {
+            headers: {
+                "content-type": "application/json",
+                origin: baseUrl,
+                referer: `${baseUrl}/problems/${titleSlug}/`,
+                cookie: `csrftoken=${csrf || ""}; LEETCODE_SESSION=${session || ""};`,
+                "x-csrftoken": csrf || "",
+                "x-requested-with": "XMLHttpRequest",
+                "user-agent": "Mozilla/5.0 LeetCode API",
+            },
+        });
+
+        return response.data.submissions_dump || [];
+    }
+
+    private normalizeProblemSubmission(submission: ProblemSubmissionsApiResponse["submissions_dump"][number], titleSlug: string): LeetcodeSubmission {
+        const submissionId = Number(submission.id ?? submission.url.split("/").filter(Boolean).pop() ?? 0);
+        return {
+            code: "",
+            compare_result: "",
+            flag_type: 0,
+            has_notes: false,
+            id: submissionId,
+            is_pending: "false",
+            lang: submission.lang,
+            lang_name: submission.lang,
+            memory: submission.memory || "",
+            question_id: 0,
+            runtime: submission.runtime || "",
+            status: 0,
+            status_display: submission.status_display,
+            time: "",
+            timestamp: submission.timestamp,
+            title: submission.title,
+            title_slug: titleSlug,
+            url: new URL(submission.url, getUrl("base")).toString(),
+        };
     }
 }
 

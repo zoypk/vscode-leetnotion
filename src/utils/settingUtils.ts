@@ -16,6 +16,14 @@ export function getWorkspaceFolder(): string {
     return getWorkspaceConfiguration().get<string>("workspaceFolder", "");
 }
 
+export function getReviewSheetFilters(): string[] {
+    return getWorkspaceConfiguration().get<string[]>("review.sheetFilters", []);
+}
+
+export async function setReviewSheetFilters(filters: string[]): Promise<void> {
+    await getWorkspaceConfiguration().update("review.sheetFilters", filters, true);
+}
+
 export function getEditorShortcuts(): string[] {
     return getWorkspaceConfiguration().get<string[]>("editor.shortcuts", ["submit", "test"]);
 }
