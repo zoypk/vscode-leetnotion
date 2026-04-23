@@ -33,7 +33,14 @@ export function extractCookie(cookie: string): ICredential {
     let session = '';
 
     cookies.forEach(individualCookie => {
-        const [key, value] = individualCookie.trim().split('=');
+        const trimmedCookie = individualCookie.trim();
+        const separatorIndex = trimmedCookie.indexOf('=');
+        if (separatorIndex === -1) {
+            return;
+        }
+
+        const key = trimmedCookie.slice(0, separatorIndex);
+        const value = trimmedCookie.slice(separatorIndex + 1);
         if (key === 'csrftoken') {
             csrf = value;
         } else if (key === 'LEETCODE_SESSION') {

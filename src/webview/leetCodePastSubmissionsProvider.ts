@@ -1,8 +1,8 @@
 // Copyright (c) leetnotion. All rights reserved.
 // Licensed under the MIT license.
 
-import { ViewColumn } from "vscode";
-import { LeetcodeSubmission } from "@/types";
+import { commands, ViewColumn } from "vscode";
+import { LeetcodeSubmission, SubmissionHistoryItem } from "@/types";
 import { openUrl } from "@/utils/uiUtils";
 import { ILeetCodeWebviewOption, LeetCodeWebview } from "./LeetCodeWebview";
 
@@ -85,6 +85,12 @@ class LeetCodePastSubmissionsProvider extends LeetCodeWebview {
                         font-size: 13px;
                     }
 
+                    .actions {
+                        display: flex;
+                        gap: 8px;
+                        flex-wrap: wrap;
+                    }
+
                     .meta-label {
                         color: var(--vscode-descriptionForeground);
                     }
@@ -117,6 +123,10 @@ class LeetCodePastSubmissionsProvider extends LeetCodeWebview {
                 <script>
                     const vscode = acquireVsCodeApi();
 
+                    function openSubmissionDetail(submission) {
+                        vscode.postMessage({ command: 'open-submission-detail', submission: JSON.parse(submission) });
+                    }
+
                     function openSubmission(url) {
                         vscode.postMessage({ command: 'open-submission', url });
                     }
@@ -126,13 +136,29 @@ class LeetCodePastSubmissionsProvider extends LeetCodeWebview {
         `;
     }
 
-    protected async onDidReceiveMessage(message: { command: string; url: string }): Promise<void> {
+    protected async onDidReceiveMessage(message: { command: string; url?: string; submission?: SubmissionHistoryItem }): Promise<void> {
         if (message.command === "open-submission") {
-            await openUrl(message.url);
+            if (message.url) {
+                await openUrl(message.url);
+            }
+        } else if (message.command === "open-submission-detail" && message.submission) {
+            await commands.executeCommand("leetnotion.showSubmissionDetail", message.submission);
         }
     }
 
     private renderSubmission(submission: LeetcodeSubmission): string {
+        const payload: SubmissionHistoryItem = {
+            id: submission.id,
+            title: submission.title,
+            questionNumber: this.questionNumber,
+            url: submission.url,
+            timestamp: submission.timestamp,
+            lang: submission.lang,
+            runtime: submission.runtime,
+            memory: submission.memory,
+            status_display: submission.status_display,
+        };
+
         return `
             <section class="submission">
                 <div class="submission-header">
@@ -140,7 +166,10 @@ class LeetCodePastSubmissionsProvider extends LeetCodeWebview {
                         <div class="status">${this.escapeHtml(submission.status_display)}</div>
                         <div>${this.escapeHtml(this.formatTimestamp(submission.timestamp))}</div>
                     </div>
-                    <button onclick="openSubmission(${JSON.stringify(submission.url)})">Open on LeetCode</button>
+                    <div class="actions">
+                        <button data-submission="${this.escapeHtml(JSON.stringify(payload))}" onclick="openSubmissionDetail(this.dataset.submission)">View code</button>
+                        <button onclick="openSubmission(${JSON.stringify(submission.url)})">Open on LeetCode</button>
+                    </div>
                 </div>
                 <div class="meta">
                     <div><span class="meta-label">Submission ID:</span> ${this.escapeHtml(submission.id.toString())}</div>

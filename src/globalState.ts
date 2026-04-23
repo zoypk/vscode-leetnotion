@@ -16,6 +16,7 @@ export const PendingSessionKey = "leetnotion-template-update-pending-session";
 export const LeetcodeListsKey = "leetcode-lists";
 export const QuestionsOfListKey = "leetcode-questions-of-list";
 export const ProblemRatingMapKey = "leetcode-problem-rating-map";
+export const PinnedSheetsKey = "leetcode-pinned-sheets";
 
 export type UserDataType = {
     isSignedIn: boolean;
@@ -47,6 +48,7 @@ class GlobalState {
     private _lists?: Lists;
     private _questionsOfList?: Record<string, QuestionsOfList>;
     private _problemRatingMap?: ProblemRatingMap;
+    private _pinnedSheets?: string[];
 
     public initialize(context: vscode.ExtensionContext): void {
         this.context = context;
@@ -213,6 +215,19 @@ class GlobalState {
     public setProblemRatingMap(problemRatingMap: ProblemRatingMap) {
         this._problemRatingMap = problemRatingMap;
         return this._state.update(ProblemRatingMapKey, problemRatingMap);
+    }
+
+    public setPinnedSheets(pinnedSheets: string[]): any {
+        this._pinnedSheets = pinnedSheets;
+        return this._state.update(PinnedSheetsKey, pinnedSheets);
+    }
+
+    public getPinnedSheets(): string[] {
+        return this._pinnedSheets ?? this._state.get(PinnedSheetsKey) ?? [];
+    }
+
+    public isPinnedSheet(sheet: string): boolean {
+        return this.getPinnedSheets().includes(sheet);
     }
 
     public async getWithBackgroundRefresh<T>(

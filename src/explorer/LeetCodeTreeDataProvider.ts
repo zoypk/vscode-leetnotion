@@ -45,7 +45,11 @@ export class LeetCodeTreeDataProvider implements vscode.TreeDataProvider<LeetCod
         if (element.isProblem) {
             contextValue = element.isFavorite ? "problem-favorite" : "problem";
         } else {
-            contextValue = element.id.toLowerCase();
+            if (element.id.startsWith(`${Category.Sheets}#`)) {
+                contextValue = globalState.isPinnedSheet(element.name) ? "sheet-pinned" : "sheet";
+            } else {
+                contextValue = element.id.toLowerCase();
+            }
         }
 
         return {

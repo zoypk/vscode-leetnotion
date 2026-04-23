@@ -104,14 +104,26 @@ class LeetCodePreviewProvider extends LeetCodeWebview {
             ).join(" | "),
         ].join("\n");
         const sheets: string = this.description.sheets.length > 0 ? [
-            `<details>`,
+            // `<details>`,
             `<summary><strong>Sheets</strong></summary>`,
             this.description.sheets.map((sheet: string) =>
                 `<a href="#" onclick="onSheetClick('${sheet}')"><code>${sheet}</code></a>`
             ).join(" | "),
-            `</details>`,
+            // `</details>`,
         ].join("\n") : "";
         const links: string = markdownEngine.render(`[Submissions](${this.getSubmissionsLink(url)}) | [Solution](${this.getSolutionsLink(url)})`) + ` | <a href="#" onclick="showPastSubmissions()">Past Submissions</a>`;
+        const quickNavItems: string[] = [
+            `<a href="#overview">Overview</a>`,
+            this.description.tags.length > 0 ? `<a href="#tags">Tags</a>` : "",
+            this.description.companies.length > 0 ? `<a href="#companies">Companies</a>` : "",
+            this.description.sheets.length > 0 ? `<a href="#sheets">Sheets</a>` : "",
+            `<a href="#description">Description</a>`,
+            neetCodeSection ? `<a href="#neetcode">NeetCode</a>` : "",
+            `<a href="#links">Links</a>`,
+        ].filter(Boolean);
+        const quickNav: string = quickNavItems.length > 1
+            ? `<nav class="quick-nav" aria-label="Quick navigation">${quickNavItems.join("")}</nav>`
+            : "";
         return `
             <!DOCTYPE html>
             <html>
@@ -120,20 +132,61 @@ class LeetCodePreviewProvider extends LeetCodeWebview {
                 ${markdownEngine.getStyles(this.getPanel().webview)}
                 ${!this.sideMode ? button.style : ""}
                 <style>
+                    html {
+                        scroll-behavior: smooth;
+                    }
+                    section {
+                        scroll-margin-top: 4rem;
+                    }
+                    .quick-nav {
+                        position: sticky;
+                        top: 0;
+                        z-index: 1;
+                        display: flex;
+                        flex-wrap: wrap;
+                        gap: 0.5rem;
+                        margin: 1rem 0;
+                        padding: 0.75rem 0;
+                        background: var(--vscode-editor-background);
+                        border-bottom: 1px solid var(--vscode-panel-border, var(--vscode-editorWidget-border, rgba(128, 128, 128, 0.35)));
+                    }
+                    .quick-nav a {
+                        padding: 0.2rem 0.6rem;
+                        border-radius: 999px;
+                        text-decoration: none;
+                        color: var(--vscode-textLink-foreground);
+                        background: var(--vscode-button-secondaryBackground, rgba(128, 128, 128, 0.16));
+                    }
+                    .quick-nav a:hover {
+                        background: var(--vscode-button-secondaryHoverBackground, rgba(128, 128, 128, 0.28));
+                    }
                     code { white-space: pre-wrap; }
+                    #neetcode-section details.hint-accordion {
+                        margin-bottom: 0;
+                    }
+                    #neetcode-section details.hint-accordion + details {
+                        margin-top: 0;
+                    }
                 </style>
             </head>
             <body>
-                ${head}
-                ${info}
-                ${tags}
-                ${companies}
-                ${sheets}
-                <hr />
-                ${body}
-                ${neetCodeSection}
-                <hr />
-                ${links}
+                <section id="overview">
+                    ${head}
+                    ${info}
+                </section>
+                ${quickNav}
+                ${this.description.tags.length > 0 ? `<section id="tags">${tags}</section>` : ""}
+                ${this.description.companies.length > 0 ? `<section id="companies">${companies}</section>` : ""}
+                ${this.description.sheets.length > 0 ? `<section id="sheets">${sheets}</section>` : ""}
+                <section id="description">
+                    <hr />
+                    ${body}
+                </section>
+                ${neetCodeSection ? `<section id="neetcode">${neetCodeSection}</section>` : ""}
+                <section id="links">
+                    <hr />
+                    ${links}
+                </section>
                 ${!this.sideMode ? button.element : ""}
                 <script>
                     const vscode = acquireVsCodeApi();
@@ -259,7 +312,7 @@ class LeetCodePreviewProvider extends LeetCodeWebview {
             return "";
         }
 
-        const sections: string[] = ["<hr />", "<h2>NeetCode</h2>"];
+        const sections: string[] = ["<hr />", "<h2>NeetCode</h2>", `<div id="neetcode-section">`];
         if (metadata.length > 0) {
             sections.push(`<p>${metadata.join(" ")}</p>`);
         }
@@ -267,21 +320,19 @@ class LeetCodePreviewProvider extends LeetCodeWebview {
             sections.push(markdownEngine.render(links.join(" | ")));
         }
         if (problem.hintMarkdown) {
-            sections.push([
-                `<details>`,
-                `<summary><strong>Hints</strong></summary>`,
-                `${problem.hintMarkdown}`,
-                `</details>`,
-            ].join("\n"));
+            sections.push(this.getExpandedHintMarkdown(problem.hintMarkdown));
         }
         if (problem.articleMarkdown) {
+            const articleMarkdown: string = this.getPythonOnlyArticleMarkdown(problem.articleMarkdown);
             sections.push([
                 `<details>`,
                 `<summary><strong>Article</strong></summary>`,
-                markdownEngine.render(problem.articleMarkdown),
+                markdownEngine.render(articleMarkdown),
                 `</details>`,
             ].join("\n"));
         }
+
+        sections.push(`</div>`);
 
         return sections.join("\n");
     }
@@ -302,6 +353,78 @@ class LeetCodePreviewProvider extends LeetCodeWebview {
     }
     private getSubmissionsLink(url: string): string {
         return url.replace("/description/", "/submissions/") + "?source=vscode";
+    }
+
+    private getPythonOnlyArticleMarkdown(articleMarkdown: string): string {
+        const output: string[] = [];
+        const lines: string[] = articleMarkdown.split(/\r?\n/);
+        let inTabs: boolean = false;
+        let inPythonFence: boolean = false;
+        let inSkippedFence: boolean = false;
+
+        for (const line of lines) {
+            const trimmed: string = line.trim();
+
+            if (trimmed === "::tabs-start") {
+                while (output.length > 0 && output[output.length - 1].trim() === "") {
+                    output.pop();
+                }
+                inTabs = true;
+                inPythonFence = false;
+                inSkippedFence = false;
+                continue;
+            }
+
+            if (trimmed === "::tabs-end") {
+                inTabs = false;
+                inPythonFence = false;
+                inSkippedFence = false;
+                continue;
+            }
+
+            if (!inTabs) {
+                output.push(line);
+                continue;
+            }
+
+            if (trimmed.startsWith("```")) {
+                if (inPythonFence) {
+                    output.push(line);
+                    inPythonFence = false;
+                    continue;
+                }
+
+                if (inSkippedFence) {
+                    inSkippedFence = false;
+                    continue;
+                }
+
+                const language: string = trimmed.slice(3).trim().toLowerCase();
+                const isPythonFence: boolean = language === "python" || language === "python3" || language === "py" || language.startsWith("python ");
+
+                if (isPythonFence) {
+                    inPythonFence = true;
+                    output.push(line);
+                } else {
+                    inSkippedFence = true;
+                }
+
+                continue;
+            }
+
+            if (inPythonFence) {
+                output.push(line);
+            }
+        }
+
+        return output.join("\n");
+    }
+
+    private getExpandedHintMarkdown(hintMarkdown: string): string {
+        return hintMarkdown.replace(
+            /<details class="hint-accordion">/,
+            '<details class="hint-accordion" open>'
+        );
     }
 }
 

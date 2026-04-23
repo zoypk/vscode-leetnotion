@@ -49,6 +49,18 @@ export interface LeetcodeSubmission {
     url: string;
 }
 
+export interface SubmissionHistoryItem {
+    id: number;
+    title: string;
+    questionNumber: string;
+    url: string;
+    timestamp: number;
+    lang: string;
+    runtime: string;
+    memory: string;
+    status_display: string;
+}
+
 export type PartialProblemPage = {
     id: string;
     'Question Number': QueryNumberType;

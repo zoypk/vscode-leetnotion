@@ -7,6 +7,7 @@ import * as cache from "./commands/cache";
 import { switchDefaultLanguage } from "./commands/language";
 import * as plugin from "./commands/plugin";
 import * as show from "./commands/show";
+import * as sheet from "./commands/sheet";
 import * as star from "./commands/star";
 import * as submit from "./commands/submit";
 import * as test from "./commands/test";
@@ -24,6 +25,7 @@ import { leetCodeStatusBarController } from "./statusbar/leetCodeStatusBarContro
 import { DialogType, promptForOpenOutputChannel } from "./utils/uiUtils";
 import { leetCodePreviewProvider } from "./webview/leetCodePreviewProvider";
 import { leetCodePastSubmissionsProvider } from "./webview/leetCodePastSubmissionsProvider";
+import { leetCodeSubmissionDetailProvider } from "./webview/leetCodeSubmissionDetailProvider";
 import { leetCodeSolutionProvider } from "./webview/leetCodeSolutionProvider";
 import { leetCodeSubmissionProvider } from "./webview/leetCodeSubmissionProvider";
 import { markdownEngine } from "./webview/markdownEngine";
@@ -88,6 +90,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
             leetCodeChannel,
             leetCodePreviewProvider,
             leetCodePastSubmissionsProvider,
+            leetCodeSubmissionDetailProvider,
             leetCodeSubmissionProvider,
             leetCodeSolutionProvider,
             leetCodeExecutor,
@@ -123,6 +126,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
             vscode.commands.registerCommand("leetnotion.searchList", () => show.searchLists()),
             vscode.commands.registerCommand("leetnotion.showSolution", (input: LeetCodeNode | vscode.Uri) => show.showSolution(input)),
             vscode.commands.registerCommand("leetnotion.showPastSubmissions", (input?: LeetCodeNode | vscode.Uri) => show.showPastSubmissions(input)),
+            vscode.commands.registerCommand("leetnotion.showPastSubmissionsByQuestionNumber", (questionNumber: string, title?: string) => show.showPastSubmissionsByQuestionNumber(questionNumber, title)),
+            vscode.commands.registerCommand("leetnotion.showSubmissionDetail", (submission) => show.showSubmissionDetail(submission)),
             vscode.commands.registerCommand("leetnotion.refreshExplorer", () => leetCodeTreeDataProvider.refresh()),
             vscode.commands.registerCommand("leetnotion.refreshReviews", () => reviewTreeDataProvider.refresh()),
             vscode.commands.registerCommand("leetnotion.testSolution", (uri?: vscode.Uri) => {
@@ -148,6 +153,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
             vscode.commands.registerCommand("leetnotion.switchDefaultLanguage", () => switchDefaultLanguage()),
             vscode.commands.registerCommand("leetnotion.addFavorite", (node: LeetCodeNode) => star.addFavorite(node)),
             vscode.commands.registerCommand("leetnotion.removeFavorite", (node: LeetCodeNode) => star.removeFavorite(node)),
+            vscode.commands.registerCommand("leetnotion.pinSheet", (node: LeetCodeNode) => sheet.pinSheet(node)),
+            vscode.commands.registerCommand("leetnotion.unpinSheet", (node: LeetCodeNode) => sheet.unpinSheet(node)),
             vscode.commands.registerCommand("leetnotion.problems.sort", () => plugin.switchSortingStrategy()),
             vscode.commands.registerCommand("leetnotion.clearAllData", async () => {
                 await leetnotionManager.clearAllData();

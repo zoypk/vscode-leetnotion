@@ -171,6 +171,18 @@
                 "icon": "$(search)"
             },
             {
+                "command": "leetnotion.pinSheet",
+                "title": "Pin Sheet",
+                "category": "Leetnotion",
+                "icon": "$(pin)"
+            },
+            {
+                "command": "leetnotion.unpinSheet",
+                "title": "Unpin Sheet",
+                "category": "Leetnotion",
+                "icon": "$(pinned)"
+            },
+            {
                 "command": "leetnotion.searchContests",
                 "title": "Search Contests",
                 "category": "Leetnotion",
@@ -386,6 +398,16 @@
                 {
                     "command": "leetnotion.searchSheets",
                     "when": "view == leetnotionExplorer && viewItem == sheets",
+                    "group": "inline"
+                },
+                {
+                    "command": "leetnotion.pinSheet",
+                    "when": "view == leetnotionExplorer && viewItem == sheet",
+                    "group": "inline"
+                },
+                {
+                    "command": "leetnotion.unpinSheet",
+                    "when": "view == leetnotionExplorer && viewItem == sheet-pinned",
                     "group": "inline"
                 },
                 {

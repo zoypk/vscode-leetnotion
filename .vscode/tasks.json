@@ -1,4 +1,23 @@
 {
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "npm: watch",
+      "type": "npm",
+      "script": "watch",
+      "isBackground": true,
+      "problemMatcher": ["$tsc-watch"],
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      },
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      }
+    }
+  ]
+}{
     "version": "2.0.0",
     "tasks": [
         {
@@ -10,7 +29,7 @@
                 "reveal": "silent",
                 "panel": "dedicated"
             },
-            "problemMatcher": "$tsc-watch",
+            "problemMatcher": [],
             "group": {
                 "kind": "build",
                 "isDefault": true
@@ -21,6 +40,15 @@
             "type": "npm",
             "script": "compile",
             "problemMatcher": []
+        },
+        {
+            "label": "npm: typecheck",
+            "type": "npm",
+            "script": "typecheck",
+            "problemMatcher": "$tsc",
+            "group": {
+                "kind": "test"
+            }
         },
         {
             "label": "npm: lint",

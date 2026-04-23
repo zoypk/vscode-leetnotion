@@ -138,6 +138,17 @@ class ExplorerNodeManager implements Disposable {
                 default: return nodes;
             }
         }
+        if (id === Category.Sheets) {
+            const pinnedSheets = new Set(globalState.getPinnedSheets());
+            const order = new Map<string, number>(nodes.map((node: LeetCodeNode, index: number) => [node.name, index] as [string, number]));
+            return nodes.sort((a: LeetCodeNode, b: LeetCodeNode) => {
+                const pinnedDiff = Number(pinnedSheets.has(b.name)) - Number(pinnedSheets.has(a.name));
+                if (pinnedDiff !== 0) {
+                    return pinnedDiff;
+                }
+                return (order.get(a.name) ?? 0) - (order.get(b.name) ?? 0);
+            });
+        }
         if (id === Category.Company) {
             return this.applyCompanySortingStrategy(nodes);
         }

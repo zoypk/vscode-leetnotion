@@ -28,6 +28,7 @@ import { getActiveFilePath, selectWorkspaceFolder } from "../utils/workspaceUtil
 import * as wsl from "../utils/wslUtils";
 import { leetCodePastSubmissionsProvider } from "../webview/leetCodePastSubmissionsProvider";
 import { leetCodePreviewProvider } from "../webview/leetCodePreviewProvider";
+import { leetCodeSubmissionDetailProvider } from "../webview/leetCodeSubmissionDetailProvider";
 import { leetCodeSolutionProvider } from "../webview/leetCodeSolutionProvider";
 import * as list from "./list";
 import { getLeetCodeEndpoint } from "./plugin";
@@ -35,6 +36,7 @@ import { globalState } from "../globalState";
 import { extractArrayElements, getCompanyTags, getLists, getSheets, getTopicTags } from "@/utils/dataUtils";
 import { CompanyTags, Lists, Sheets, TopicTags } from "@/types";
 import TrackData from "../utils/trackingUtils";
+import { SubmissionHistoryItem } from "../types";
 
 export async function previewProblem(input: IProblem | vscode.Uri, isSideMode: boolean = false): Promise<void> {
     let node: IProblem;
@@ -239,6 +241,20 @@ export async function showPastSubmissions(input?: LeetCodeNode | IProblem | vsco
             return;
         }
 
+        await showPastSubmissionsByQuestionNumber(questionNumber, title);
+    } catch (error) {
+        leetCodeChannel.appendLine(`Failed to fetch past submissions: ${error}`);
+        await promptForOpenOutputChannel("Failed to fetch past submissions. Please open the output channel for details.", DialogType.error);
+    }
+}
+
+export async function showPastSubmissionsByQuestionNumber(questionNumber: string, title?: string): Promise<void> {
+    if (!leetCodeManager.getUser()) {
+        await promptForSignIn();
+        return;
+    }
+
+    try {
         await vscode.window.withProgress(
             {
                 location: vscode.ProgressLocation.Notification,
@@ -252,9 +268,51 @@ export async function showPastSubmissions(input?: LeetCodeNode | IProblem | vsco
             }
         );
     } catch (error) {
+        if (isUnauthorizedLeetCodeError(error)) {
+            await promptForSignIn();
+            return;
+        }
+
         leetCodeChannel.appendLine(`Failed to fetch past submissions: ${error}`);
         await promptForOpenOutputChannel("Failed to fetch past submissions. Please open the output channel for details.", DialogType.error);
     }
+}
+
+export async function showSubmissionDetail(submission: SubmissionHistoryItem): Promise<void> {
+    if (!leetCodeManager.getUser()) {
+        await promptForSignIn();
+        return;
+    }
+
+    try {
+        await vscode.window.withProgress(
+            {
+                location: vscode.ProgressLocation.Notification,
+                cancellable: false,
+                title: `Loading submission ${submission.id}`,
+            },
+            async () => {
+                const detail = await leetcodeClient.getSubmissionDetail(submission.id);
+                leetCodeSubmissionDetailProvider.show(submission.title, submission.questionNumber, submission, detail);
+            }
+        );
+    } catch (error) {
+        if (isUnauthorizedLeetCodeError(error)) {
+            await promptForSignIn();
+            return;
+        }
+
+        leetCodeChannel.appendLine(`Failed to fetch submission detail: ${error}`);
+        await promptForOpenOutputChannel("Failed to fetch submission detail. Please open the output channel for details.", DialogType.error);
+    }
+}
+
+function isUnauthorizedLeetCodeError(error: unknown): boolean {
+    return typeof error === "object"
+        && error !== null
+        && "response" in error
+        && typeof (error as { response?: { status?: number } }).response?.status === "number"
+        && (error as { response?: { status?: number } }).response?.status === 401;
 }
 
 async function fetchProblemLanguage(): Promise<string | undefined> {
@@ -417,7 +475,16 @@ async function parseCompaniesToPicks(companyTags: CompanyTags) {
 }
 
 async function parseSheetsToPicks(sheets: Sheets) {
-    const picks: Array<IQuickItemEx<string>> = Object.keys(sheets).map((sheet: string) =>
+    const pinnedSheets = new Set(globalState.getPinnedSheets());
+    const sheetNames = Object.keys(sheets);
+    const order = new Map<string, number>(sheetNames.map((sheet: string, index: number) => [sheet, index] as [string, number]));
+    const picks: Array<IQuickItemEx<string>> = [...sheetNames].sort((a: string, b: string) => {
+        const pinnedDiff = Number(pinnedSheets.has(b)) - Number(pinnedSheets.has(a));
+        if (pinnedDiff !== 0) {
+            return pinnedDiff;
+        }
+        return (order.get(a) ?? 0) - (order.get(b) ?? 0);
+    }).map((sheet: string) =>
         Object.assign(
             {},
             {
