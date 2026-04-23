@@ -111,12 +111,13 @@ class LeetCodePreviewProvider extends LeetCodeWebview {
             ).join(" | "),
             // `</details>`,
         ].join("\n") : "";
-        const links: string = markdownEngine.render(`[Submissions](${this.getSubmissionsLink(url)}) | [Solution](${this.getSolutionsLink(url)})`) + ` | <a href="#" onclick="showPastSubmissions()">Past Submissions</a>`;
+        const submissionsHtml: string = markdownEngine.render(
+            `[Submissions](${this.getSubmissionsLink(url)}) | [Solution](${this.getSolutionsLink(url)})`
+        );
+        const submissionsHtmlNoP: string = submissionsHtml.replace(/^\s*<p>/i, "").replace(/<\/p>\s*$/i, "");
+        const links: string = `<p>${submissionsHtmlNoP} | <a href="#" onclick="showPastSubmissions()">Past Submissions</a></p>`;
         const quickNavItems: string[] = [
             `<a href="#overview">Overview</a>`,
-            this.description.tags.length > 0 ? `<a href="#tags">Tags</a>` : "",
-            this.description.companies.length > 0 ? `<a href="#companies">Companies</a>` : "",
-            this.description.sheets.length > 0 ? `<a href="#sheets">Sheets</a>` : "",
             `<a href="#description">Description</a>`,
             neetCodeSection ? `<a href="#neetcode">NeetCode</a>` : "",
             `<a href="#links">Links</a>`,
