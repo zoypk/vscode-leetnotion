@@ -14,10 +14,17 @@ class ExplorerNodeManager implements Disposable {
     private explorerNodeMap: Map<string, LeetCodeNode> = new Map<string, LeetCodeNode>();
     private dataTree: LeetnotionTree = {};
 
+    public getSheetNodeId(sheetName: string): string {
+        return `${this.hasPinnedSheet(sheetName) ? Category.PinnedSheets : Category.Sheets}#${sheetName}`;
+    }
+
     public async refreshCache(): Promise<void> {
         this.dispose();
         const shouldHideSolved: boolean = shouldHideSolvedProblem();
         const dailyProblem = globalState.getDailyProblem();
+        const allSheets = getSheets();
+        const pinnedSheets = this.getPinnedSheetsData(allSheets);
+        const unpinnedSheets = this.getUnpinnedSheetsData(allSheets);
 
         let problems = await list.listProblems()
         problems = problems.filter(item => !shouldHideSolved || item.state !== ProblemState.AC)
@@ -37,7 +44,8 @@ class ExplorerNodeManager implements Disposable {
             [Category.Contests]: await getContests(),
             [Category.Favorite]: problems.filter(({ isFavorite }) => isFavorite).map(problem => problem.id),
             [Category.Daily]: [dailyProblem],
-            [Category.Sheets]: getSheets(),
+            [Category.PinnedSheets]: pinnedSheets,
+            [Category.Sheets]: unpinnedSheets,
             [Category.Lists]: await getListsWithQuestions(),
         }
         this.storeLeetCodeNodes();
@@ -46,9 +54,22 @@ class ExplorerNodeManager implements Disposable {
     public getRootNodes(): LeetCodeNode[] {
         const nodes: LeetCodeNode[] = [];
         for (const category of Object.keys(this.dataTree)) {
+            if (category === Category.PinnedSheets) {
+                continue;
+            }
             if(this.explorerNodeMap.has(category)) {
                 const node = this.explorerNodeMap.get(category);
                 nodes.push(node);
+            }
+        }
+
+        const pinnedSheets = this.dataTree[Category.PinnedSheets];
+        if (pinnedSheets && !Array.isArray(pinnedSheets)) {
+            for (const sheetName of Object.keys(pinnedSheets)) {
+                const node = this.explorerNodeMap.get(`${Category.PinnedSheets}#${sheetName}`);
+                if (node) {
+                    nodes.push(node);
+                }
             }
         }
         return nodes;
@@ -138,7 +159,7 @@ class ExplorerNodeManager implements Disposable {
                 default: return nodes;
             }
         }
-        if (id === Category.Sheets) {
+        if ([Category.PinnedSheets, Category.Sheets].some((category) => id.toLowerCase() === category.toLowerCase())) {
             const pinnedSheets = new Set(globalState.getPinnedSheets());
             const order = new Map<string, number>(nodes.map((node: LeetCodeNode, index: number) => [node.name, index] as [string, number]));
             return nodes.sort((a: LeetCodeNode, b: LeetCodeNode) => {
@@ -171,6 +192,24 @@ class ExplorerNodeManager implements Disposable {
             default:
                 return nodes;
         }
+    }
+
+    private hasPinnedSheet(sheetName: string): boolean {
+        return globalState.isPinnedSheet(sheetName);
+    }
+
+    private getPinnedSheetsData(allSheets: Record<string, Record<string, string[]>>): Record<string, Record<string, string[]>> {
+        const pinnedSheetNames = new Set(globalState.getPinnedSheets());
+        return Object.fromEntries(
+            Object.entries(allSheets).filter(([sheetName]) => pinnedSheetNames.has(sheetName))
+        );
+    }
+
+    private getUnpinnedSheetsData(allSheets: Record<string, Record<string, string[]>>): Record<string, Record<string, string[]>> {
+        const pinnedSheetNames = new Set(globalState.getPinnedSheets());
+        return Object.fromEntries(
+            Object.entries(allSheets).filter(([sheetName]) => !pinnedSheetNames.has(sheetName))
+        );
     }
 
     private storeLeetCodeNodes() {

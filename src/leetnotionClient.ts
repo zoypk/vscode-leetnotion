@@ -10,6 +10,9 @@ import { areArraysEqual, getNotionLang, splitTextIntoChunks } from "./utils/tool
 import { leetCodeSubmissionProvider } from "./webview/leetCodeSubmissionProvider";
 import { LeetCodeToNotionConverter } from "./modules/leetnotion/converter";
 import Bottleneck from "bottleneck";
+import { reviewService } from "./reviews/reviewService";
+import { reviewTreeDataProvider } from "./reviews/reviewTreeDataProvider";
+import { selectWorkspaceFolder } from "./utils/workspaceUtils";
 
 const QuestionsDatabaseKey = "Questions Database";
 const SubmissionsDatabaseKey = "Submissions Database";
@@ -95,7 +98,7 @@ class LeetnotionClient {
                 throw new Error(`no-recent-submission`);
             }
             const submissionPageId = await this.createSubmissionPage(questionNumber, submission);
-            this.updatePanel(updateResponse.id, submissionPageId, this.getSelectTags(updateResponse.properties.Tags.multi_select.map(tag => tag.name)));
+            this.updatePanel(questionNumber, updateResponse.id, submissionPageId, this.getSelectTags(updateResponse.properties.Tags.multi_select.map(tag => tag.name)));
             await this.addCodeToPage(submissionPageId, submission.lang, submission.code);
         } catch (error) {
             promptForOpenOutputChannel(`Failed to update notion for your submission`, DialogType.error);
@@ -103,13 +106,13 @@ class LeetnotionClient {
         }
     }
 
-    public updatePanel(questionPageId: string, submissionPageId: string, tags: SelectTags) {
+    public updatePanel(questionNumber: string, questionPageId: string, submissionPageId: string, tags: SelectTags) {
         try {
             const panel = leetCodeSubmissionProvider.getPanel();
             if (!panel) {
                 throw new Error('panel-not-available');
             }
-            panel.webview.postMessage({ command: 'submission-done', questionPageId, submissionPageId, tags })
+            panel.webview.postMessage({ command: 'submission-done', questionNumber, questionPageId, submissionPageId, tags })
         } catch (error) {
             throw new Error(`Failed to update submission panel: ${error}`);
         }
@@ -190,37 +193,39 @@ class LeetnotionClient {
         }
     }
 
-    public async setProperties(message: SetPropertiesMessage) {
-        if (!hasNotionIntegrationEnabled()) return;
-        if (message.command !== "set-properties") return;
+    public async setProperties(message: SetPropertiesMessage): Promise<boolean> {
+        if (!hasNotionIntegrationEnabled()) return false;
+        if (message.command !== "set-properties") return false;
         const tagsChanged = !areArraysEqual(message.initialTags, message.finalTags);
-        const hasReviewDate = message.reviewDate && message.reviewDate.length > 0;
         const hasNotes = message.notes && message.notes.length > 0;
-        const questionPageProperties: UpdatePageProperties = {};
-        if (hasReviewDate) {
-            questionPageProperties['Review Date'] = {
-                date: {
-                    start: message.reviewDate
-                }
-            },
+        try {
+            const reviewDate = await this.syncReviewSchedule(message);
+            const hasReviewDate = !!reviewDate;
+            const questionPageProperties: UpdatePageProperties = {};
+            if (hasReviewDate) {
+                questionPageProperties['Review Date'] = {
+                    date: {
+                        start: reviewDate
+                    }
+                };
                 questionPageProperties['Reviewed'] = {
                     checkbox: false
-                }
-        }
-        if (tagsChanged) {
-            questionPageProperties['Tags'] = {
-                multi_select: message.finalTags.map(name => ({ name }))
+                };
             }
-        }
+            if (tagsChanged) {
+                questionPageProperties['Tags'] = {
+                    multi_select: message.finalTags.map(name => ({ name }))
+                };
+            }
 
-        const submissionPageProperties: UpdatePageProperties = {};
-        submissionPageProperties['Note'] = {
-            rich_text: [{ text: { content: message.notes } }]
-        }
-        submissionPageProperties['Tags'] = {
-            multi_select: message.isOptimal ? [{ name: 'Optimal' }] : []
-        }
-        try {
+            const submissionPageProperties: UpdatePageProperties = {};
+            submissionPageProperties['Note'] = {
+                rich_text: [{ text: { content: message.notes } }]
+            };
+            submissionPageProperties['Tags'] = {
+                multi_select: message.isOptimal ? [{ name: 'Optimal' }] : []
+            };
+
             if (!this.isSignedIn || !this.notion) {
                 throw new Error("notion-integration-not-enabled");
             }
@@ -240,10 +245,59 @@ class LeetnotionClient {
             if (!prevTags) prevTags = [];
             const allTags = Array.from(new Set([...prevTags, ...message.finalTags]));
             globalState.setUserQuestionTags(allTags);
+            return true;
         } catch (error) {
             leetCodeChannel.appendLine(`Failed to set properties: ${error}`);
             promptForOpenOutputChannel(`Failed to set properties`, DialogType.error);
+            return false;
         }
+    }
+
+    private async syncReviewSchedule(message: SetPropertiesMessage): Promise<string | undefined> {
+        if (message.reviewRating) {
+            await this.ensureReviewWorkspaceConfigured();
+            await reviewService.addProblem(message.questionNumber);
+            const dueAt = await reviewService.applyRating(message.questionNumber, message.reviewRating);
+            await reviewTreeDataProvider.refresh();
+            return this.toDateInputValue(new Date(dueAt));
+        }
+
+        if (message.reviewDate && message.reviewDate.length > 0) {
+            await this.ensureReviewWorkspaceConfigured();
+            await reviewService.addProblem(message.questionNumber);
+            await reviewService.snoozeReview(message.questionNumber, this.parseDateInput(message.reviewDate));
+            await reviewTreeDataProvider.refresh();
+            return message.reviewDate;
+        }
+
+        return undefined;
+    }
+
+    private async ensureReviewWorkspaceConfigured(): Promise<void> {
+        if (reviewService.isConfigured()) {
+            return;
+        }
+
+        const workspaceFolder = await selectWorkspaceFolder();
+        if (workspaceFolder === "" || !reviewService.isConfigured()) {
+            throw new Error("local-review-workspace-not-configured");
+        }
+    }
+
+    private parseDateInput(value: string): Date {
+        const [year, month, day] = value.split("-").map(Number);
+        if (!year || !month || !day) {
+            throw new Error(`Invalid review date: ${value}`);
+        }
+
+        return new Date(year, month - 1, day);
+    }
+
+    private toDateInputValue(date: Date): string {
+        const year = date.getFullYear();
+        const month = `${date.getMonth() + 1}`.padStart(2, "0");
+        const day = `${date.getDate()}`.padStart(2, "0");
+        return `${year}-${month}-${day}`;
     }
 
     public async setUserQuestionTags(): Promise<void> {

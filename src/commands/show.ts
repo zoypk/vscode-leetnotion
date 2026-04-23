@@ -177,7 +177,7 @@ export async function searchSheets(): Promise<void> {
     if (!choice) {
         return;
     }
-    explorerNodeManager.revealNode(`${Category.Sheets}#${choice.value}`);
+    explorerNodeManager.revealNode(explorerNodeManager.getSheetNodeId(choice.value));
 }
 
 export async function searchLists(): Promise<void> {

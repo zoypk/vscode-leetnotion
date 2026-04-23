@@ -4,9 +4,8 @@
 import {
     Credential,
     LeetCodeAdvanced,
+    type JudgeCheckResponse,
     type Submission,
-    type SubmissionDetail,
-    type ProblemSubmission,
     type UserContestInfo,
     type UserProfile,
     type UserSubmission,
@@ -17,9 +16,22 @@ import { getUrl } from "./shared";
 import { extractCookie } from "./utils/toolUtils";
 import { DialogType, promptForOpenOutputChannel } from "./utils/uiUtils";
 import { leetCodeChannel } from "./leetCodeChannel";
-import { LeetcodeProblem, LeetcodeSubmission, ProblemRatingMap } from "./types";
+import { LeetcodeProblem, LeetcodeSubmission, ProblemRatingMap, SubmissionDetailView } from "./types";
 import { ProblemRating } from "./shared";
 import _ from "lodash";
+
+type ProblemSubmissionsApiResponse = {
+    submissions_dump: Array<{
+        id?: string | number;
+        url: string;
+        status_display: string;
+        lang: string;
+        title: string;
+        timestamp: number;
+        runtime: string;
+        memory: string;
+    }>;
+};
 
 class LeetcodeClient {
     private leetcode: LeetCodeAdvanced;
@@ -140,12 +152,44 @@ class LeetcodeClient {
         return submissions.map((submission) => this.normalizeProblemSubmission(submission, titleSlug));
     }
 
-    public async getSubmissionDetail(id: number): Promise<SubmissionDetail> {
+    public async getSubmissionDetail(id: number): Promise<SubmissionDetailView> {
         if (!this.isSignedIn) {
             throw new Error("not-signed-in-to-leetcode");
         }
 
-        return await this.leetcode.submission(id);
+        const cookie = globalState.getCookie();
+        if (!cookie) {
+            throw new Error("not-signed-in-to-leetcode");
+        }
+
+        const { csrf } = extractCookie(cookie);
+        const baseUrl = getUrl("base");
+        const response = await axios.get<JudgeCheckResponse>(`${baseUrl}/submissions/detail/${id}/check/`, {
+            headers: {
+                "content-type": "application/json",
+                origin: baseUrl,
+                referer: `${baseUrl}/submissions/detail/${id}/`,
+                cookie,
+                "x-csrftoken": csrf || "",
+                "x-requested-with": "XMLHttpRequest",
+                "user-agent": "Mozilla/5.0 LeetCode API",
+            },
+        });
+
+        return {
+            code: "",
+            runtime_percentile: response.data.runtime_percentile ?? null,
+            memory_percentile: response.data.memory_percentile ?? null,
+            details: {
+                total_correct: response.data.total_correct,
+                total_testcases: response.data.total_testcases,
+                compare_result: response.data.status_msg,
+                status_msg: response.data.status_msg,
+                stdout: response.data.std_output,
+                testcase: response.data.last_testcase || response.data.input,
+                error: [response.data.runtime_error, response.data.compile_error, response.data.syntax_error].filter((value): value is string => Boolean(value)),
+            },
+        };
     }
 
     public async getUserProfile(username: string): Promise<UserProfile> {
@@ -242,14 +286,30 @@ class LeetcodeClient {
         };
     }
 
-    private async getProblemSubmissionsBySlug(titleSlug: string): Promise<ProblemSubmission[]> {
-        const leetcode = this.leetcode as LeetCodeAdvanced & {
-            problemSubmissions(slug: string): Promise<ProblemSubmission[]>;
-        };
-        return await leetcode.problemSubmissions(titleSlug);
+    private async getProblemSubmissionsBySlug(titleSlug: string): Promise<ProblemSubmissionsApiResponse["submissions_dump"]> {
+        const cookie = globalState.getCookie();
+        if (!cookie) {
+            throw new Error("not-signed-in-to-leetcode");
+        }
+
+        const { csrf } = extractCookie(cookie);
+        const baseUrl = getUrl("base");
+        const response = await axios.get<ProblemSubmissionsApiResponse>(`${baseUrl}/api/submissions/${titleSlug}`, {
+            headers: {
+                "content-type": "application/json",
+                origin: baseUrl,
+                referer: `${baseUrl}/problems/${titleSlug}/`,
+                cookie,
+                "x-csrftoken": csrf || "",
+                "x-requested-with": "XMLHttpRequest",
+                "user-agent": "Mozilla/5.0 LeetCode API",
+            },
+        });
+
+        return response.data.submissions_dump || [];
     }
 
-    private normalizeProblemSubmission(submission: ProblemSubmission, titleSlug: string): LeetcodeSubmission {
+    private normalizeProblemSubmission(submission: ProblemSubmissionsApiResponse["submissions_dump"][number], titleSlug: string): LeetcodeSubmission {
         const submissionId = Number(submission.id ?? submission.url.split("/").filter(Boolean).pop() ?? 0);
         return {
             code: "",

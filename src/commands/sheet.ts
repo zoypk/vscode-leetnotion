@@ -8,7 +8,9 @@ import { Category } from "../shared";
 import { DialogType, promptForOpenOutputChannel } from "../utils/uiUtils";
 
 function getSheetName(node: LeetCodeNode): string | undefined {
-    if (!node.id.startsWith(`${Category.Sheets}#`)) {
+    const lowerCaseId = node.id.toLowerCase();
+    const sheetPrefixes = [Category.Sheets, Category.PinnedSheets].map((category) => `${category.toLowerCase()}#`);
+    if (!sheetPrefixes.some((prefix) => lowerCaseId.startsWith(prefix))) {
         return undefined;
     }
     return node.name;

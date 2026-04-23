@@ -87,7 +87,7 @@ class ReviewService {
         });
     }
 
-    public async applyRating(questionNumber: string, rating: ReviewRating): Promise<void> {
+    public async applyRating(questionNumber: string, rating: ReviewRating): Promise<string> {
         const state = await reviewStorage.load();
         const record = state.reviews[questionNumber];
         if (!record) {
@@ -108,6 +108,7 @@ class ReviewService {
         };
 
         await reviewStorage.save(state);
+        return result.card.due.toISOString();
     }
 
     public async snoozeReview(questionNumber: string, dueDate: Date): Promise<void> {

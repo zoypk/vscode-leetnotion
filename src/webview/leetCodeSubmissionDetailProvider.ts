@@ -2,8 +2,7 @@
 // Licensed under the MIT license.
 
 import { commands, ViewColumn } from "vscode";
-import type { SubmissionDetail } from "@leetnotion/leetcode-api";
-import { SubmissionHistoryItem } from "../types";
+import { SubmissionDetailView, SubmissionHistoryItem } from "../types";
 import { openUrl } from "../utils/uiUtils";
 import { ILeetCodeWebviewOption, LeetCodeWebview } from "./LeetCodeWebview";
 import { markdownEngine } from "./markdownEngine";
@@ -14,9 +13,9 @@ class LeetCodeSubmissionDetailProvider extends LeetCodeWebview {
     private problemTitle: string = "Submission";
     private questionNumber: string = "";
     private submission: SubmissionHistoryItem;
-    private detail: SubmissionDetail;
+    private detail: SubmissionDetailView;
 
-    public show(problemTitle: string, questionNumber: string, submission: SubmissionHistoryItem, detail: SubmissionDetail): void {
+    public show(problemTitle: string, questionNumber: string, submission: SubmissionHistoryItem, detail: SubmissionDetailView): void {
         this.problemTitle = problemTitle;
         this.questionNumber = questionNumber;
         this.submission = submission;
@@ -36,18 +35,28 @@ class LeetCodeSubmissionDetailProvider extends LeetCodeWebview {
         const styles = markdownEngine.getStyles(webview);
         const head = markdownEngine.render(`# ${this.escapeHtml(this.problemTitle)}`);
         const subtitle = `<div class="subtitle">Problem ${this.escapeHtml(this.questionNumber)} · Submission ${this.submission.id} · ${this.escapeHtml(this.submission.status_display)}</div>`;
+        const runtimePercentile = this.formatPercentile(this.detail.runtime_percentile);
+        const memoryPercentile = this.formatPercentile(this.detail.memory_percentile);
         const info = markdownEngine.render([
             `| Field | Value |`,
             `| :--- | :--- |`,
             `| Language | ${this.escapeHtml(this.submission.lang)} |`,
             `| Runtime | ${this.escapeHtml(this.submission.runtime || "N/A")} |`,
             `| Memory | ${this.escapeHtml(this.submission.memory || "N/A")} |`,
-            `| Runtime percentile | ${this.detail.runtime_percentile.toFixed(2)} |`,
-            `| Memory percentile | ${this.detail.memory_percentile.toFixed(2)} |`,
+            `| Runtime percentile | ${runtimePercentile} |`,
+            `| Memory percentile | ${memoryPercentile} |`,
             `| Total correct | ${this.escapeHtml(this.detail.details.total_correct || "N/A")} |`,
             `| Total testcases | ${this.escapeHtml(this.detail.details.total_testcases || "N/A")} |`,
-            `| Compare result | ${this.escapeHtml(this.detail.details.compare_result || "N/A")} |`,
+            `| Result | ${this.escapeHtml(this.detail.details.compare_result || "N/A")} |`,
         ].join("\n"));
+        const codeBlock = this.detail.code
+            ? `<pre class="code-block"><code>${this.escapeHtml(this.detail.code)}</code></pre>`
+            : `<div class="empty-state">Code is not available from LeetCode's current submission detail API. Use <strong>Open on LeetCode</strong> for the original page.</div>`;
+        const extraSections = [
+            this.renderTextSection("Last testcase", this.detail.details.testcase),
+            this.renderTextSection("Stdout", this.detail.details.stdout),
+            this.renderErrorSection(this.detail.details.error),
+        ].filter(Boolean).join("");
 
         return `
             <!DOCTYPE html>
@@ -99,6 +108,14 @@ class LeetCodeSubmissionDetailProvider extends LeetCodeWebview {
                         white-space: pre-wrap;
                         word-break: break-word;
                     }
+
+                    .empty-state {
+                        margin-top: 16px;
+                        padding: 16px;
+                        border-radius: 8px;
+                        border: 1px dashed var(--vscode-panel-border);
+                        color: var(--vscode-descriptionForeground);
+                    }
                 </style>
             </head>
             <body class="vscode-body">
@@ -109,7 +126,8 @@ class LeetCodeSubmissionDetailProvider extends LeetCodeWebview {
                     <button onclick="showPastSubmissions()">Back to submissions</button>
                     <button onclick="openSubmission()">Open on LeetCode</button>
                 </div>
-                <pre class="code-block"><code>${this.escapeHtml(this.detail.code)}</code></pre>
+                ${codeBlock}
+                ${extraSections}
                 <script>
                     const vscode = acquireVsCodeApi();
 
@@ -149,12 +167,38 @@ class LeetCodeSubmissionDetailProvider extends LeetCodeWebview {
     }
 
     private escapeHtml(value: string): string {
-        return value
+        return String(value)
             .replace(/&/g, "&amp;")
             .replace(/</g, "&lt;")
             .replace(/>/g, "&gt;")
             .replace(/\"/g, "&quot;")
             .replace(/'/g, "&#39;");
+    }
+
+    private formatPercentile(value: number | null): string {
+        return typeof value === "number" ? value.toFixed(2) : "N/A";
+    }
+
+    private renderTextSection(title: string, value?: string): string {
+        if (!value) {
+            return "";
+        }
+
+        return `
+            <h2>${this.escapeHtml(title)}</h2>
+            <pre class="code-block"><code>${this.escapeHtml(value)}</code></pre>
+        `;
+    }
+
+    private renderErrorSection(errors?: string[]): string {
+        if (!errors || errors.length === 0) {
+            return "";
+        }
+
+        return `
+            <h2>Errors</h2>
+            <pre class="code-block"><code>${this.escapeHtml(errors.join("\n\n"))}</code></pre>
+        `;
     }
 }
 

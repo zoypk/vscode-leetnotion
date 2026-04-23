@@ -45,7 +45,7 @@ export class LeetCodeTreeDataProvider implements vscode.TreeDataProvider<LeetCod
         if (element.isProblem) {
             contextValue = element.isFavorite ? "problem-favorite" : "problem";
         } else {
-            if (element.id.startsWith(`${Category.Sheets}#`)) {
+            if (this.isSheetNode(element.id)) {
                 contextValue = globalState.isPinnedSheet(element.name) ? "sheet-pinned" : "sheet";
             } else {
                 contextValue = element.id.toLowerCase();
@@ -140,6 +140,7 @@ export class LeetCodeTreeDataProvider implements vscode.TreeDataProvider<LeetCod
         const categoryTooltips: Record<string, string> = {
             [Category.Tag]: `No of tags: ${childrenNodes.length}`,
             [Category.Company]: `No of companies: ${childrenNodes.length}`,
+            [Category.PinnedSheets]: `No of pinned sheets: ${childrenNodes.length}`,
             [Category.Sheets]: `No of sheets: ${childrenNodes.length}`,
             [Category.Lists]: `No of lists: ${childrenNodes.length}`
         };
@@ -167,6 +168,11 @@ export class LeetCodeTreeDataProvider implements vscode.TreeDataProvider<LeetCod
             failedNum,
             totalNum,
         }
+    }
+
+    private isSheetNode(id: string): boolean {
+        const lowerCaseId = id.toLowerCase();
+        return lowerCaseId.startsWith(`${Category.Sheets.toLowerCase()}#`) || lowerCaseId.startsWith(`${Category.PinnedSheets.toLowerCase()}#`);
     }
 }
 

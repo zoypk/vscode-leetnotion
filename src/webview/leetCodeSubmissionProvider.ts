@@ -83,8 +83,10 @@ class LeetCodeSubmissionProvider extends LeetCodeWebview {
     protected async onDidReceiveMessage(message: SetPropertiesMessage): Promise<void> {
         switch (message.command) {
             case 'set-properties': {
-                await leetnotionClient.setProperties(message);
-                promptForOpenOutputChannel(`Properties Updated in Notion`, DialogType.completed);
+                const updated = await leetnotionClient.setProperties(message);
+                if (updated) {
+                    promptForOpenOutputChannel(`Properties updated`, DialogType.completed);
+                }
                 break;
             }
             default: {

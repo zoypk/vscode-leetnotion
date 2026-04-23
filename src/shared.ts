@@ -111,6 +111,7 @@ export enum Category {
     Company = "Company",
     Favorite = "Favorite",
     Daily = "Daily",
+    PinnedSheets = "Pinned Sheets",
     Sheets = "Sheets",
     Sublist = "Sublist",
     Lists = "Lists",

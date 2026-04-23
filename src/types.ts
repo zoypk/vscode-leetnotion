@@ -26,6 +26,7 @@ import type {
     MutationUrl,
     PrimaryColor,
 } from '@leetnotion/notion-api';
+import { ReviewRating } from "./reviews/types";
 import { ALL_TIME, LAST_30_DAYS, LAST_3_MONTHS, LAST_6_MONTHS, MORE_THAN_6_MONTHS, ProblemRating } from './shared';
 
 export interface LeetcodeSubmission {
@@ -59,6 +60,21 @@ export interface SubmissionHistoryItem {
     runtime: string;
     memory: string;
     status_display: string;
+}
+
+export interface SubmissionDetailView {
+    code: string;
+    runtime_percentile: number | null;
+    memory_percentile: number | null;
+    details: {
+        total_correct?: number | string;
+        total_testcases?: number | string;
+        compare_result?: string;
+        status_msg?: string;
+        stdout?: string;
+        testcase?: string;
+        error?: string[];
+    };
 }
 
 export type PartialProblemPage = {
@@ -200,10 +216,12 @@ export type WebviewMessage = {
 
 export type SetPropertiesMessage = {
     command: string;
+    questionNumber: string;
     questionPageId: string;
     submissionPageId: string;
     notes: string;
     reviewDate: string;
+    reviewRating?: ReviewRating;
     isOptimal: boolean;
     initialTags: string[];
     finalTags: string[]
@@ -263,6 +281,7 @@ export type LeetnotionTree = {
     Contests?: Record<string, string[]>;
     Favorite?: string[];
     Daily?: string[];
+    ["Pinned Sheets"]?: Sheets;
     Sheets?: Sheets;
     Lists?: Record<string, string[]>;
 }

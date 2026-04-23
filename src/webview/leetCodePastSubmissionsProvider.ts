@@ -167,7 +167,7 @@ class LeetCodePastSubmissionsProvider extends LeetCodeWebview {
                         <div>${this.escapeHtml(this.formatTimestamp(submission.timestamp))}</div>
                     </div>
                     <div class="actions">
-                        <button data-submission="${this.escapeHtml(JSON.stringify(payload))}" onclick="openSubmissionDetail(this.dataset.submission)">View code</button>
+                        <button data-submission="${this.escapeHtml(JSON.stringify(payload))}" onclick="openSubmissionDetail(this.dataset.submission)">View details</button>
                         <button onclick="openSubmission(${JSON.stringify(submission.url)})">Open on LeetCode</button>
                     </div>
                 </div>

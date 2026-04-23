@@ -40,10 +40,19 @@ class LeetnotionEngine implements vscode.Disposable {
                             <div id="notes-label">Notes</div>
                         </vscode-text-area>
                         <div id="review-container">
-                        <label id="review-label" for="absolute-review-date-container">Review on</label>
-                        <div id="absolute-review-date-container">
-                            <input type="date" id="review-date-input" value="" />
-                        </div>
+                            <label id="review-label" for="absolute-review-date-container">Review schedule</label>
+                            <div id="review-inputs">
+                                <div id="absolute-review-date-container">
+                                    <input type="date" id="review-date-input" value="" />
+                                </div>
+                                <div id="review-rating-buttons" role="group" aria-label="FSRS review rating">
+                                    <button type="button" class="review-rating-button" data-rating="again" title="Missed the answer. Schedule the card again soon.">Again</button>
+                                    <button type="button" class="review-rating-button" data-rating="hard" title="Remembered with difficulty. Schedule it a bit sooner.">Hard</button>
+                                    <button type="button" class="review-rating-button" data-rating="good" title="Remembered normally. Use the standard FSRS interval.">Good</button>
+                                    <button type="button" class="review-rating-button" data-rating="easy" title="Remembered effortlessly. Stretch the next interval.">Easy</button>
+                                </div>
+                                <p id="review-hint">Pick a calendar date or let FSRS schedule from a rating.</p>
+                            </div>
                         </div>
                         <vscode-checkbox id="optimal-checkbox-input">Optimal Solution</vscode-checkbox>
                     </div>

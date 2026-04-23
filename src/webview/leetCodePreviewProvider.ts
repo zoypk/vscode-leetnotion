@@ -230,7 +230,7 @@ class LeetCodePreviewProvider extends LeetCodeWebview {
                 break;
             }
             case "SheetClick": {
-                explorerNodeManager.revealNode(`${Category.Sheets}#${message.sheet}`);
+                explorerNodeManager.revealNode(explorerNodeManager.getSheetNodeId(message.sheet));
                 break;
             }
             case "ShowPastSubmissions": {
@@ -325,10 +325,14 @@ class LeetCodePreviewProvider extends LeetCodeWebview {
         }
         if (problem.articleMarkdown) {
             const articleMarkdown: string = this.getPythonOnlyArticleMarkdown(problem.articleMarkdown);
+            const articleHtml: string = markdownEngine.render(articleMarkdown).replace(
+                /<p>(?:&lt;br&gt;|<br\s*\/?>)<\/p>/g,
+                ""
+            );
             sections.push([
                 `<details>`,
                 `<summary><strong>Article</strong></summary>`,
-                markdownEngine.render(articleMarkdown),
+                articleHtml,
                 `</details>`,
             ].join("\n"));
         }
@@ -384,6 +388,10 @@ class LeetCodePreviewProvider extends LeetCodeWebview {
             }
 
             if (!inTabs) {
+                if (trimmed === "<br>" || trimmed === "<br/>" || trimmed === "<br />") {
+                    continue;
+                }
+
                 output.push(line);
                 continue;
             }
@@ -415,6 +423,11 @@ class LeetCodePreviewProvider extends LeetCodeWebview {
 
             if (inPythonFence) {
                 output.push(line);
+                continue;
+            }
+
+            if (trimmed === "<br>" || trimmed === "<br/>" || trimmed === "<br />") {
+                continue;
             }
         }
 
