@@ -66,6 +66,12 @@
                 "icon": "$(refresh)"
             },
             {
+                "command": "leetnotion.refreshStudy",
+                "title": "Refresh Study",
+                "category": "Leetnotion",
+                "icon": "$(refresh)"
+            },
+            {
                 "command": "leetnotion.refreshHome",
                 "title": "Refresh Home",
                 "category": "Leetnotion",
@@ -103,10 +109,26 @@
                 "category": "Leetnotion"
             },
             {
+                "command": "leetnotion.previewStudyProblem",
+                "title": "Preview Problem",
+                "category": "Leetnotion"
+            },
+            {
+                "command": "leetnotion.openStudyProblem",
+                "title": "Open Problem",
+                "category": "Leetnotion"
+            },
+            {
                 "command": "leetnotion.addToReview",
                 "title": "Add to Review",
                 "category": "Leetnotion",
                 "icon": "$(calendar)"
+            },
+            {
+                "command": "leetnotion.addToBacklog",
+                "title": "Add to Backlog",
+                "category": "Leetnotion",
+                "icon": "$(list-unordered)"
             },
             {
                 "command": "leetnotion.startReviewSession",
@@ -115,10 +137,28 @@
                 "icon": "$(play)"
             },
             {
+                "command": "leetnotion.startStudySession",
+                "title": "Start Study Session",
+                "category": "Leetnotion",
+                "icon": "$(play)"
+            },
+            {
                 "command": "leetnotion.setReviewFilters",
                 "title": "Set Review Filters",
                 "category": "Leetnotion",
                 "icon": "$(filter)"
+            },
+            {
+                "command": "leetnotion.setStudyFilters",
+                "title": "Set Study Filters",
+                "category": "Leetnotion",
+                "icon": "$(filter)"
+            },
+            {
+                "command": "leetnotion.setDailyNewProblemLimit",
+                "title": "Set Daily New Problem Limit",
+                "category": "Leetnotion",
+                "icon": "$(dashboard)"
             },
             {
                 "command": "leetnotion.searchProblem",
@@ -253,6 +293,18 @@
                 "title": "Snooze",
                 "category": "Leetnotion",
                 "icon": "$(clock)"
+            },
+            {
+                "command": "leetnotion.markStudyProblemDone",
+                "title": "Mark Done",
+                "category": "Leetnotion",
+                "icon": "$(check)"
+            },
+            {
+                "command": "leetnotion.removeFromBacklog",
+                "title": "Remove from Backlog",
+                "category": "Leetnotion",
+                "icon": "$(trash)"
             }
         ],
         "viewsContainers": {
@@ -273,6 +325,10 @@
                 {
                     "id": "leetnotionReviews",
                     "name": "Reviews"
+                },
+                {
+                    "id": "leetnotionStudy",
+                    "name": "Study"
                 },
                 {
                     "id": "leetnotionHome",
@@ -342,6 +398,26 @@
                     "command": "leetnotion.setReviewFilters",
                     "when": "view == leetnotionReviews",
                     "group": "navigation@2"
+                },
+                {
+                    "command": "leetnotion.startStudySession",
+                    "when": "view == leetnotionStudy",
+                    "group": "navigation@0"
+                },
+                {
+                    "command": "leetnotion.refreshStudy",
+                    "when": "view == leetnotionStudy",
+                    "group": "navigation@1"
+                },
+                {
+                    "command": "leetnotion.setStudyFilters",
+                    "when": "view == leetnotionStudy",
+                    "group": "navigation@2"
+                },
+                {
+                    "command": "leetnotion.setDailyNewProblemLimit",
+                    "when": "view == leetnotionStudy",
+                    "group": "navigation@3"
                 }
             ],
             "view/item/context": [
@@ -374,6 +450,11 @@
                     "command": "leetnotion.addToReview",
                     "when": "view == leetnotionExplorer && viewItem =~ /problem*/",
                     "group": "inline@2"
+                },
+                {
+                    "command": "leetnotion.addToBacklog",
+                    "when": "view == leetnotionExplorer && viewItem =~ /problem*/",
+                    "group": "inline@3"
                 },
                 {
                     "command": "leetnotion.removeFavorite",
@@ -434,6 +515,46 @@
                     "command": "leetnotion.snoozeReview",
                     "when": "view == leetnotionReviews && viewItem == review-problem",
                     "group": "inline"
+                },
+                {
+                    "command": "leetnotion.previewStudyProblem",
+                    "when": "view == leetnotionStudy && viewItem == study-review-problem",
+                    "group": "leetnotion@1"
+                },
+                {
+                    "command": "leetnotion.openReviewProblem",
+                    "when": "view == leetnotionStudy && viewItem == study-review-problem",
+                    "group": "leetnotion@2"
+                },
+                {
+                    "command": "leetnotion.markReviewReviewed",
+                    "when": "view == leetnotionStudy && viewItem == study-review-problem",
+                    "group": "inline"
+                },
+                {
+                    "command": "leetnotion.snoozeReview",
+                    "when": "view == leetnotionStudy && viewItem == study-review-problem",
+                    "group": "inline@2"
+                },
+                {
+                    "command": "leetnotion.previewStudyProblem",
+                    "when": "view == leetnotionStudy && viewItem == study-new-problem",
+                    "group": "leetnotion@1"
+                },
+                {
+                    "command": "leetnotion.openStudyProblem",
+                    "when": "view == leetnotionStudy && viewItem == study-new-problem",
+                    "group": "leetnotion@2"
+                },
+                {
+                    "command": "leetnotion.markStudyProblemDone",
+                    "when": "view == leetnotionStudy && viewItem == study-new-problem",
+                    "group": "inline"
+                },
+                {
+                    "command": "leetnotion.removeFromBacklog",
+                    "when": "view == leetnotionStudy && viewItem == study-new-problem",
+                    "group": "inline@2"
                 }
             ],
             "commandPalette": [
@@ -476,6 +597,14 @@
                 {
                     "command": "leetnotion.snoozeReview",
                     "when": "never"
+                },
+                {
+                    "command": "leetnotion.previewStudyProblem",
+                    "when": "never"
+                },
+                {
+                    "command": "leetnotion.openStudyProblem",
+                    "when": "never"
                 }
             ],
             "explorer/context": [
@@ -498,6 +627,11 @@
                     "command": "leetnotion.addToReview",
                     "when": "explorerResourceIsFolder == false",
                     "group": "leetnotion@4"
+                },
+                {
+                    "command": "leetnotion.addToBacklog",
+                    "when": "explorerResourceIsFolder == false",
+                    "group": "leetnotion@5"
                 }
             ],
             "editor/context": [
@@ -529,6 +663,10 @@
                 {
                     "command": "leetnotion.previewProblem",
                     "group": "leetnotion@6"
+                },
+                {
+                    "command": "leetnotion.addToBacklog",
+                    "group": "leetnotion@7"
                 }
             ]
         },
@@ -651,6 +789,37 @@
                         "type": "array",
                         "scope": "application",
                         "description": "Optional sheet names to include in the review queue. Leave empty to review all problems.",
+                        "default": [],
+                        "items": {
+                            "type": "string"
+                        }
+                    },
+                    "leetnotion.study.newProblemsPerDay": {
+                        "type": "number",
+                        "scope": "application",
+                        "description": "How many new backlog problems to plan each day.",
+                        "default": 3,
+                        "minimum": 0
+                    },
+                    "leetnotion.study.weekdaysOnly": {
+                        "type": "boolean",
+                        "scope": "application",
+                        "description": "Only assign new backlog problems on weekdays.",
+                        "default": false
+                    },
+                    "leetnotion.study.sheetFilters": {
+                        "type": "array",
+                        "scope": "application",
+                        "description": "Optional sheet names that new backlog problems must match to be planned for today.",
+                        "default": [],
+                        "items": {
+                            "type": "string"
+                        }
+                    },
+                    "leetnotion.study.topicFilters": {
+                        "type": "array",
+                        "scope": "application",
+                        "description": "Optional topic names that new backlog problems must match to be planned for today.",
                         "default": [],
                         "items": {
                             "type": "string"

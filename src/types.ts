@@ -230,6 +230,7 @@ export type SetPropertiesMessage = {
     questionPageId: string;
     submissionPageId: string;
     notes: string;
+    flagType: string;
     reviewDate: string;
     reviewRating?: ReviewRating;
     isOptimal: boolean;

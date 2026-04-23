@@ -3,12 +3,16 @@ import * as show from "../commands/show";
 import { LeetCodeNode } from "../explorer/LeetCodeNode";
 import { explorerNodeManager } from "../explorer/explorerNodeManager";
 import { defaultProblem, IProblem } from "../shared";
+import { StudyNode } from "../study/studyNode";
 import { extractArrayElements, getSheets } from "../utils/dataUtils";
 import { getReviewSheetFilters, setReviewSheetFilters } from "../utils/settingUtils";
 import { getQuestionNumber } from "../utils/toolUtils";
 import { DialogType, promptForOpenOutputChannel } from "../utils/uiUtils";
 import { getActiveFilePath, selectWorkspaceFolder } from "../utils/workspaceUtils";
+import { continueStudySession, isStudySessionActive } from "../study/session";
+import { studyTreeDataProvider } from "../study/studyTreeDataProvider";
 import { reviewService } from "./reviewService";
+import { ReviewNode } from "./reviewNode";
 import { reviewTreeDataProvider } from "./reviewTreeDataProvider";
 import { ReviewItem, ReviewProblemSnapshot, ReviewSchedulingOption } from "./types";
 
@@ -36,39 +40,69 @@ const allProblemsFilterValue = "__all_problems__";
 
 let reviewSessionActive = false;
 
-export async function previewReviewProblem(review: ReviewItem): Promise<void> {
-    await show.previewProblem(getProblem(review));
+export async function previewReviewProblem(review: ReviewItem | ReviewNode | StudyNode): Promise<void> {
+    const reviewItem = resolveReviewItem(review);
+    if (!reviewItem) {
+        return;
+    }
+
+    await show.previewProblem(getProblem(reviewItem));
 }
 
-export async function openReviewProblem(review: ReviewItem): Promise<void> {
-    await show.openProblem(getProblem(review));
+export async function openReviewProblem(review: ReviewItem | ReviewNode | StudyNode): Promise<void> {
+    const reviewItem = resolveReviewItem(review);
+    if (!reviewItem) {
+        return;
+    }
+
+    await show.openProblem(getProblem(reviewItem));
 }
 
-export async function markReviewReviewed(review: ReviewItem): Promise<void> {
-    const option = await pickReviewOption(review);
+export async function markReviewReviewed(review: ReviewItem | ReviewNode | StudyNode): Promise<void> {
+    const reviewItem = resolveReviewItem(review);
+    if (!reviewItem) {
+        return;
+    }
+
+    const option = await pickReviewOption(reviewItem);
     if (!option) {
         return;
     }
 
     try {
-        await reviewService.applyRating(review.questionNumber, option.rating);
+        await reviewService.applyRating(reviewItem.questionNumber, option.rating);
         await reviewTreeDataProvider.refresh();
-        await continueReviewSession();
+        await studyTreeDataProvider.refresh();
+        if (isStudySessionActive()) {
+            await continueStudySession();
+        } else {
+            await continueReviewSession();
+        }
     } catch (error) {
         await promptForOpenOutputChannel(`Failed to update review: ${error}`, DialogType.error);
     }
 }
 
-export async function snoozeReview(review: ReviewItem): Promise<void> {
-    const preset = await pickReviewPreset(review, "Snooze");
+export async function snoozeReview(review: ReviewItem | ReviewNode | StudyNode): Promise<void> {
+    const reviewItem = resolveReviewItem(review);
+    if (!reviewItem) {
+        return;
+    }
+
+    const preset = await pickReviewPreset(reviewItem, "Snooze");
     if (!preset) {
         return;
     }
 
     try {
-        await reviewService.snoozeReview(review.questionNumber, addDays(new Date(), preset.days));
+        await reviewService.snoozeReview(reviewItem.questionNumber, addDays(new Date(), preset.days));
         await reviewTreeDataProvider.refresh();
-        await continueReviewSession();
+        await studyTreeDataProvider.refresh();
+        if (isStudySessionActive()) {
+            await continueStudySession();
+        } else {
+            await continueReviewSession();
+        }
     } catch (error) {
         await promptForOpenOutputChannel(`Failed to snooze review: ${error}`, DialogType.error);
     }
@@ -119,6 +153,7 @@ export async function addProblemToReview(input?: LeetCodeNode | vscode.Uri): Pro
         };
         const result = await reviewService.addProblem(questionNumber, snapshot);
         await reviewTreeDataProvider.refresh();
+        await studyTreeDataProvider.refresh();
         const message = result === "added"
             ? `Added [${questionNumber}] ${reviewTarget.name} to the review queue.`
             : `Moved [${questionNumber}] ${reviewTarget.name} back into the review queue.`;
@@ -245,4 +280,12 @@ async function ensureReviewWorkspaceConfigured(): Promise<boolean> {
 
     const workspaceFolder = await selectWorkspaceFolder();
     return workspaceFolder !== "" && reviewService.isConfigured();
+}
+
+function resolveReviewItem(input: ReviewItem | ReviewNode | StudyNode): ReviewItem | undefined {
+    if ("questionNumber" in input) {
+        return input;
+    }
+
+    return input.review;
 }

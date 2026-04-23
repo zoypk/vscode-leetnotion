@@ -197,7 +197,6 @@ class LeetnotionClient {
         if (!hasNotionIntegrationEnabled()) return false;
         if (message.command !== "set-properties") return false;
         const tagsChanged = !areArraysEqual(message.initialTags, message.finalTags);
-        const hasNotes = message.notes && message.notes.length > 0;
         try {
             const reviewDate = await this.syncReviewSchedule(message);
             const hasReviewDate = !!reviewDate;
@@ -219,9 +218,6 @@ class LeetnotionClient {
             }
 
             const submissionPageProperties: UpdatePageProperties = {};
-            submissionPageProperties['Note'] = {
-                rich_text: [{ text: { content: message.notes } }]
-            };
             submissionPageProperties['Tags'] = {
                 multi_select: message.isOptimal ? [{ name: 'Optimal' }] : []
             };
@@ -235,7 +231,7 @@ class LeetnotionClient {
                     properties: questionPageProperties
                 })
             }
-            if (hasNotes || message.isOptimal) {
+            if (message.isOptimal) {
                 await this.notion.pages.update({
                     page_id: message.submissionPageId,
                     properties: submissionPageProperties

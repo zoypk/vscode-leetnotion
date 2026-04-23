@@ -1,20 +1,17 @@
 // Copyright (c) jdneo. All rights reserved.
 // Licensed under the MIT license.
 
+import * as os from "os";
+import * as vscode from "vscode";
 import { ViewColumn } from "vscode";
 import { leetcodeClient } from "../leetCodeClient";
 import { leetCodeChannel } from "../leetCodeChannel";
-import { SubmissionResultContext } from "../types";
+import { SetPropertiesMessage, SubmissionResultContext } from "../types";
 import { DialogType, openKeybindingsEditor, promptForOpenOutputChannel, promptHintMessage } from "../utils/uiUtils";
 import { ILeetCodeWebviewOption, LeetCodeWebview } from "./LeetCodeWebview";
 import { markdownEngine } from "./markdownEngine";
-
-type SubmissionWebviewMessage = {
-    command: string;
-    submissionId?: number | null;
-    notes?: string;
-    flagType?: string;
-};
+import { leetnotionEngine } from "./leetnotionEngine";
+import { leetnotionClient } from "../leetnotionClient";
 
 type SubmissionFlagOption = {
     value: string;
@@ -56,6 +53,8 @@ class LeetCodeSubmissionProvider extends LeetCodeWebview {
 
     protected getWebviewContent(): string {
         const webview = this.panel.webview;
+        const styles: string = [markdownEngine.getStyles(webview), this.getStyles()].join("\n");
+        const scripts: string = this.getScripts();
         const title: string = `## ${this.result.messages[0]}`;
         const messages: string[] = this.result.messages.slice(1).map((message: string) => `* ${message}`);
         const sections: string[] = Object.keys(this.result)
@@ -71,243 +70,42 @@ class LeetCodeSubmissionProvider extends LeetCodeWebview {
             ...messages,
             ...sections,
         ].join("\n"));
+        const submissionFormConfig = this.renderSubmissionFormConfigScript();
+        const leetnotionBody: string = leetnotionEngine.render(webview, {
+            submissionContext: this.submissionContext,
+            flagOptions: this.getOrderedFlagOptions(this.submissionContext?.flagType || "WHITE").map(({ value, label }) => ({ value, label })),
+        });
 
         return `
             <!DOCTYPE html>
             <html>
             <head>
-                <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${webview.cspSource} https: data:; script-src 'unsafe-inline'; style-src 'unsafe-inline';">
+                <meta http-equiv="Content-Security-Policy" content="
+                    default-src 'none';
+                    img-src ${webview.cspSource} https: data:;
+                    script-src ${webview.cspSource} 'unsafe-inline' 'unsafe-eval';
+                    style-src ${webview.cspSource} 'unsafe-inline' https://*.vscode-cdn.net https://cdnjs.cloudflare.com;
+                    font-src ${webview.cspSource} https://*.vscode-cdn.net https://cdnjs.cloudflare.com data:;
+                ">
                 <meta charset="UTF-8">
                 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                ${markdownEngine.getStyles(webview)}
-                <style>
-                    body {
-                        padding: 16px;
-                    }
-
-                    .submission-note-section {
-                        margin-top: 24px;
-                        padding: 16px;
-                        border: 1px solid var(--vscode-panel-border);
-                        border-radius: 10px;
-                        background: var(--vscode-sideBar-background);
-                    }
-
-                    .submission-note-header {
-                        display: flex;
-                        justify-content: space-between;
-                        gap: 12px;
-                        flex-wrap: wrap;
-                        align-items: flex-start;
-                    }
-
-                    .submission-note-title {
-                        font-size: 16px;
-                        font-weight: 600;
-                    }
-
-                    .submission-note-subtitle {
-                        margin-top: 4px;
-                        color: var(--vscode-descriptionForeground);
-                        font-size: 12px;
-                    }
-
-                    .submission-note-form {
-                        display: grid;
-                        gap: 12px;
-                        margin-top: 16px;
-                    }
-
-                    .submission-note-grid {
-                        display: grid;
-                        grid-template-columns: minmax(0, 1fr) 180px;
-                        gap: 12px;
-                    }
-
-                    .submission-note-label {
-                        display: block;
-                        margin-bottom: 6px;
-                        font-size: 12px;
-                        font-weight: 600;
-                        color: var(--vscode-descriptionForeground);
-                        text-transform: uppercase;
-                        letter-spacing: 0.04em;
-                    }
-
-                    .submission-note-textarea,
-                    .submission-note-select {
-                        width: 100%;
-                        border: 1px solid var(--vscode-input-border, transparent);
-                        border-radius: 8px;
-                        background: var(--vscode-input-background);
-                        color: var(--vscode-input-foreground);
-                        font: inherit;
-                        box-sizing: border-box;
-                    }
-
-                    .submission-note-textarea {
-                        min-height: 132px;
-                        padding: 12px;
-                        resize: vertical;
-                    }
-
-                    .submission-note-select {
-                        padding: 10px 12px;
-                    }
-
-                    .submission-note-preview {
-                        min-height: 42px;
-                        display: inline-flex;
-                        align-items: center;
-                        gap: 8px;
-                        padding: 0 12px;
-                        border-radius: 999px;
-                        border: 1px solid transparent;
-                        font-size: 12px;
-                        font-weight: 600;
-                        box-sizing: border-box;
-                    }
-
-                    .submission-note-preview-dot {
-                        width: 10px;
-                        height: 10px;
-                        border-radius: 999px;
-                        background: currentColor;
-                    }
-
-                    .submission-note-actions {
-                        display: flex;
-                        align-items: center;
-                        gap: 12px;
-                        flex-wrap: wrap;
-                    }
-
-                    .submission-note-save {
-                        border: 0;
-                        border-radius: 8px;
-                        padding: 8px 14px;
-                        cursor: pointer;
-                        color: var(--vscode-button-foreground);
-                        background: var(--vscode-button-background);
-                        font: inherit;
-                    }
-
-                    .submission-note-save:hover {
-                        background: var(--vscode-button-hoverBackground);
-                    }
-
-                    .submission-note-save:disabled {
-                        cursor: default;
-                        opacity: 0.7;
-                    }
-
-                    .submission-note-status {
-                        min-height: 18px;
-                        font-size: 12px;
-                        color: var(--vscode-descriptionForeground);
-                    }
-
-                    .submission-note-status.error {
-                        color: var(--vscode-errorForeground);
-                    }
-
-                    @media (max-width: 720px) {
-                        .submission-note-grid {
-                            grid-template-columns: 1fr;
-                        }
-                    }
-                </style>
+                ${styles}
+                ${scripts}
             </head>
             <body class="vscode-body 'scrollBeyondLastLine' 'wordWrap' 'showEditorSelection'" style="tab-size:4">
                 ${body}
-                ${this.renderSubmissionNoteSection()}
-                <script>
-                    const vscode = acquireVsCodeApi();
-                    const submissionFlagStyles = ${JSON.stringify(this.getSubmissionFlagStyles())};
-
-                    function updateSubmissionFlagPreview() {
-                        const select = document.getElementById('submission-flag-select');
-                        const preview = document.getElementById('submission-flag-preview');
-                        const previewLabel = document.getElementById('submission-flag-preview-label');
-                        if (!select || !preview || !previewLabel) {
-                            return;
-                        }
-
-                        const style = submissionFlagStyles[select.value] || submissionFlagStyles.WHITE;
-                        preview.style.background = style.background;
-                        preview.style.borderColor = style.accent;
-                        preview.style.color = style.foreground || style.accent;
-                        previewLabel.textContent = style.label;
-                    }
-
-                    function setSubmissionNoteStatus(message, isError) {
-                        const status = document.getElementById('submission-note-status');
-                        if (!status) {
-                            return;
-                        }
-
-                        status.textContent = message || '';
-                        status.classList.toggle('error', Boolean(isError));
-                    }
-
-                    function setSubmissionNoteSaving(isSaving) {
-                        const button = document.getElementById('save-submission-note-button');
-                        if (!button) {
-                            return;
-                        }
-
-                        button.disabled = isSaving;
-                        button.textContent = isSaving ? 'Saving...' : 'Save to LeetCode';
-                    }
-
-                    function saveSubmissionNote() {
-                        const notes = document.getElementById('submission-note-input');
-                        const flagType = document.getElementById('submission-flag-select');
-                        if (!notes || !flagType) {
-                            return;
-                        }
-
-                        setSubmissionNoteSaving(true);
-                        setSubmissionNoteStatus('Saving note...', false);
-                        vscode.postMessage({
-                            command: 'save-submission-note',
-                            submissionId: ${JSON.stringify(this.submissionContext?.submissionId ?? null)},
-                            notes: notes.value,
-                            flagType: flagType.value,
-                        });
-                    }
-
-                    window.addEventListener('message', (event) => {
-                        const message = event.data;
-                        switch (message.command) {
-                            case 'submission-note-saved':
-                                setSubmissionNoteSaving(false);
-                                setSubmissionNoteStatus('Saved to LeetCode.', false);
-                                break;
-                            case 'submission-note-save-failed':
-                                setSubmissionNoteSaving(false);
-                                setSubmissionNoteStatus(message.error || 'Failed to save note.', true);
-                                break;
-                            default:
-                                break;
-                        }
-                    });
-
-                    updateSubmissionFlagPreview();
-                </script>
+                <hr />
+                ${submissionFormConfig}
+                ${leetnotionBody}
             </body>
             </html>
         `;
     }
 
-    protected async onDidReceiveMessage(message: SubmissionWebviewMessage): Promise<void> {
+    protected async onDidReceiveMessage(message: SetPropertiesMessage): Promise<void> {
         switch (message.command) {
-            case "save-submission-note": {
-                if (typeof message.submissionId !== "number") {
-                    break;
-                }
-
-                await this.saveSubmissionNote(message.submissionId, message.notes || "", message.flagType || "WHITE");
+            case "set-properties": {
+                await this.saveProperties(message);
                 break;
             }
             default: {
@@ -352,72 +150,56 @@ class LeetCodeSubmissionProvider extends LeetCodeWebview {
         return result;
     }
 
-    private async saveSubmissionNote(submissionId: number, notes: string, flagType: string): Promise<void> {
+    private async saveProperties(message: SetPropertiesMessage): Promise<void> {
         try {
-            await leetcodeClient.updateSubmissionNote(submissionId, notes, flagType);
-            if (this.submissionContext && this.submissionContext.submissionId === submissionId) {
+            const hasSubmissionContext = Boolean(this.submissionContext);
+            const hasNotionProperties = Boolean(message.questionPageId && message.submissionPageId);
+
+            if (this.submissionContext) {
+                await leetcodeClient.updateSubmissionNote(this.submissionContext.submissionId, message.notes || "", message.flagType || "WHITE");
+            }
+
+            if (hasNotionProperties) {
+                const updated = await leetnotionClient.setProperties(message);
+                if (!updated) {
+                    throw new Error("notion-properties-not-updated");
+                }
+            }
+
+            if (this.submissionContext) {
                 this.submissionContext = {
                     ...this.submissionContext,
-                    notes,
-                    flagType,
+                    notes: message.notes || "",
+                    flagType: message.flagType || "WHITE",
                 };
             }
 
-            this.getPanel()?.webview.postMessage({ command: "submission-note-saved" });
-        } catch (error) {
-            leetCodeChannel.appendLine(`Failed to save submission note: ${error}`);
             this.getPanel()?.webview.postMessage({
-                command: "submission-note-save-failed",
+                command: "submission-properties-saved",
+                message: this.getSuccessMessage(hasSubmissionContext, hasNotionProperties),
+                notes: this.submissionContext?.notes,
+                flagType: this.submissionContext?.flagType,
+            });
+        } catch (error) {
+            leetCodeChannel.appendLine(`Failed to save submission properties: ${error}`);
+            this.getPanel()?.webview.postMessage({
+                command: "submission-properties-save-failed",
                 error: error instanceof Error ? error.message : String(error),
             });
-            await promptForOpenOutputChannel("Failed to save the submission note to LeetCode. Please open the output channel for details.", DialogType.error);
+            await promptForOpenOutputChannel("Failed to save submission properties. Please open the output channel for details.", DialogType.error);
         }
     }
 
-    private renderSubmissionNoteSection(): string {
-        if (!this.submissionContext) {
-            return "";
+    private getSuccessMessage(hasSubmissionContext: boolean, hasNotionProperties: boolean): string {
+        if (hasSubmissionContext && hasNotionProperties) {
+            return "Saved LeetCode note and Notion properties.";
         }
 
-        return `
-            <section class="submission-note-section">
-                <div class="submission-note-header">
-                    <div>
-                        <div class="submission-note-title">LeetCode Submission Note</div>
-                        <div class="submission-note-subtitle">Problem ${this.escapeHtml(this.submissionContext.questionNumber)} · Submission ${this.submissionContext.submissionId}</div>
-                    </div>
-                </div>
-                <div class="submission-note-form">
-                    <div class="submission-note-grid">
-                        <div>
-                            <label class="submission-note-label" for="submission-note-input">Note</label>
-                            <textarea id="submission-note-input" class="submission-note-textarea" placeholder="Add private notes for this submission...">${this.escapeHtml(this.submissionContext.notes)}</textarea>
-                        </div>
-                        <div>
-                            <label class="submission-note-label" for="submission-flag-select">Color</label>
-                            <select id="submission-flag-select" class="submission-note-select" onchange="updateSubmissionFlagPreview()">
-                                ${this.renderSubmissionFlagOptions(this.submissionContext.flagType)}
-                            </select>
-                            <div style="margin-top: 12px;">
-                                <div id="submission-flag-preview" class="submission-note-preview">
-                                    <span class="submission-note-preview-dot"></span>
-                                    <span id="submission-flag-preview-label"></span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="submission-note-actions">
-                        <button id="save-submission-note-button" class="submission-note-save" onclick="saveSubmissionNote()">Save to LeetCode</button>
-                        <div id="submission-note-status" class="submission-note-status"></div>
-                    </div>
-                </div>
-            </section>
-        `;
-    }
+        if (hasSubmissionContext) {
+            return "Saved to LeetCode.";
+        }
 
-    private renderSubmissionFlagOptions(selectedFlagType: string): string {
-        const options = this.getOrderedFlagOptions(selectedFlagType);
-        return options.map((option) => `<option value="${this.escapeHtml(option.value)}"${option.value === selectedFlagType ? " selected" : ""}>${this.escapeHtml(option.label)}</option>`).join("");
+        return "Properties updated.";
     }
 
     private getOrderedFlagOptions(selectedFlagType: string): SubmissionFlagOption[] {
@@ -441,6 +223,57 @@ class LeetCodeSubmissionProvider extends LeetCodeWebview {
             styles[option.value] = option;
             return styles;
         }, {});
+    }
+
+    private renderSubmissionFormConfigScript(): string {
+        return `
+            <script>
+                window.__LEETNOTION_SUBMISSION_CONTEXT__ = ${JSON.stringify(this.submissionContext ?? null)};
+                window.__LEETNOTION_SUBMISSION_FLAG_STYLES__ = ${JSON.stringify(this.getSubmissionFlagStyles())};
+            </script>
+        `;
+    }
+
+    private getScripts() {
+        let scripts: vscode.Uri[] = [];
+        try {
+            const scriptPaths = ["jquery.min.js", "select2.min.js"];
+            scripts = scriptPaths.map((scriptPath: string) => {
+                const onDiskPath = vscode.Uri.joinPath(
+                    globalState.getExtensionUri(),
+                    "public",
+                    "scripts",
+                    scriptPath,
+                );
+                return this.panel
+                    ? this.panel.webview.asWebviewUri(onDiskPath)
+                    : onDiskPath;
+            });
+        } catch (error) {
+            leetCodeChannel.appendLine("[Error] Failed to load built-in script file.");
+        }
+        return scripts.map((script: vscode.Uri) => `<script src="${script.toString()}"></script>`).join(os.EOL);
+    }
+
+    public getStyles(): string {
+        let styles: vscode.Uri[] = [];
+        try {
+            const stylePaths: string[] = ["select2.min.css", "style.css"];
+            styles = stylePaths.map((stylePath: string) => {
+                const onDiskPath = vscode.Uri.joinPath(
+                    globalState.getExtensionUri(),
+                    "public",
+                    "styles",
+                    stylePath,
+                );
+                return this.panel
+                    ? this.panel.webview.asWebviewUri(onDiskPath)
+                    : onDiskPath;
+            });
+        } catch (error) {
+            leetCodeChannel.appendLine("[Error] Failed to load built-in style file.");
+        }
+        return styles.map((style: vscode.Uri) => `<link rel="stylesheet" type="text/css" href="${style.toString()}">`).join(os.EOL);
     }
 
     private escapeHtml(value: string): string {

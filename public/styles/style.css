@@ -1,10 +1,72 @@
 #setPropertiesSection {
     display: none;
+    margin-top: 16px;
 }
+
+#setPropertiesInputSection {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+#leetcode-properties-section,
+#notion-properties-section {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+#notion-properties-section {
+    display: none;
+}
+
 #notes-label,
 #notes-input {
     font-size: 1.2rem;
 }
+
+#submission-flag-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    align-items: center;
+}
+
+#submission-flag-label {
+    font-size: 1.05rem;
+    min-width: 130px;
+}
+
+#submission-flag-controls {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+#submission-flag-select {
+    min-width: 180px;
+}
+
+#submission-flag-preview {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 36px;
+    padding: 0 12px;
+    border: 1px solid var(--vscode-panel-border);
+    border-radius: 999px;
+    font-size: 0.95rem;
+    font-weight: 600;
+}
+
+#submission-flag-preview-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: currentColor;
+}
+
 #review-container {
     display: flex;
     align-items: flex-start;
@@ -70,6 +132,17 @@
 #setPropertiesButton {
     margin: 10px 0;
 }
+
+#submission-properties-status {
+    min-height: 18px;
+    margin: 0;
+    color: var(--vscode-descriptionForeground);
+}
+
+#submission-properties-status.error {
+    color: var(--vscode-errorForeground);
+}
+
 #optimal-checkbox-input {
     margin: 7px 0;
 }
@@ -90,4 +163,21 @@
 .select2-container--default .select2-selection--multiple .select2-selection__choice__remove:hover {
     background-color: var(--button-primary-background);
     color: var(--vscode-button-secondaryHoverBackground);
+}
+
+@media (max-width: 720px) {
+    #review-container,
+    #submission-flag-container {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    #submission-flag-controls {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    #submission-flag-select {
+        width: 100%;
+    }
 }

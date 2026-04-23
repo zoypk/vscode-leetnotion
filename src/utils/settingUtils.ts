@@ -24,6 +24,34 @@ export async function setReviewSheetFilters(filters: string[]): Promise<void> {
     await getWorkspaceConfiguration().update("review.sheetFilters", filters, true);
 }
 
+export function getStudySheetFilters(): string[] {
+    return getWorkspaceConfiguration().get<string[]>("study.sheetFilters", []);
+}
+
+export async function setStudySheetFilters(filters: string[]): Promise<void> {
+    await getWorkspaceConfiguration().update("study.sheetFilters", filters, true);
+}
+
+export function getStudyTopicFilters(): string[] {
+    return getWorkspaceConfiguration().get<string[]>("study.topicFilters", []);
+}
+
+export async function setStudyTopicFilters(filters: string[]): Promise<void> {
+    await getWorkspaceConfiguration().update("study.topicFilters", filters, true);
+}
+
+export function getStudyNewProblemsPerDay(): number {
+    return getWorkspaceConfiguration().get<number>("study.newProblemsPerDay", 3);
+}
+
+export async function setStudyNewProblemsPerDay(value: number): Promise<void> {
+    await getWorkspaceConfiguration().update("study.newProblemsPerDay", value, true);
+}
+
+export function shouldUseStudyWeekdaysOnly(): boolean {
+    return getWorkspaceConfiguration().get<boolean>("study.weekdaysOnly", false);
+}
+
 export function getEditorShortcuts(): string[] {
     return getWorkspaceConfiguration().get<string[]>("editor.shortcuts", ["submit", "test"]);
 }
