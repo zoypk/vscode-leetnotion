@@ -4,7 +4,6 @@
 import {
     Credential,
     LeetCodeAdvanced,
-    type JudgeCheckResponse,
     type Submission,
     type UserContestInfo,
     type UserProfile,
@@ -32,6 +31,65 @@ type ProblemSubmissionsApiResponse = {
         memory: string;
     }>;
 };
+
+type LeetCodeGraphqlResponse<T> = {
+    data?: T;
+    errors?: Array<{
+        message: string;
+    }>;
+};
+
+type SubmissionDetailsGraphqlData = {
+    submissionDetails: {
+        code: string;
+        runtimePercentile: number | null;
+        memoryPercentile: number | null;
+        statusDisplay: string | null;
+        totalCorrect: number | string | null;
+        totalTestcases: number | string | null;
+        stdOutput: string | null;
+        lastTestcase: string | null;
+        runtimeError: string | null;
+        compileError: string | null;
+        notes: string | null;
+        flagType: string | null;
+    } | null;
+};
+
+type UpdateSubmissionNoteGraphqlData = {
+    updateSubmissionNote: {
+        ok: boolean;
+        error: string | null;
+    } | null;
+};
+
+const SUBMISSION_DETAILS_QUERY = `
+    query submissionDetails($submissionId: Int!) {
+        submissionDetails(submissionId: $submissionId) {
+            code
+            runtimePercentile
+            memoryPercentile
+            statusDisplay
+            totalCorrect
+            totalTestcases
+            stdOutput
+            lastTestcase
+            runtimeError
+            compileError
+            notes
+            flagType
+        }
+    }
+`;
+
+const UPDATE_SUBMISSION_NOTE_MUTATION = `
+    mutation updateSubmissionNote($submissionId: ID!, $note: String, $tagIds: [Int], $flagType: SubmissionFlagTypeEnum) {
+        updateSubmissionNote(submissionId: $submissionId, note: $note, tagIds: $tagIds, flagType: $flagType) {
+            ok
+            error
+        }
+    }
+`;
 
 class LeetcodeClient {
     private leetcode: LeetCodeAdvanced;
@@ -153,43 +211,49 @@ class LeetcodeClient {
     }
 
     public async getSubmissionDetail(id: number): Promise<SubmissionDetailView> {
-        if (!this.isSignedIn) {
-            throw new Error("not-signed-in-to-leetcode");
-        }
+        const data = await this.graphqlRequest<SubmissionDetailsGraphqlData>(
+            SUBMISSION_DETAILS_QUERY,
+            { submissionId: id },
+            `${getUrl("base")}/submissions/detail/${id}/`
+        );
 
-        const cookie = globalState.getCookie();
-        if (!cookie) {
-            throw new Error("not-signed-in-to-leetcode");
+        if (!data.submissionDetails) {
+            throw new Error(`submission-detail-not-found:${id}`);
         }
-
-        const { csrf } = extractCookie(cookie);
-        const baseUrl = getUrl("base");
-        const response = await axios.get<JudgeCheckResponse>(`${baseUrl}/submissions/detail/${id}/check/`, {
-            headers: {
-                "content-type": "application/json",
-                origin: baseUrl,
-                referer: `${baseUrl}/submissions/detail/${id}/`,
-                cookie,
-                "x-csrftoken": csrf || "",
-                "x-requested-with": "XMLHttpRequest",
-                "user-agent": "Mozilla/5.0 LeetCode API",
-            },
-        });
 
         return {
-            code: "",
-            runtime_percentile: response.data.runtime_percentile ?? null,
-            memory_percentile: response.data.memory_percentile ?? null,
+            code: data.submissionDetails.code || "",
+            runtime_percentile: data.submissionDetails.runtimePercentile ?? null,
+            memory_percentile: data.submissionDetails.memoryPercentile ?? null,
+            notes: data.submissionDetails.notes || "",
+            flag_type: data.submissionDetails.flagType || "WHITE",
             details: {
-                total_correct: response.data.total_correct,
-                total_testcases: response.data.total_testcases,
-                compare_result: response.data.status_msg,
-                status_msg: response.data.status_msg,
-                stdout: response.data.std_output,
-                testcase: response.data.last_testcase || response.data.input,
-                error: [response.data.runtime_error, response.data.compile_error, response.data.syntax_error].filter((value): value is string => Boolean(value)),
+                total_correct: data.submissionDetails.totalCorrect ?? undefined,
+                total_testcases: data.submissionDetails.totalTestcases ?? undefined,
+                compare_result: data.submissionDetails.statusDisplay || undefined,
+                status_msg: data.submissionDetails.statusDisplay || undefined,
+                stdout: data.submissionDetails.stdOutput || undefined,
+                testcase: data.submissionDetails.lastTestcase || undefined,
+                error: [data.submissionDetails.runtimeError, data.submissionDetails.compileError].filter((value): value is string => Boolean(value)),
             },
         };
+    }
+
+    public async updateSubmissionNote(id: number, note: string, flagType: string): Promise<void> {
+        const data = await this.graphqlRequest<UpdateSubmissionNoteGraphqlData>(
+            UPDATE_SUBMISSION_NOTE_MUTATION,
+            {
+                submissionId: id.toString(),
+                note,
+                tagIds: [],
+                flagType,
+            },
+            `${getUrl("base")}/submissions/detail/${id}/`
+        );
+
+        if (!data.updateSubmissionNote?.ok) {
+            throw new Error(data.updateSubmissionNote?.error || `Failed to update note for submission ${id}`);
+        }
     }
 
     public async getUserProfile(username: string): Promise<UserProfile> {
@@ -331,6 +395,44 @@ class LeetcodeClient {
             title_slug: titleSlug,
             url: new URL(submission.url, getUrl("base")).toString(),
         };
+    }
+
+    private async graphqlRequest<T>(query: string, variables: Record<string, unknown>, referer: string): Promise<T> {
+        if (!this.isSignedIn) {
+            throw new Error("not-signed-in-to-leetcode");
+        }
+
+        const cookie = globalState.getCookie();
+        if (!cookie) {
+            throw new Error("not-signed-in-to-leetcode");
+        }
+
+        const { csrf } = extractCookie(cookie);
+        const baseUrl = getUrl("base");
+        const response = await axios.post<LeetCodeGraphqlResponse<T>>(getUrl("graphql"), {
+            query,
+            variables,
+        }, {
+            headers: {
+                "content-type": "application/json",
+                origin: baseUrl,
+                referer,
+                cookie,
+                "x-csrftoken": csrf || "",
+                "x-requested-with": "XMLHttpRequest",
+                "user-agent": "Mozilla/5.0 LeetCode API",
+            },
+        });
+
+        if (response.data.errors && response.data.errors.length > 0) {
+            throw new Error(response.data.errors.map((error) => error.message).join(", "));
+        }
+
+        if (!response.data.data) {
+            throw new Error("LeetCode GraphQL returned no data.");
+        }
+
+        return response.data.data;
     }
 }
 

@@ -26,17 +26,18 @@ import {
 } from "../utils/uiUtils";
 import { getActiveFilePath, selectWorkspaceFolder } from "../utils/workspaceUtils";
 import * as wsl from "../utils/wslUtils";
-import { leetCodePastSubmissionsProvider } from "../webview/leetCodePastSubmissionsProvider";
 import { leetCodePreviewProvider } from "../webview/leetCodePreviewProvider";
-import { leetCodeSubmissionDetailProvider } from "../webview/leetCodeSubmissionDetailProvider";
 import { leetCodeSolutionProvider } from "../webview/leetCodeSolutionProvider";
 import * as list from "./list";
 import { getLeetCodeEndpoint } from "./plugin";
 import { globalState } from "../globalState";
 import { extractArrayElements, getCompanyTags, getLists, getSheets, getTopicTags } from "@/utils/dataUtils";
-import { CompanyTags, Lists, Sheets, TopicTags } from "@/types";
+import { CompanyTags, LeetcodeSubmission, Lists, Sheets, TopicTags } from "@/types";
 import TrackData from "../utils/trackingUtils";
-import { SubmissionHistoryItem } from "../types";
+
+interface SubmissionQuickPickItem extends vscode.QuickPickItem {
+    url: string;
+}
 
 export async function previewProblem(input: IProblem | vscode.Uri, isSideMode: boolean = false): Promise<void> {
     let node: IProblem;
@@ -255,18 +256,39 @@ export async function showPastSubmissionsByQuestionNumber(questionNumber: string
     }
 
     try {
-        await vscode.window.withProgress(
+        const submissions = await vscode.window.withProgress(
             {
                 location: vscode.ProgressLocation.Notification,
                 cancellable: false,
                 title: `Loading past submissions for ${title || `problem ${questionNumber}`}`,
             },
-            async () => {
-                const submissions = await leetcodeClient.getProblemSubmissions(questionNumber);
-                const problemTitle = title || submissions[0]?.title || `Problem ${questionNumber}`;
-                leetCodePastSubmissionsProvider.show(problemTitle, questionNumber, submissions);
+            async () => leetcodeClient.getProblemSubmissions(questionNumber)
+        );
+
+        const problemTitle = title || submissions[0]?.title || `Problem ${questionNumber}`;
+        const sortedSubmissions = submissions
+            .slice()
+            .sort((left, right) => right.timestamp - left.timestamp)
+            .slice(0, 100);
+
+        if (sortedSubmissions.length === 0) {
+            vscode.window.showInformationMessage(`No past submissions found for ${problemTitle}.`);
+            return;
+        }
+
+        const selection = await vscode.window.showQuickPick(
+            sortedSubmissions.map((submission) => toSubmissionQuickPickItem(submission)),
+            {
+                matchOnDescription: true,
+                matchOnDetail: true,
+                placeHolder: `Select a submission to open on LeetCode (${sortedSubmissions.length}${submissions.length > sortedSubmissions.length ? ` of ${submissions.length}` : ""})`,
+                title: `${problemTitle}: Past Submissions`,
             }
         );
+
+        if (selection) {
+            await openUrl(selection.url);
+        }
     } catch (error) {
         if (isUnauthorizedLeetCodeError(error)) {
             await promptForSignIn();
@@ -278,41 +300,21 @@ export async function showPastSubmissionsByQuestionNumber(questionNumber: string
     }
 }
 
-export async function showSubmissionDetail(submission: SubmissionHistoryItem): Promise<void> {
-    if (!leetCodeManager.getUser()) {
-        await promptForSignIn();
-        return;
-    }
-
-    try {
-        await vscode.window.withProgress(
-            {
-                location: vscode.ProgressLocation.Notification,
-                cancellable: false,
-                title: `Loading submission ${submission.id}`,
-            },
-            async () => {
-                const detail = await leetcodeClient.getSubmissionDetail(submission.id);
-                leetCodeSubmissionDetailProvider.show(submission.title, submission.questionNumber, submission, detail);
-            }
-        );
-    } catch (error) {
-        if (isUnauthorizedLeetCodeError(error)) {
-            await promptForSignIn();
-            return;
-        }
-
-        leetCodeChannel.appendLine(`Failed to fetch submission detail: ${error}`);
-        await promptForOpenOutputChannel("Failed to fetch submission detail. Please open the output channel for details.", DialogType.error);
-    }
-}
-
 function isUnauthorizedLeetCodeError(error: unknown): boolean {
     return typeof error === "object"
         && error !== null
         && "response" in error
         && typeof (error as { response?: { status?: number } }).response?.status === "number"
         && (error as { response?: { status?: number } }).response?.status === 401;
+}
+
+function toSubmissionQuickPickItem(submission: LeetcodeSubmission): SubmissionQuickPickItem {
+    return {
+        label: submission.status_display,
+        description: new Date(submission.timestamp * 1000).toLocaleString(),
+        detail: `${submission.lang} | Runtime: ${submission.runtime || "N/A"} | Memory: ${submission.memory || "N/A"} | Submission ID: ${submission.id}`,
+        url: submission.url,
+    };
 }
 
 async function fetchProblemLanguage(): Promise<string | undefined> {

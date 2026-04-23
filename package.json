@@ -917,14 +917,16 @@
                                 "test",
                                 "star",
                                 "solution",
-                                "description"
+                                "description",
+                                "submissions"
                             ],
                             "enumDescriptions": [
                                 "Submit your answer to LeetCode.",
                                 "Test your answer with customized test cases.",
                                 "Star or unstar the current problem.",
                                 "Show the top voted solution for the current problem.",
-                                "Show the problem description page."
+                                "Show the problem description page.",
+                                "Show your past submissions for the current problem."
                             ]
                         },
                         "description": "Customize the shortcuts in editors."

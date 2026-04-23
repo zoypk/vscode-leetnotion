@@ -87,6 +87,14 @@ export class CustomCodeLensProvider implements vscode.CodeLensProvider {
             }));
         }
 
+        if (shortcuts.indexOf("submissions") >= 0) {
+            codeLens.push(new vscode.CodeLens(range, {
+                title: "Past Submissions",
+                command: "leetnotion.showPastSubmissions",
+                arguments: [document.uri],
+            }));
+        }
+
         return codeLens;
     }
 }

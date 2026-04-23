@@ -2,9 +2,12 @@
 // Licensed under the MIT license.
 
 import * as vscode from "vscode";
+import { leetCodeChannel } from "../leetCodeChannel";
+import { leetcodeClient } from "../leetCodeClient";
 import { leetCodeTreeDataProvider } from "../explorer/LeetCodeTreeDataProvider";
 import { leetCodeExecutor } from "../leetCodeExecutor";
 import { leetCodeManager } from "../leetCodeManager";
+import { SubmissionResultContext } from "../types";
 import { DialogType, promptForOpenOutputChannel, promptForSignIn } from "../utils/uiUtils";
 import { getActiveFilePath } from "../utils/workspaceUtils";
 import { leetCodeSubmissionProvider } from "../webview/leetCodeSubmissionProvider";
@@ -25,9 +28,11 @@ export async function submitSolution(uri?: vscode.Uri): Promise<void> {
 
     try {
         const result: string = await leetCodeExecutor.submitSolution(filePath);
-        leetCodeSubmissionProvider.show(result);
+        const questionNumber = getQuestionNumber(filePath);
+        const submissionContext = questionNumber ? await resolveSubmissionResultContext(questionNumber) : undefined;
+
+        leetCodeSubmissionProvider.show(result, submissionContext);
         if(hasNotionIntegrationEnabled() && result.indexOf('Accepted') >= 0) {
-            const questionNumber = getQuestionNumber(filePath);
             if(!questionNumber) return;
             await leetnotionClient.submitSolution(questionNumber);
         }
@@ -37,4 +42,25 @@ export async function submitSolution(uri?: vscode.Uri): Promise<void> {
     }
 
     leetCodeTreeDataProvider.refresh();
+}
+
+async function resolveSubmissionResultContext(questionNumber: string): Promise<SubmissionResultContext | undefined> {
+    try {
+        const submission = await leetcodeClient.getRecentSubmission();
+        if (!submission) {
+            return undefined;
+        }
+
+        const detail = await leetcodeClient.getSubmissionDetail(submission.id);
+        return {
+            questionNumber,
+            submissionId: submission.id,
+            title: submission.title,
+            notes: detail.notes,
+            flagType: detail.flag_type,
+        };
+    } catch (error) {
+        leetCodeChannel.appendLine(`Failed to load submission note context: ${error}`);
+        return undefined;
+    }
 }

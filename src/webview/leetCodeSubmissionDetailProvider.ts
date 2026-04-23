@@ -166,7 +166,7 @@ class LeetCodeSubmissionDetailProvider extends LeetCodeWebview {
         }
     }
 
-    private escapeHtml(value: string): string {
+    private escapeHtml(value: string | number): string {
         return String(value)
             .replace(/&/g, "&amp;")
             .replace(/</g, "&lt;")

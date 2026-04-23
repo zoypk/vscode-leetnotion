@@ -66,6 +66,8 @@ export interface SubmissionDetailView {
     code: string;
     runtime_percentile: number | null;
     memory_percentile: number | null;
+    notes: string;
+    flag_type: string;
     details: {
         total_correct?: number | string;
         total_testcases?: number | string;
@@ -75,6 +77,14 @@ export interface SubmissionDetailView {
         testcase?: string;
         error?: string[];
     };
+}
+
+export interface SubmissionResultContext {
+    questionNumber: string;
+    submissionId: number;
+    title: string;
+    notes: string;
+    flagType: string;
 }
 
 export type PartialProblemPage = {
