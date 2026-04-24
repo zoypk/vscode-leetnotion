@@ -194,53 +194,65 @@ class LeetnotionClient {
     }
 
     public async setProperties(message: SetPropertiesMessage): Promise<boolean> {
-        if (!hasNotionIntegrationEnabled()) return false;
         if (message.command !== "set-properties") return false;
-        const tagsChanged = !areArraysEqual(message.initialTags, message.finalTags);
         try {
             const reviewDate = await this.syncReviewSchedule(message);
             const hasReviewDate = !!reviewDate;
-            const questionPageProperties: UpdatePageProperties = {};
-            if (hasReviewDate) {
-                questionPageProperties['Review Date'] = {
-                    date: {
-                        start: reviewDate
-                    }
-                };
-                questionPageProperties['Reviewed'] = {
-                    checkbox: false
-                };
-            }
-            if (tagsChanged) {
-                questionPageProperties['Tags'] = {
-                    multi_select: message.finalTags.map(name => ({ name }))
-                };
-            }
+            const hasNotionProperties = Boolean(
+                hasNotionIntegrationEnabled() &&
+                this.isSignedIn &&
+                this.notion &&
+                message.questionPageId &&
+                message.submissionPageId,
+            );
+            const tagsChanged = hasNotionProperties && !areArraysEqual(message.initialTags, message.finalTags);
 
-            const submissionPageProperties: UpdatePageProperties = {};
-            submissionPageProperties['Tags'] = {
-                multi_select: message.isOptimal ? [{ name: 'Optimal' }] : []
-            };
+            if (hasNotionProperties) {
+                const notionClient = this.notion;
+                if (!notionClient) {
+                    throw new Error("notion-integration-not-enabled");
+                }
 
-            if (!this.isSignedIn || !this.notion) {
-                throw new Error("notion-integration-not-enabled");
+                const questionPageProperties: UpdatePageProperties = {};
+                if (hasReviewDate) {
+                    questionPageProperties['Review Date'] = {
+                        date: {
+                            start: reviewDate
+                        }
+                    };
+                    questionPageProperties['Reviewed'] = {
+                        checkbox: false
+                    };
+                }
+                if (tagsChanged) {
+                    questionPageProperties['Tags'] = {
+                        multi_select: message.finalTags.map(name => ({ name }))
+                    };
+                }
+
+                const submissionPageProperties: UpdatePageProperties = {};
+                submissionPageProperties['Tags'] = {
+                    multi_select: message.isOptimal ? [{ name: 'Optimal' }] : []
+                };
+
+                if (hasReviewDate || tagsChanged) {
+                    await notionClient.pages.update({
+                        page_id: message.questionPageId,
+                        properties: questionPageProperties
+                    })
+                }
+                if (message.isOptimal) {
+                    await notionClient.pages.update({
+                        page_id: message.submissionPageId,
+                        properties: submissionPageProperties
+                    })
+                }
+
+                let prevTags = globalState.getUserQuestionTags();
+                if (!prevTags) prevTags = [];
+                const allTags = Array.from(new Set([...prevTags, ...message.finalTags]));
+                globalState.setUserQuestionTags(allTags);
             }
-            if (hasReviewDate || tagsChanged) {
-                await this.notion.pages.update({
-                    page_id: message.questionPageId,
-                    properties: questionPageProperties
-                })
-            }
-            if (message.isOptimal) {
-                await this.notion.pages.update({
-                    page_id: message.submissionPageId,
-                    properties: submissionPageProperties
-                })
-            }
-            let prevTags = globalState.getUserQuestionTags();
-            if (!prevTags) prevTags = [];
-            const allTags = Array.from(new Set([...prevTags, ...message.finalTags]));
-            globalState.setUserQuestionTags(allTags);
             return true;
         } catch (error) {
             leetCodeChannel.appendLine(`Failed to set properties: ${error}`);

@@ -261,7 +261,7 @@ class LeetCodeSubmissionProvider extends LeetCodeWebview {
                 await leetcodeClient.updateSubmissionNote(this.submissionContext.submissionId, message.notes || "", message.flagType || "WHITE");
             }
 
-            if (hasNotionProperties) {
+            if (hasSubmissionContext || hasNotionProperties) {
                 const updated = await leetnotionClient.setProperties(message);
                 if (!updated) {
                     throw new Error("notion-properties-not-updated");
@@ -294,14 +294,14 @@ class LeetCodeSubmissionProvider extends LeetCodeWebview {
 
     private getSuccessMessage(hasSubmissionContext: boolean, hasNotionProperties: boolean): string {
         if (hasSubmissionContext && hasNotionProperties) {
-            return "Saved LeetCode note and Notion properties.";
+            return "Saved LeetCode note, review, and Notion properties.";
         }
 
         if (hasSubmissionContext) {
-            return "Saved to LeetCode.";
+            return "Saved LeetCode note and review.";
         }
 
-        return "Properties updated.";
+        return "Saved Notion properties.";
     }
 
     private getOrderedFlagOptions(selectedFlagType: string): SubmissionFlagOption[] {

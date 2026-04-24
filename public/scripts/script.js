@@ -3,6 +3,8 @@ const setPropertiesSection = document.getElementById("setPropertiesSection");
 const setPropertiesButton = document.getElementById("setPropertiesButton");
 const leetcodePropertiesSection = document.getElementById("leetcode-properties-section");
 const notionPropertiesSection = document.getElementById("notion-properties-section");
+const reviewDateInput = document.getElementById("review-date-input");
+const reviewRatingButtons = Array.from(document.querySelectorAll(".review-rating-button"));
 const notesInput = document.getElementById("notes-input");
 const submissionFlagInput = document.getElementById("submission-flag-select");
 const submissionFlagSwatches = Array.from(document.querySelectorAll(".submission-flag-swatch"));
@@ -85,10 +87,12 @@ function setSavingState(isSaving) {
     setPropertiesButton.textContent = isSaving
         ? "Saving..."
         : hasSubmissionProperties && hasNotionProperties
-            ? "Save LeetCode Note + Notion Properties"
+            ? "Save LeetCode Note + Review + Notion Properties"
             : hasSubmissionProperties
-                ? "Save to LeetCode"
-                : "Set Properties";
+                ? "Save LeetCode Note + Review"
+                : hasNotionProperties
+                    ? "Save Notion Properties"
+                    : "Set Properties";
 }
 
 function ensureSectionVisible() {
@@ -113,6 +117,8 @@ function initializeSubmissionFields() {
         leetcodePropertiesSection.style.display = "flex";
     }
 
+    initializeReviewFields();
+
     if (notesInput) {
         notesInput.value = submissionData.notes || "";
     }
@@ -129,20 +135,25 @@ function initializeSubmissionFields() {
     ensureSectionVisible();
 }
 
-function initializeNotionFields(message) {
-    notionData = message;
+function initializeReviewFields() {
+    if (!reviewDateInput || reviewRatingButtons.length === 0) {
+        return;
+    }
 
-    setSelectedReviewRating(undefined);
-    const reviewDateInput = document.getElementById("review-date-input");
     reviewDateInput.value = "";
     reviewDateInput.oninput = () => {
         if (reviewDateInput.value) {
             setSelectedReviewRating(undefined);
         }
     };
-    document.querySelectorAll(".review-rating-button").forEach((button) => {
+
+    reviewRatingButtons.forEach((button) => {
         button.onclick = () => setSelectedReviewRating(button.dataset.rating);
     });
+}
+
+function initializeNotionFields(message) {
+    notionData = message;
 
     if (tagsInitialized) {
         $("#tags-select").off().select2("destroy");
@@ -192,7 +203,6 @@ function getFinalTags() {
 }
 
 function saveProperties() {
-    const reviewDateInput = document.getElementById("review-date-input");
     const optimalCheckboxInput = document.getElementById("optimal-checkbox-input");
 
     setSavingState(true);

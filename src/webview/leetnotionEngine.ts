@@ -63,20 +63,6 @@ class LeetnotionEngine implements vscode.Disposable {
         return `<div id="setPropertiesSection">
                     <div id="setPropertiesInputSection">
                         <div id="leetcode-properties-section">
-                            <vscode-text-area autofocus cols="8" rows="6" resize="both" id="notes-input">
-                                <div id="notes-label">LeetCode Note</div>
-                            </vscode-text-area>
-                            <div id="submission-flag-container">
-                                <details>
-                                <div id="submission-flag-label">LeetCode Color</div>
-                                <div id="submission-flag-swatches" role="radiogroup" aria-labelledby="submission-flag-label">
-                                    ${swatches}
-                                </div>
-                                <input type="hidden" id="submission-flag-select" value="${selectedFlagValue}" />
-                                </details>
-                            </div>
-                        </div>
-                        <div id="notion-properties-section">
                             <div id="review-container">
                                 <label id="review-label" for="absolute-review-date-container">Review schedule</label>
                                 <div id="review-inputs">
@@ -92,6 +78,20 @@ class LeetnotionEngine implements vscode.Disposable {
                                     <p id="review-hint">Pick a calendar date or let FSRS schedule from a rating.</p>
                                 </div>
                             </div>
+                            <vscode-text-area autofocus cols="8" rows="6" resize="both" id="notes-input">
+                                <div id="notes-label">LeetCode Note</div>
+                            </vscode-text-area>
+                            <div id="submission-flag-container">
+                                <details>
+                                <div id="submission-flag-label">LeetCode Color</div>
+                                <div id="submission-flag-swatches" role="radiogroup" aria-labelledby="submission-flag-label">
+                                    ${swatches}
+                                </div>
+                                <input type="hidden" id="submission-flag-select" value="${selectedFlagValue}" />
+                                </details>
+                            </div>
+                        </div>
+                        <div id="notion-properties-section">
                             <vscode-checkbox id="optimal-checkbox-input">Optimal Solution</vscode-checkbox>
                             <label id="tags-label" for="tags-box">Tags</label>
                             <div id="tags-box">
