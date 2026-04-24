@@ -14,12 +14,16 @@ import { studyTreeDataProvider } from "../study/studyTreeDataProvider";
 import { reviewService } from "./reviewService";
 import { ReviewNode } from "./reviewNode";
 import { reviewTreeDataProvider } from "./reviewTreeDataProvider";
-import { ReviewItem, ReviewProblemSnapshot, ReviewSchedulingOption } from "./types";
+import { ReviewItem, ReviewProblemSnapshot, ReviewRating, ReviewSchedulingOption } from "./types";
 
 type ReviewPreset = {
     label: string;
     description: string;
     days: number;
+};
+
+type ReviewRatingQuickPickItem = vscode.QuickPickItem & {
+    value: ReviewRating;
 };
 
 type ReviewTarget = Pick<ReviewItem, "questionNumber" | "name">;
@@ -34,6 +38,13 @@ const reviewPresets: ReviewPreset[] = [
     { label: "In 1 week", description: "Review again in 7 days", days: 7 },
     { label: "In 2 weeks", description: "Review again in 14 days", days: 14 },
     { label: "In 1 month", description: "Review again in 30 days", days: 30 },
+];
+
+const reviewRatings: ReviewRatingQuickPickItem[] = [
+    { label: "Again", description: "Schedule the problem for another immediate review", value: "again" },
+    { label: "Hard", description: "Review the problem sooner", value: "hard" },
+    { label: "Good", description: "Use the default review spacing", value: "good" },
+    { label: "Easy", description: "Review the problem later", value: "easy" },
 ];
 
 const allProblemsFilterValue = "__all_problems__";
@@ -146,12 +157,18 @@ export async function addProblemToReview(input?: LeetCodeNode | vscode.Uri): Pro
         name: problem?.name ?? "Problem",
     };
 
+    const rating = await pickInitialReviewRating(reviewTarget);
+    if (!rating) {
+        return;
+    }
+
     try {
         const snapshot: Partial<ReviewProblemSnapshot> = {
             name: problem?.name,
             difficulty: problem?.difficulty,
         };
         const result = await reviewService.addProblem(questionNumber, snapshot);
+        await reviewService.applyRating(questionNumber, rating);
         await reviewTreeDataProvider.refresh();
         await studyTreeDataProvider.refresh();
         const message = result === "added"
@@ -247,6 +264,16 @@ async function pickReviewOption(review: ReviewTarget): Promise<ReviewSchedulingO
         matchOnDescription: true,
         matchOnDetail: true,
     });
+}
+
+async function pickInitialReviewRating(review: ReviewTarget): Promise<ReviewRating | undefined> {
+    const selection = await vscode.window.showQuickPick(reviewRatings, {
+        placeHolder: `Choose an initial rating for [${review.questionNumber}] ${review.name}`,
+        ignoreFocusOut: true,
+        matchOnDescription: true,
+    });
+
+    return selection?.value;
 }
 
 async function continueReviewSession(): Promise<void> {

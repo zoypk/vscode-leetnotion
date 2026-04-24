@@ -7,7 +7,7 @@ import { leetcodeClient } from "../leetCodeClient";
 import { leetCodeTreeDataProvider } from "../explorer/LeetCodeTreeDataProvider";
 import { leetCodeExecutor } from "../leetCodeExecutor";
 import { leetCodeManager } from "../leetCodeManager";
-import { SubmissionResultContext } from "../types";
+import { SubmissionDetailView, SubmissionResultContext } from "../types";
 import { DialogType, promptForOpenOutputChannel, promptForSignIn } from "../utils/uiUtils";
 import { getActiveFilePath } from "../utils/workspaceUtils";
 import { leetCodeSubmissionProvider } from "../webview/leetCodeSubmissionProvider";
@@ -29,9 +29,9 @@ export async function submitSolution(uri?: vscode.Uri): Promise<void> {
     try {
         const result: string = await leetCodeExecutor.submitSolution(filePath);
         const questionNumber = getQuestionNumber(filePath);
-        const submissionContext = questionNumber ? await resolveSubmissionResultContext(questionNumber) : undefined;
+        const submissionData = questionNumber ? await resolveSubmissionResultContext(questionNumber) : undefined;
 
-        leetCodeSubmissionProvider.show(result, submissionContext);
+        leetCodeSubmissionProvider.show(result, submissionData?.context, submissionData?.detail);
         if(hasNotionIntegrationEnabled() && result.indexOf('Accepted') >= 0) {
             if(!questionNumber) return;
             await leetnotionClient.submitSolution(questionNumber);
@@ -44,7 +44,7 @@ export async function submitSolution(uri?: vscode.Uri): Promise<void> {
     leetCodeTreeDataProvider.refresh();
 }
 
-async function resolveSubmissionResultContext(questionNumber: string): Promise<SubmissionResultContext | undefined> {
+async function resolveSubmissionResultContext(questionNumber: string): Promise<{ context: SubmissionResultContext; detail: SubmissionDetailView } | undefined> {
     try {
         const submission = await leetcodeClient.getRecentSubmission();
         if (!submission) {
@@ -53,11 +53,14 @@ async function resolveSubmissionResultContext(questionNumber: string): Promise<S
 
         const detail = await leetcodeClient.getSubmissionDetail(submission.id);
         return {
-            questionNumber,
-            submissionId: submission.id,
-            title: submission.title,
-            notes: detail.notes,
-            flagType: detail.flag_type,
+            context: {
+                questionNumber,
+                submissionId: submission.id,
+                title: submission.title,
+                notes: detail.notes,
+                flagType: detail.flag_type,
+            },
+            detail,
         };
     } catch (error) {
         leetCodeChannel.appendLine(`Failed to load submission note context: ${error}`);

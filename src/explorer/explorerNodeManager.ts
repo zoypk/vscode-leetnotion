@@ -200,16 +200,24 @@ class ExplorerNodeManager implements Disposable {
 
     private getPinnedSheetsData(allSheets: Record<string, Record<string, string[]>>): Record<string, Record<string, string[]>> {
         const pinnedSheetNames = new Set(globalState.getPinnedSheets());
-        return Object.fromEntries(
-            Object.entries(allSheets).filter(([sheetName]) => pinnedSheetNames.has(sheetName))
-        );
+        return Object.entries(allSheets).reduce<Record<string, Record<string, string[]>>>((result, [sheetName, sheetData]) => {
+            if (pinnedSheetNames.has(sheetName)) {
+                result[sheetName] = sheetData;
+            }
+
+            return result;
+        }, {});
     }
 
     private getUnpinnedSheetsData(allSheets: Record<string, Record<string, string[]>>): Record<string, Record<string, string[]>> {
         const pinnedSheetNames = new Set(globalState.getPinnedSheets());
-        return Object.fromEntries(
-            Object.entries(allSheets).filter(([sheetName]) => !pinnedSheetNames.has(sheetName))
-        );
+        return Object.entries(allSheets).reduce<Record<string, Record<string, string[]>>>((result, [sheetName, sheetData]) => {
+            if (!pinnedSheetNames.has(sheetName)) {
+                result[sheetName] = sheetData;
+            }
+
+            return result;
+        }, {});
     }
 
     private storeLeetCodeNodes() {

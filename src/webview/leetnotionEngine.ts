@@ -45,25 +45,35 @@ class LeetnotionEngine implements vscode.Disposable {
     public render(webview: vscode.Webview, options: RenderOptions): string {
         if(!this.notionIntegrationEnabled && !options.submissionContext) return "";
 
-        const flagOptions = options.flagOptions.map((option) => `<vscode-option value="${this.escapeHtml(option.value)}">${this.escapeHtml(option.label)}</vscode-option>`).join("");
+        const selectedFlagType = options.submissionContext?.flagType || "WHITE";
+        const selectedFlagValue = this.escapeHtml(selectedFlagType);
+        const swatches = options.flagOptions.map((option) => {
+            const value = this.escapeHtml(option.value);
+            const label = this.escapeHtml(option.label);
+            const isSelected = option.value === selectedFlagType;
+            return `<button type="button" class="submission-flag-swatch${isSelected ? " selected" : ""}" data-flag-value="${value}" role="radio" aria-checked="${isSelected ? "true" : "false"}" aria-label="${label}" title="${label}">
+                        <span class="submission-flag-swatch-check" aria-hidden="true">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="1em" height="1em" fill="currentColor" class="submission-flag-swatch-icon">
+                                <path fill-rule="evenodd" d="M9.688 15.898l-3.98-3.98a1 1 0 00-1.415 1.414L8.98 18.02a1 1 0 001.415 0L20.707 7.707a1 1 0 00-1.414-1.414l-9.605 9.605z" clip-rule="evenodd"></path>
+                            </svg>
+                        </span>
+                    </button>`;
+        }).join("");
 
         return `<div id="setPropertiesSection">
                     <div id="setPropertiesInputSection">
                         <div id="leetcode-properties-section">
-                            <vscode-text-area autofocus cols="50" rows="10" resize="both" id="notes-input">
+                            <vscode-text-area autofocus cols="8" rows="6" resize="both" id="notes-input">
                                 <div id="notes-label">LeetCode Note</div>
                             </vscode-text-area>
                             <div id="submission-flag-container">
-                                <label id="submission-flag-label" for="submission-flag-select">LeetCode Color</label>
-                                <div id="submission-flag-controls">
-                                    <vscode-dropdown id="submission-flag-select" position="below">
-                                        ${flagOptions}
-                                    </vscode-dropdown>
-                                    <div id="submission-flag-preview" aria-live="polite">
-                                        <span id="submission-flag-preview-dot"></span>
-                                        <span id="submission-flag-preview-label"></span>
-                                    </div>
+                                <details>
+                                <div id="submission-flag-label">LeetCode Color</div>
+                                <div id="submission-flag-swatches" role="radiogroup" aria-labelledby="submission-flag-label">
+                                    ${swatches}
                                 </div>
+                                <input type="hidden" id="submission-flag-select" value="${selectedFlagValue}" />
+                                </details>
                             </div>
                         </div>
                         <div id="notion-properties-section">
@@ -83,7 +93,6 @@ class LeetnotionEngine implements vscode.Disposable {
                                 </div>
                             </div>
                             <vscode-checkbox id="optimal-checkbox-input">Optimal Solution</vscode-checkbox>
-                            <vscode-divider></vscode-divider>
                             <label id="tags-label" for="tags-box">Tags</label>
                             <div id="tags-box">
                                 <select class="form-control" multiple="multiple" id="tags-select">

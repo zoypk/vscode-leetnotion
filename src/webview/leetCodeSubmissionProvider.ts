@@ -6,7 +6,8 @@ import * as vscode from "vscode";
 import { ViewColumn } from "vscode";
 import { leetcodeClient } from "../leetCodeClient";
 import { leetCodeChannel } from "../leetCodeChannel";
-import { SetPropertiesMessage, SubmissionResultContext } from "../types";
+import { globalState } from "../globalState";
+import { SetPropertiesMessage, SubmissionDetailView, SubmissionResultContext } from "../types";
 import { DialogType, openKeybindingsEditor, promptForOpenOutputChannel, promptHintMessage } from "../utils/uiUtils";
 import { ILeetCodeWebviewOption, LeetCodeWebview } from "./LeetCodeWebview";
 import { markdownEngine } from "./markdownEngine";
@@ -36,10 +37,12 @@ class LeetCodeSubmissionProvider extends LeetCodeWebview {
     protected readonly viewType: string = "leetnotion.submission";
     private result: IResult;
     private submissionContext?: SubmissionResultContext;
+    private submissionDetail?: SubmissionDetailView;
 
-    public show(resultString: string, submissionContext?: SubmissionResultContext): void {
+    public show(resultString: string, submissionContext?: SubmissionResultContext, submissionDetail?: SubmissionDetailView): void {
         this.result = this.parseResult(resultString);
         this.submissionContext = submissionContext;
+        this.submissionDetail = submissionDetail;
         this.showWebviewInternal();
         this.showKeybindingsHint();
     }
@@ -55,21 +58,7 @@ class LeetCodeSubmissionProvider extends LeetCodeWebview {
         const webview = this.panel.webview;
         const styles: string = [markdownEngine.getStyles(webview), this.getStyles()].join("\n");
         const scripts: string = this.getScripts();
-        const title: string = `## ${this.result.messages[0]}`;
-        const messages: string[] = this.result.messages.slice(1).map((message: string) => `* ${message}`);
-        const sections: string[] = Object.keys(this.result)
-            .filter((key: string) => key !== "messages")
-            .map((key: string) => [
-                `### ${key}`,
-                "```",
-                this.result[key].join("\n"),
-                "```",
-            ].join("\n"));
-        const body: string = markdownEngine.render([
-            title,
-            ...messages,
-            ...sections,
-        ].join("\n"));
+        const body: string = this.renderResultBody();
         const submissionFormConfig = this.renderSubmissionFormConfigScript();
         const leetnotionBody: string = leetnotionEngine.render(webview, {
             submissionContext: this.submissionContext,
@@ -148,6 +137,119 @@ class LeetCodeSubmissionProvider extends LeetCodeWebview {
             }
         } while (entry);
         return result;
+    }
+
+    private renderResultBody(): string {
+        const mergedResult: IResult = {
+            ...this.result,
+        };
+
+        const status = this.submissionDetail?.details.compare_result
+            || this.submissionDetail?.details.status_msg
+            || this.result.messages[0]
+            || "";
+        const isAccepted = status === "Accepted";
+
+        if (this.submissionDetail?.details.testcase) {
+            mergedResult[isAccepted ? "Your Input" : "Testcase"] = [this.submissionDetail.details.testcase];
+        }
+
+        if (this.submissionDetail?.details.stdout) {
+            mergedResult["Stdout"] = [this.submissionDetail.details.stdout];
+        }
+
+        if (!isAccepted) {
+            if (mergedResult["Output (0 ms)"]?.length) {
+                mergedResult["Output"] = mergedResult["Output (0 ms)"];
+                delete mergedResult["Output (0 ms)"];
+            }
+
+            if (mergedResult["Expected Answer"]?.length) {
+                mergedResult["Expected"] = mergedResult["Expected Answer"];
+                delete mergedResult["Expected Answer"];
+            }
+        }
+
+        this.result = mergedResult;
+
+        const title: string = `## ${this.result.messages[0]}`;
+        const messages: string[] = this.result.messages.slice(1).map((message: string) => `* ${message}`);
+        const sections: string[] = Object.keys(this.result)
+            .filter((key: string) => key !== "messages")
+            .filter((key: string) => this.result[key] && this.result[key].length > 0)
+            .map((key: string) => [
+                `### ${key}`,
+                "```",
+                this.result[key].join("\n"),
+                "```",
+            ].join("\n"));
+        const body: string = markdownEngine.render([
+            title,
+            ...messages,
+            ...sections,
+        ].join("\n"));
+
+        return `
+            <div id="submission-result">
+                ${body}
+            </div>
+        `;
+    }
+
+    private getSectionValues(sectionNames: string[]): string[] {
+        for (const sectionName of sectionNames) {
+            const values = this.result[sectionName];
+            if (values && values.length > 0) {
+                return values;
+            }
+        }
+
+        return [];
+    }
+
+    private escapeHtml(value: string): string {
+        return value
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/\"/g, "&quot;")
+            .replace(/'/g, "&#39;");
+    }
+
+    private formatPercentile(value: number | null): string {
+        return typeof value === "number" ? value.toFixed(2) : "N/A";
+    }
+
+    private renderSummaryRow(label: string, value: string | number | undefined): string {
+        if (value === undefined || value === null || value === "") {
+            return "";
+        }
+
+        return `
+            <tr>
+                <td>${this.escapeHtml(label)}</td>
+                <td>${this.escapeHtml(String(value))}</td>
+            </tr>
+        `;
+    }
+
+    private renderSection(title: string, value?: string): string {
+        if (!value) {
+            return "";
+        }
+
+        return `
+            <h3>${this.escapeHtml(title)}</h3>
+            <pre><code>${this.escapeHtml(value)}</code></pre>
+        `;
+    }
+
+    private renderErrorSection(errors?: string[]): string {
+        if (!errors || errors.length === 0) {
+            return "";
+        }
+
+        return this.renderSection("Errors", errors.join("\n\n"));
     }
 
     private async saveProperties(message: SetPropertiesMessage): Promise<void> {
@@ -274,15 +376,6 @@ class LeetCodeSubmissionProvider extends LeetCodeWebview {
             leetCodeChannel.appendLine("[Error] Failed to load built-in style file.");
         }
         return styles.map((style: vscode.Uri) => `<link rel="stylesheet" type="text/css" href="${style.toString()}">`).join(os.EOL);
-    }
-
-    private escapeHtml(value: string): string {
-        return String(value)
-            .replace(/&/g, "&amp;")
-            .replace(/</g, "&lt;")
-            .replace(/>/g, "&gt;")
-            .replace(/\"/g, "&quot;")
-            .replace(/'/g, "&#39;");
     }
 }
 

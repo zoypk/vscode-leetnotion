@@ -4,7 +4,8 @@ const setPropertiesButton = document.getElementById("setPropertiesButton");
 const leetcodePropertiesSection = document.getElementById("leetcode-properties-section");
 const notionPropertiesSection = document.getElementById("notion-properties-section");
 const notesInput = document.getElementById("notes-input");
-const submissionFlagSelect = document.getElementById("submission-flag-select");
+const submissionFlagInput = document.getElementById("submission-flag-select");
+const submissionFlagSwatches = Array.from(document.querySelectorAll(".submission-flag-swatch"));
 let selectedReviewRating;
 let submissionData = window.__LEETNOTION_SUBMISSION_CONTEXT__ || null;
 let notionData = null;
@@ -31,19 +32,35 @@ function getDefaultFlagType() {
     return submissionData?.flagType || "WHITE";
 }
 
-function updateSubmissionFlagPreview() {
-    const preview = document.getElementById("submission-flag-preview");
-    const previewLabel = document.getElementById("submission-flag-preview-label");
-    if (!preview || !previewLabel || !submissionFlagSelect) {
+function getFlagStyle(value) {
+    return submissionFlagStyles[value] || submissionFlagStyles.WHITE || { label: value, accent: "#9ca3af", background: "rgba(148, 163, 184, 0.16)", foreground: "#ffffff" };
+}
+
+function updateSubmissionFlagSwatches() {
+    if (!submissionFlagInput) {
         return;
     }
 
-    const currentValue = submissionFlagSelect.value || getDefaultFlagType();
-    const style = submissionFlagStyles[currentValue] || submissionFlagStyles.WHITE || { label: currentValue, accent: "#9ca3af", background: "rgba(148, 163, 184, 0.16)" };
-    preview.style.background = style.background;
-    preview.style.borderColor = style.accent;
-    preview.style.color = style.foreground || style.accent;
-    previewLabel.textContent = style.label;
+    const currentValue = submissionFlagInput.value || getDefaultFlagType();
+    submissionFlagSwatches.forEach((button) => {
+        const value = button.dataset.flagValue || "WHITE";
+        const style = getFlagStyle(value);
+        const selected = value === currentValue;
+        button.classList.toggle("selected", selected);
+        button.setAttribute("aria-checked", String(selected));
+        button.style.setProperty("--submission-flag-accent", style.accent);
+        button.style.setProperty("--submission-flag-background", style.background || style.accent);
+        button.style.setProperty("--submission-flag-foreground", style.foreground || "#ffffff");
+    });
+}
+
+function setSubmissionFlagValue(value) {
+    if (!submissionFlagInput) {
+        return;
+    }
+
+    submissionFlagInput.value = value;
+    updateSubmissionFlagSwatches();
 }
 
 function setSubmissionPropertiesStatus(message, isError = false) {
@@ -100,12 +117,15 @@ function initializeSubmissionFields() {
         notesInput.value = submissionData.notes || "";
     }
 
-    if (submissionFlagSelect) {
-        submissionFlagSelect.value = submissionData.flagType || "WHITE";
-        submissionFlagSelect.onchange = updateSubmissionFlagPreview;
+    if (submissionFlagInput) {
+        submissionFlagInput.value = submissionData.flagType || "WHITE";
     }
 
-    updateSubmissionFlagPreview();
+    submissionFlagSwatches.forEach((button) => {
+        button.onclick = () => setSubmissionFlagValue(button.dataset.flagValue || "WHITE");
+    });
+
+    updateSubmissionFlagSwatches();
     ensureSectionVisible();
 }
 
@@ -143,6 +163,14 @@ function initializeNotionFields(message) {
     ensureSectionVisible();
 }
 
+function initializeNotionSectionVisibility() {
+    if (!notionPropertiesSection) {
+        return;
+    }
+
+    notionPropertiesSection.style.display = notionData ? "flex" : "none";
+}
+
 function getInitialTags() {
     if (!notionData?.tags) {
         return [];
@@ -176,7 +204,7 @@ function saveProperties() {
         questionPageId: notionData?.questionPageId || "",
         submissionPageId: notionData?.submissionPageId || "",
         notes: notesInput?.value || "",
-        flagType: submissionFlagSelect?.value || getDefaultFlagType(),
+        flagType: submissionFlagInput?.value || getDefaultFlagType(),
         reviewDate: reviewDateInput?.value || "",
         reviewRating: selectedReviewRating,
         isOptimal: optimalCheckboxInput?.checked || false,
@@ -190,6 +218,7 @@ if (setPropertiesButton) {
 }
 
 initializeSubmissionFields();
+initializeNotionSectionVisibility();
 setSavingState(false);
 
 window.addEventListener("message", (event) => {
@@ -205,10 +234,10 @@ window.addEventListener("message", (event) => {
             }
             if (message.flagType !== undefined && submissionData) {
                 submissionData.flagType = message.flagType;
-                if (submissionFlagSelect) {
-                    submissionFlagSelect.value = message.flagType;
+                if (submissionFlagInput) {
+                    submissionFlagInput.value = message.flagType;
                 }
-                updateSubmissionFlagPreview();
+                updateSubmissionFlagSwatches();
             }
             setSavingState(false);
             setSubmissionPropertiesStatus(message.message || "Saved.", false);

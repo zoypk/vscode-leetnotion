@@ -1,4 +1,3 @@
-import { Card, createEmptyCard, fsrs, Rating } from "ts-fsrs";
 import { explorerNodeManager } from "../explorer/explorerNodeManager";
 import { globalState } from "../globalState";
 import { getUrl } from "../shared";
@@ -18,9 +17,26 @@ import {
 } from "./types";
 import { reviewStorage } from "./reviewStorage";
 
+type FsrsCard = {
+    due: Date;
+    stability: number;
+    difficulty: number;
+    elapsed_days: number;
+    scheduled_days: number;
+    learning_steps: number;
+    reps: number;
+    lapses: number;
+    state: number;
+    last_review?: Date;
+};
+
+// Load ts-fsrs at runtime so the extension host uses the package's native
+// CommonJS entrypoint instead of an inlined bundle transform.
+const { createEmptyCard, fsrs, Rating } = eval("require")("ts-fsrs");
+
 const scheduler = fsrs();
 
-const reviewRatingOrder: Array<{ rating: ReviewRating; label: string; fsrsRating: Rating }> = [
+const reviewRatingOrder: Array<{ rating: ReviewRating; label: string; fsrsRating: number }> = [
     { rating: "again", label: "Again", fsrsRating: Rating.Again },
     { rating: "hard", label: "Hard", fsrsRating: Rating.Hard },
     { rating: "good", label: "Good", fsrsRating: Rating.Good },
@@ -264,7 +280,7 @@ class ReviewService {
         return titleSlug ? `${getUrl("base")}/problems/${titleSlug}` : "";
     }
 
-    private serializeCard(card: Card): SerializedFsrsCard {
+    private serializeCard(card: FsrsCard): SerializedFsrsCard {
         return {
             due: card.due.toISOString(),
             stability: card.stability,
@@ -279,7 +295,7 @@ class ReviewService {
         };
     }
 
-    private deserializeCard(card: SerializedFsrsCard): Card {
+    private deserializeCard(card: SerializedFsrsCard): FsrsCard {
         return {
             due: this.parseDate(card.due),
             stability: card.stability,
@@ -303,7 +319,7 @@ class ReviewService {
         return parsed;
     }
 
-    private toFsrsRating(rating: ReviewRating): Rating {
+    private toFsrsRating(rating: ReviewRating): number {
         return reviewRatingOrder.find((option) => option.rating === rating)?.fsrsRating ?? Rating.Good;
     }
 
