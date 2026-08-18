@@ -161,6 +161,24 @@ class LeetCodePreviewProvider extends LeetCodeWebview {
                     .quick-nav a:hover {
                         background: var(--vscode-button-secondaryHoverBackground, rgba(128, 128, 128, 0.28));
                     }
+                    #description {
+                        width: 100%;
+                        max-width: 68ch;
+                        margin-inline: auto;
+                    }
+                    #description h1,
+                    #description h2,
+                    #description h3,
+                    #description h4,
+                    #description h5,
+                    #description h6 {
+                        text-wrap: balance;
+                    }
+                    #description p,
+                    #description li,
+                    #description blockquote {
+                        text-wrap: pretty;
+                    }
                     code { white-space: pre-wrap; }
                     #neetcode-section details.hint-accordion {
                         margin-bottom: 0;
