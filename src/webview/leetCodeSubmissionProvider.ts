@@ -390,13 +390,6 @@ class LeetCodeSubmissionProvider extends LeetCodeWebview {
         ];
     }
 
-    private getSubmissionFlagStyles(): Record<string, SubmissionFlagOption> {
-        return this.getOrderedFlagOptions(this.submissionContext?.flagType || "WHITE").reduce<Record<string, SubmissionFlagOption>>((styles, option) => {
-            styles[option.value] = option;
-            return styles;
-        }, {});
-    }
-
     private getPublicFormConfig(): object {
         return {
             state: this.savedState ?? {
@@ -409,7 +402,6 @@ class LeetCodeSubmissionProvider extends LeetCodeWebview {
             hasLeetCodeProperties: Boolean(this.submissionContext),
             hasNotionProperties: Boolean(this.notionContext),
             tagOptions: this.getTagOptions(),
-            flagStyles: this.getSubmissionFlagStyles(),
         };
     }
 

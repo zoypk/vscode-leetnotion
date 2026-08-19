@@ -271,7 +271,7 @@ class LeetnotionClient {
         // addAndScheduleAt, and removeProblem. The legacy fallbacks keep this
         // isolated commit runnable before that stream is cherry-picked.
         const service = reviewService as typeof reviewService & {
-            addAndApplyRating?: (questionNumber: string, rating: "again" | "hard" | "good" | "easy") => Promise<string>;
+            addAndApplyRating?: (questionNumber: string, rating: "again" | "hard" | "good" | "easy") => Promise<{ dueAt: string }>;
             addAndScheduleAt?: (questionNumber: string, date: Date) => Promise<void>;
             removeProblem?: (questionNumber: string) => Promise<void>;
         };
@@ -284,20 +284,16 @@ class LeetnotionClient {
             },
             schedule: async (questionNumber, date) => {
                 const parsedDate = this.parseDateInput(date);
-                if (service.addAndScheduleAt) {
-                    await service.addAndScheduleAt(questionNumber, parsedDate);
-                    return;
+                if (!service.addAndScheduleAt) {
+                    throw new Error("review-service-addAndScheduleAt-unavailable");
                 }
-                await service.addProblem(questionNumber);
-                await service.snoozeReview(questionNumber, parsedDate);
+                await service.addAndScheduleAt(questionNumber, parsedDate);
             },
             rate: async (questionNumber, rating) => {
-                const dueAt = service.addAndApplyRating
-                    ? await service.addAndApplyRating(questionNumber, rating)
-                    : await (async () => {
-                        await service.addProblem(questionNumber);
-                        return service.applyRating(questionNumber, rating);
-                    })();
+                if (!service.addAndApplyRating) {
+                    throw new Error("review-service-addAndApplyRating-unavailable");
+                }
+                const { dueAt } = await service.addAndApplyRating(questionNumber, rating);
                 return this.toDateInputValue(new Date(dueAt));
             },
             refresh: async () => reviewTreeDataProvider.refresh(),
@@ -580,10 +576,16 @@ class LeetnotionClient {
                     }
                     const submissionPageId = await this.limiter.schedule(async () => this.createSubmissionPage(questionNumber, submission));
                     leetCodeChannel.appendLine(`Created submission page for ${submission.id} submission`);
+                    return submissionPageId;
+                },
+                afterCreate: async (submission, _question, submissionPageId) => {
                     if (shouldAddCodeToSubmissionPage()) {
-                        await this.limiter.schedule(async () => this.addCodeToPage(submissionPageId, submission.lang, submission.code));
+                        await this.limiter.schedule(async () => this.addCodeToPage(String(submissionPageId), submission.lang, submission.code));
                         leetCodeChannel.appendLine(`Added code to submission page for ${submission.title_slug} question`);
                     }
+                },
+                onPostCreateError: (error, submission) => {
+                    leetCodeChannel.appendLine(`Submission ${submission.id} was added, but its code could not be attached: ${error}`);
                 },
                 onCreated: callbackFn,
                 isCancelled,

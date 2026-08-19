@@ -72,6 +72,22 @@ test("progress advances only after creation and cancellation reports partial com
     assert.deepEqual(result, { added: 1, existing: 0, malformed: 0, missingQuestion: 0, cancelled: true });
 });
 
+test("counts a created page even when optional code attachment fails", async () => {
+    const events = [];
+    const result = await runBulkImport({
+        submissions: [submission(1)],
+        existingIds: new Set(),
+        malformed: 0,
+        resolveQuestion: () => ({ questionNumber: "1", pageId: "page" }),
+        create: async () => "submission-page",
+        afterCreate: async () => { throw new Error("code upload failed"); },
+        onCreated: ({ added }) => events.push(`added-${added}`),
+        onPostCreateError: (error) => events.push(error.message),
+    });
+    assert.equal(result.added, 1);
+    assert.deepEqual(events, ["added-1", "code upload failed"]);
+});
+
 test("zero-added and partial final messages are truthful", () => {
     assert.equal(formatBulkImportResult({ added: 0, existing: 3, malformed: 0, missingQuestion: 0, cancelled: false }),
         "No new submissions were added. 3 already existed.");

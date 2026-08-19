@@ -14,6 +14,8 @@ export interface BulkImportDependencies {
     malformed: number;
     resolveQuestion: (submission: LeetcodeSubmission) => { questionNumber: string; pageId: string } | undefined;
     create: (submission: LeetcodeSubmission, question: { questionNumber: string; pageId: string }) => Promise<unknown>;
+    afterCreate?: (submission: LeetcodeSubmission, question: { questionNumber: string; pageId: string }, created: unknown) => Promise<void>;
+    onPostCreateError?: (error: unknown, submission: LeetcodeSubmission) => void;
     onCreated?: (counts: BulkImportCounts) => void;
     isCancelled?: () => boolean;
 }
@@ -74,9 +76,19 @@ export async function runBulkImport(dependencies: BulkImportDependencies): Promi
             counts.missingQuestion += 1;
             continue;
         }
-        await dependencies.create(submission, question);
+        const created = await dependencies.create(submission, question);
         counts.added += 1;
         dependencies.onCreated?.({ ...counts });
+        if (dependencies.afterCreate) {
+            try {
+                await dependencies.afterCreate(submission, question, created);
+            } catch (error) {
+                if (!dependencies.onPostCreateError) {
+                    throw error;
+                }
+                dependencies.onPostCreateError(error, submission);
+            }
+        }
         if (dependencies.isCancelled?.()) {
             counts.cancelled = true;
             break;

@@ -133,6 +133,36 @@ body {
     font-size: 1.2rem;
 }
 
+.submission-flag-swatch[data-flag-value="WHITE"] {
+    --submission-flag-accent: #9ca3af;
+    --submission-flag-background: rgba(148, 163, 184, 0.28);
+}
+.submission-flag-swatch[data-flag-value="RED"] {
+    --submission-flag-accent: #ef4444;
+    --submission-flag-background: rgba(239, 68, 68, 0.28);
+}
+.submission-flag-swatch[data-flag-value="ORANGE"] {
+    --submission-flag-accent: #f97316;
+    --submission-flag-background: rgba(249, 115, 22, 0.28);
+}
+.submission-flag-swatch[data-flag-value="YELLOW"] {
+    --submission-flag-accent: #facc15;
+    --submission-flag-background: rgba(250, 204, 21, 0.32);
+    --submission-flag-foreground: #3f3200;
+}
+.submission-flag-swatch[data-flag-value="GREEN"] {
+    --submission-flag-accent: #22c55e;
+    --submission-flag-background: rgba(34, 197, 94, 0.28);
+}
+.submission-flag-swatch[data-flag-value="BLUE"] {
+    --submission-flag-accent: #3b82f6;
+    --submission-flag-background: rgba(59, 130, 246, 0.28);
+}
+.submission-flag-swatch[data-flag-value="PURPLE"] {
+    --submission-flag-accent: #a855f7;
+    --submission-flag-background: rgba(168, 85, 247, 0.28);
+}
+
 #review-container legend {
     padding: 0 6px;
 }

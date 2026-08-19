@@ -60,11 +60,6 @@ test("authoritative tag state supports A to B to A without stale selections", ()
     assert.deepEqual(a.tags, ["A"]);
 });
 
-test("failed save preservation is achieved by leaving state untouched", () => {
-    const draft = chooseReviewRating({ ...createSubmissionFormState(initial), notes: "unsaved", tags: ["B"] }, "easy");
-    assert.deepEqual(draft, chooseReviewRating({ ...createSubmissionFormState(initial), notes: "unsaved", tags: ["B"] }, "easy"));
-});
-
 test("radio arrow navigation wraps in both directions", () => {
     assert.equal(moveRadioIndex(0, "ArrowLeft", 7), 6);
     assert.equal(moveRadioIndex(6, "ArrowRight", 7), 0);

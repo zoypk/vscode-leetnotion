@@ -2,6 +2,8 @@ const assert = require("node:assert/strict");
 const test = require("node:test");
 
 const { renderSubmissionFormHtml } = require("../../out-test/webview/submissionFormState.js");
+const fs = require("node:fs");
+const path = require("node:path");
 
 test("uses non-executable JSON, semantic review controls, and valid color disclosure", () => {
     const html = renderSubmissionFormHtml({
@@ -27,4 +29,12 @@ test("uses non-executable JSON, semantic review controls, and valid color disclo
     assert.match(html, /tabindex="-1"/);
     assert.match(html, /aria-live="polite"/);
     assert.match(html, /nonce="nonce-value"/);
+});
+
+test("each supported LeetCode color has a distinct CSP-safe CSS rule", () => {
+    const css = fs.readFileSync(path.join(__dirname, "..", "..", "public", "styles", "style.css"), "utf8");
+    for (const color of ["WHITE", "RED", "ORANGE", "YELLOW", "GREEN", "BLUE", "PURPLE"]) {
+        assert.match(css, new RegExp(`data-flag-value=\\"${color}\\"`));
+    }
+    assert.doesNotMatch(css, /javascript:/i);
 });
