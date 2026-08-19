@@ -97,3 +97,86 @@ test("strict CSP uses a nonce without unsafe directives", () => {
     assert.match(csp, /style-src webview-resource: 'nonce-abcDEF123\+\/=+'/);
     assert.doesNotMatch(csp, /unsafe-inline|unsafe-eval|command:|file:/);
 });
+
+test("enforces input and output limits while preserving balanced safe HTML", () => {
+    const inputLimited = security.sanitizeHtmlWithDiagnostics(
+        `<div><strong>${"word ".repeat(100)}</strong></div>`,
+        { maxInputLength: 80 },
+    );
+    assert.ok(inputLimited.diagnostics.reasons.includes("input"));
+    assert.ok(inputLimited.diagnostics.charactersScanned <= 80);
+    assert.equal((inputLimited.html.match(/<div>/g) || []).length, (inputLimited.html.match(/<\/div>/g) || []).length);
+    assert.equal((inputLimited.html.match(/<strong>/g) || []).length, (inputLimited.html.match(/<\/strong>/g) || []).length);
+
+    const outputLimited = security.sanitizeHtmlWithDiagnostics(
+        `<div><strong>${"<&>".repeat(100)}</strong></div>`,
+        { maxOutputLength: 64 },
+    );
+    assert.ok(outputLimited.diagnostics.reasons.includes("output"));
+    assert.ok(outputLimited.html.length <= 64);
+    assert.equal(outputLimited.diagnostics.outputLength, outputLimited.html.length);
+    assert.equal((outputLimited.html.match(/<div>/g) || []).length, (outputLimited.html.match(/<\/div>/g) || []).length);
+    assert.equal((outputLimited.html.match(/<strong>/g) || []).length, (outputLimited.html.match(/<\/strong>/g) || []).length);
+    assert.doesNotMatch(outputLimited.html, /&(?!amp;|lt;|gt;|quot;|#39;)/);
+});
+
+test("bounds nesting and token work with deterministic operation counters", () => {
+    const deeplyNested = `${"<div>".repeat(2_000)}safe${"</div>".repeat(2_000)}`;
+    const nestingLimited = security.sanitizeHtmlWithDiagnostics(deeplyNested, {
+        maxNestingDepth: 16,
+        maxTokens: 10_000,
+    });
+    assert.ok(nestingLimited.diagnostics.reasons.includes("nesting"));
+    assert.equal(nestingLimited.diagnostics.maxObservedNesting, 16);
+    assert.ok(nestingLimited.diagnostics.stackOperations <= nestingLimited.diagnostics.tokensProcessed * 2);
+    assert.ok(nestingLimited.diagnostics.charactersScanned <= deeplyNested.length * 2);
+    assert.equal((nestingLimited.html.match(/<div>/g) || []).length, (nestingLimited.html.match(/<\/div>/g) || []).length);
+
+    const manyTokens = "<b>x</b>".repeat(10_000);
+    const tokenLimited = security.sanitizeHtmlWithDiagnostics(manyTokens, { maxTokens: 25 });
+    assert.ok(tokenLimited.diagnostics.reasons.includes("tokens"));
+    assert.equal(tokenLimited.diagnostics.tokensProcessed, 25);
+    assert.ok(tokenLimited.diagnostics.stackOperations <= tokenLimited.diagnostics.tokensProcessed * 2);
+    assert.ok(tokenLimited.diagnostics.charactersScanned <= manyTokens.length * 2);
+    assert.equal((tokenLimited.html.match(/<b>/g) || []).length, (tokenLimited.html.match(/<\/b>/g) || []).length);
+});
+
+test("close-tag handling remains linear for adversarial deep mismatches", () => {
+    const depth = 60;
+    const input = `${"<div><span>".repeat(depth)}</div>${"</span></div>".repeat(depth)}`;
+    const result = security.sanitizeHtmlWithDiagnostics(input, {
+        maxNestingDepth: 128,
+        maxTokens: 50_000,
+    });
+    assert.equal(result.diagnostics.truncated, false);
+    assert.ok(result.diagnostics.stackOperations <= result.diagnostics.tokensProcessed * 2);
+    assert.ok(result.diagnostics.charactersScanned <= input.length * 2);
+    assert.equal((result.html.match(/<div>/g) || []).length, (result.html.match(/<\/div>/g) || []).length);
+    assert.equal((result.html.match(/<span>/g) || []).length, (result.html.match(/<\/span>/g) || []).length);
+});
+
+test("forbidden void and self-closing elements do not consume trailing content", () => {
+    const voidInput = ["input", "meta", "source", "embed", "frame"]
+        .map((name) => `<${name}>after-${name}`)
+        .join("|");
+    assert.equal(
+        security.sanitizeHtml(voidInput),
+        "after-input|after-meta|after-source|after-embed|after-frame",
+    );
+
+    const selfClosing = ["script", "style", "svg", "form", "iframe"]
+        .map((name) => `<${name}/>after-${name}`)
+        .join("|");
+    assert.equal(
+        security.sanitizeHtml(selfClosing),
+        "after-script|after-style|after-svg|after-form|after-iframe",
+    );
+});
+
+test("nested forbidden containers are dropped once and trailing content is retained", () => {
+    const input = "before<form>outer<form>inner</form>outer-tail</form>after"
+        + "<script><script>raw</script>after-script";
+    const result = security.sanitizeHtmlWithDiagnostics(input);
+    assert.equal(result.html, "beforeafterafter-script");
+    assert.ok(result.diagnostics.charactersScanned <= input.length * 2);
+});

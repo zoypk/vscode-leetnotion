@@ -12,11 +12,18 @@ const ALLOWED_ELEMENTS: ReadonlySet<string> = new Set([
     "table", "tbody", "td", "tfoot", "th", "thead", "tr", "u", "ul",
 ]);
 
-const DROP_CONTENT_ELEMENTS: ReadonlySet<string> = new Set([
-    "applet", "audio", "button", "canvas", "embed", "form", "frame", "frameset", "iframe",
-    "input", "math", "menu", "meta", "noembed", "noframes", "noscript", "object", "option",
-    "plaintext", "script", "select", "source", "style", "svg", "template", "textarea", "video",
-    "xmp",
+const DROP_CONTENT_CONTAINERS: ReadonlySet<string> = new Set([
+    "applet", "audio", "button", "canvas", "form", "frameset", "iframe", "math", "menu",
+    "noembed", "noframes", "noscript", "object", "option", "plaintext", "script", "select",
+    "style", "svg", "template", "textarea", "video", "xmp",
+]);
+
+const RAW_TEXT_CONTAINERS: ReadonlySet<string> = new Set([
+    "iframe", "noembed", "noframes", "noscript", "plaintext", "script", "style", "textarea", "xmp",
+]);
+
+const FORBIDDEN_VOID_ELEMENTS: ReadonlySet<string> = new Set([
+    "area", "base", "col", "embed", "frame", "input", "link", "meta", "param", "source", "track",
 ]);
 
 const GLOBAL_ATTRIBUTES: ReadonlySet<string> = new Set(["class", "title"]);
@@ -48,6 +55,43 @@ interface HtmlTag {
     name: string;
     selfClosing: boolean;
 }
+
+export interface SanitizerLimits {
+    /** Maximum UTF-16 input units examined by one sanitization call. */
+    readonly maxInputLength: number;
+    /** Maximum UTF-16 units emitted, including balancing close tags. */
+    readonly maxOutputLength: number;
+    /** Maximum simultaneously open allowed elements. */
+    readonly maxNestingDepth: number;
+    /** Maximum text, tag, comment, and declaration tokens processed. */
+    readonly maxTokens: number;
+}
+
+export type SanitizerLimitReason = "input" | "nesting" | "output" | "tokens";
+
+export interface SanitizerDiagnostics {
+    readonly charactersScanned: number;
+    readonly inputLength: number;
+    readonly limits: SanitizerLimits;
+    readonly maxObservedNesting: number;
+    readonly outputLength: number;
+    readonly reasons: readonly SanitizerLimitReason[];
+    readonly stackOperations: number;
+    readonly tokensProcessed: number;
+    readonly truncated: boolean;
+}
+
+export interface SanitizedHtmlResult {
+    readonly diagnostics: SanitizerDiagnostics;
+    readonly html: string;
+}
+
+export const DEFAULT_SANITIZER_LIMITS: SanitizerLimits = Object.freeze({
+    maxInputLength: 2_000_000,
+    maxNestingDepth: 128,
+    maxOutputLength: 2_000_000,
+    maxTokens: 200_000,
+});
 
 export function escapeHtml(value: unknown): string {
     return String(value)
@@ -118,41 +162,136 @@ export function allowWebviewUrl(rawValue: string): string | undefined {
 }
 
 export function sanitizeHtml(input: string): string {
+    return sanitizeHtmlWithDiagnostics(input).html;
+}
+
+export function sanitizeHtmlWithDiagnostics(
+    input: string,
+    requestedLimits: Partial<SanitizerLimits> = {},
+): SanitizedHtmlResult {
+    const limits = normalizeSanitizerLimits(requestedLimits);
+    const source = input.slice(0, limits.maxInputLength);
     const output: string[] = [];
     const openElements: string[] = [];
+    const openPositions: Map<string, number[]> = new Map();
+    const reasons: Set<SanitizerLimitReason> = new Set();
     let position = 0;
+    let outputLength = 0;
+    let closingBudget = 0;
+    let tokensProcessed = 0;
+    let stackOperations = 0;
+    let maxObservedNesting = 0;
+    let dropScanCharacters = 0;
+    let stopped = false;
 
-    while (position < input.length) {
-        const tagStart = input.indexOf("<", position);
+    if (source.length < input.length) {
+        reasons.add("input");
+    }
+
+    const consumeToken = (): boolean => {
+        if (tokensProcessed >= limits.maxTokens) {
+            reasons.add("tokens");
+            stopped = true;
+            return false;
+        }
+        tokensProcessed += 1;
+        return true;
+    };
+
+    const appendChunk = (chunk: string, additionalReserve: number = 0): boolean => {
+        if (outputLength + chunk.length + closingBudget + additionalReserve > limits.maxOutputLength) {
+            reasons.add("output");
+            stopped = true;
+            return false;
+        }
+        output.push(chunk);
+        outputLength += chunk.length;
+        return true;
+    };
+
+    const appendText = (text: string): boolean => {
+        const available = limits.maxOutputLength - outputLength - closingBudget;
+        const escaped = escapeTextWithinLimit(decodeCharacterReferences(text), available);
+        if (escaped.value) {
+            output.push(escaped.value);
+            outputLength += escaped.value.length;
+        }
+        if (escaped.truncated) {
+            reasons.add("output");
+            stopped = true;
+            return false;
+        }
+        return true;
+    };
+
+    const popOpenElement = (): void => {
+        const name = openElements.pop();
+        if (!name) {
+            return;
+        }
+        const closeTag = `</${name}>`;
+        closingBudget -= closeTag.length;
+        output.push(closeTag);
+        outputLength += closeTag.length;
+        const positions = openPositions.get(name)!;
+        positions.pop();
+        if (positions.length === 0) {
+            openPositions.delete(name);
+        }
+        stackOperations += 1;
+    };
+
+    while (position < source.length && !stopped) {
+        const tagStart = source.indexOf("<", position);
         if (tagStart === -1) {
-            output.push(escapeHtml(decodeCharacterReferences(input.slice(position))));
+            if (consumeToken()) {
+                appendText(source.slice(position));
+            }
+            position = source.length;
             break;
         }
         if (tagStart > position) {
-            output.push(escapeHtml(decodeCharacterReferences(input.slice(position, tagStart))));
+            if (!consumeToken() || !appendText(source.slice(position, tagStart))) {
+                position = tagStart;
+                break;
+            }
+        }
+        if (!consumeToken()) {
+            position = tagStart;
+            break;
         }
 
-        if (input.startsWith("<!--", tagStart)) {
-            const commentEnd = input.indexOf("-->", tagStart + 4);
-            position = commentEnd === -1 ? input.length : commentEnd + 3;
+        if (source.startsWith("<!--", tagStart)) {
+            const commentEnd = source.indexOf("-->", tagStart + 4);
+            position = commentEnd === -1 ? source.length : commentEnd + 3;
             continue;
         }
-        if (input[tagStart + 1] === "!" || input[tagStart + 1] === "?") {
-            position = findTagBoundary(input, tagStart + 2);
+        if (source[tagStart + 1] === "!" || source[tagStart + 1] === "?") {
+            position = findTagBoundary(source, tagStart + 2);
             continue;
         }
 
-        const tag = readTag(input, tagStart);
+        const tag = readTag(source, tagStart);
         if (!tag) {
-            output.push("&lt;");
+            appendChunk("&lt;");
             position = tagStart + 1;
             continue;
         }
         position = tag.end;
 
-        if (DROP_CONTENT_ELEMENTS.has(tag.name)) {
-            if (!tag.closing) {
-                position = findDroppedElementEnd(input, position, tag.name);
+        if (FORBIDDEN_VOID_ELEMENTS.has(tag.name)) {
+            continue;
+        }
+        if (DROP_CONTENT_CONTAINERS.has(tag.name)) {
+            if (!tag.closing && !tag.selfClosing) {
+                const dropped = findDroppedElementEnd(
+                    source,
+                    position,
+                    tag.name,
+                    RAW_TEXT_CONTAINERS.has(tag.name),
+                );
+                position = dropped.end;
+                dropScanCharacters += dropped.scanned;
             }
             continue;
         }
@@ -160,12 +299,13 @@ export function sanitizeHtml(input: string): string {
             continue;
         }
         if (tag.closing) {
-            const matchIndex = openElements.lastIndexOf(tag.name);
-            if (matchIndex === -1) {
+            const positions = openPositions.get(tag.name);
+            if (!positions || positions.length === 0) {
                 continue;
             }
+            const matchIndex = positions[positions.length - 1];
             while (openElements.length > matchIndex) {
-                output.push(`</${openElements.pop()}>`);
+                popOpenElement();
             }
             continue;
         }
@@ -174,16 +314,50 @@ export function sanitizeHtml(input: string): string {
         if (tag.name === "img" && !attributes.includes(" src=")) {
             continue;
         }
-        output.push(`<${tag.name}${attributes}>`);
-        if (!tag.selfClosing && !VOID_ELEMENTS.has(tag.name)) {
-            openElements.push(tag.name);
+        const openTag = `<${tag.name}${attributes}>`;
+        if (VOID_ELEMENTS.has(tag.name)) {
+            appendChunk(openTag);
+            continue;
         }
+        const closeTag = `</${tag.name}>`;
+        if (tag.selfClosing) {
+            appendChunk(openTag + closeTag);
+            continue;
+        }
+        if (openElements.length >= limits.maxNestingDepth) {
+            reasons.add("nesting");
+            continue;
+        }
+        if (!appendChunk(openTag, closeTag.length)) {
+            continue;
+        }
+        const positions = openPositions.get(tag.name) || [];
+        positions.push(openElements.length);
+        openPositions.set(tag.name, positions);
+        openElements.push(tag.name);
+        closingBudget += closeTag.length;
+        stackOperations += 1;
+        maxObservedNesting = Math.max(maxObservedNesting, openElements.length);
     }
 
     while (openElements.length > 0) {
-        output.push(`</${openElements.pop()}>`);
+        popOpenElement();
     }
-    return output.join("");
+    const html = output.join("");
+    return {
+        html,
+        diagnostics: {
+            charactersScanned: Math.min(position, source.length) + dropScanCharacters,
+            inputLength: input.length,
+            limits,
+            maxObservedNesting,
+            outputLength: html.length,
+            reasons: Array.from(reasons).sort() as SanitizerLimitReason[],
+            stackOperations,
+            tokensProcessed,
+            truncated: reasons.size > 0,
+        },
+    };
 }
 
 function sanitizeAttributes(element: string, attributes: HtmlAttribute[]): string {
@@ -314,22 +488,41 @@ function readTag(input: string, start: number): HtmlTag | undefined {
     return undefined;
 }
 
-function findDroppedElementEnd(input: string, start: number, name: string): number {
-    const lower = input.toLowerCase();
-    const closePrefix = `</${name}`;
-    let cursor = start;
-    while (cursor < input.length) {
-        const closeStart = lower.indexOf(closePrefix, cursor);
-        if (closeStart === -1) {
-            return input.length;
-        }
-        const afterName = closeStart + closePrefix.length;
-        if (!isNameCharacter(input[afterName])) {
-            return findTagBoundary(input, afterName);
-        }
-        cursor = afterName;
+function findDroppedElementEnd(
+    input: string,
+    start: number,
+    name: string,
+    rawText: boolean,
+): { end: number; scanned: number } {
+    if (name === "plaintext") {
+        return { end: input.length, scanned: input.length - start };
     }
-    return input.length;
+    let cursor = start;
+    let depth = 1;
+    while (cursor < input.length) {
+        const tagStart = input.indexOf("<", cursor);
+        if (tagStart === -1) {
+            return { end: input.length, scanned: input.length - start };
+        }
+        const tag = readTag(input, tagStart);
+        if (!tag) {
+            cursor = tagStart + 1;
+            continue;
+        }
+        cursor = tag.end;
+        if (tag.name !== name) {
+            continue;
+        }
+        if (tag.closing) {
+            depth -= 1;
+            if (depth === 0 || rawText) {
+                return { end: tag.end, scanned: tag.end - start };
+            }
+        } else if (!rawText && !tag.selfClosing) {
+            depth += 1;
+        }
+    }
+    return { end: input.length, scanned: input.length - start };
 }
 
 function findTagBoundary(input: string, start: number): number {
@@ -353,6 +546,44 @@ function findTagBoundary(input: string, start: number): number {
 
 function decodeCharacterReferences(value: string): string {
     return value.replace(ENTITY_REFERENCE, (reference) => decodeMarkdownEntity(reference));
+}
+
+function escapeTextWithinLimit(value: string, limit: number): { truncated: boolean; value: string } {
+    if (limit <= 0) {
+        return { truncated: value.length > 0, value: "" };
+    }
+    const chunks: string[] = [];
+    let length = 0;
+    for (const character of value) {
+        const escaped = character === "&" ? "&amp;"
+            : character === "<" ? "&lt;"
+            : character === ">" ? "&gt;"
+            : character === "\"" ? "&quot;"
+            : character === "'" ? "&#39;"
+            : character;
+        if (length + escaped.length > limit) {
+            return { truncated: true, value: chunks.join("") };
+        }
+        chunks.push(escaped);
+        length += escaped.length;
+    }
+    return { truncated: false, value: chunks.join("") };
+}
+
+function normalizeSanitizerLimits(requested: Partial<SanitizerLimits>): SanitizerLimits {
+    return {
+        maxInputLength: normalizeLimit(requested.maxInputLength, DEFAULT_SANITIZER_LIMITS.maxInputLength),
+        maxNestingDepth: normalizeLimit(requested.maxNestingDepth, DEFAULT_SANITIZER_LIMITS.maxNestingDepth),
+        maxOutputLength: normalizeLimit(requested.maxOutputLength, DEFAULT_SANITIZER_LIMITS.maxOutputLength),
+        maxTokens: normalizeLimit(requested.maxTokens, DEFAULT_SANITIZER_LIMITS.maxTokens),
+    };
+}
+
+function normalizeLimit(requested: number | undefined, maximum: number): number {
+    if (requested === undefined || !Number.isFinite(requested)) {
+        return maximum;
+    }
+    return Math.max(1, Math.min(maximum, Math.floor(requested)));
 }
 
 function isWhitespace(character: string | undefined): boolean {
