@@ -194,7 +194,7 @@ export class NeetCodeDataStore {
                 || !SLUG_PATTERN.test(titleSlug)
                 || !Number.isInteger(rawProblem.sourceIndex)
                 || Number(rawProblem.sourceIndex) < 1
-                || Number(rawProblem.sourceIndex) > 150
+                || Number(rawProblem.sourceIndex) > 250
                 || !isNonemptyString(rawProblem.title)
                 || !isNonemptyString(rawProblem.section)
                 || !DIFFICULTIES.has(String(rawProblem.difficulty))
@@ -218,8 +218,8 @@ export class NeetCodeDataStore {
                 throw this.invalidDataError(relativePath, `JIT problem ${titleSlug} contains an insecure HTTP URL`);
             }
         }
-        if (value.problemCount !== 150 || entries.length !== 150 || sourceIndexes.size !== 150) {
-            throw this.invalidDataError(relativePath, `expected exactly 150 complete JIT records, found ${entries.length}`);
+        if (value.problemCount !== 250 || entries.length !== 250 || sourceIndexes.size !== 250) {
+            throw this.invalidDataError(relativePath, `expected exactly 250 complete JIT records, found ${entries.length}`);
         }
         return value as unknown as JitLearningDataset;
     }

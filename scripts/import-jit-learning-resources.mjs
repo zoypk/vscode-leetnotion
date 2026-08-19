@@ -5,7 +5,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { validateJitLearningDataset } from "./lib/neetcode-validation.mjs";
 import { atomicWriteFiles } from "./lib/sync-utils.mjs";
 
-const EXPECTED_PROBLEM_COUNT = 150;
+const EXPECTED_PROBLEM_COUNT = 250;
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const extensionRoot = path.resolve(scriptDirectory, "..");
 const sourcePath = process.argv[2] ? path.resolve(process.cwd(), process.argv[2]) : undefined;

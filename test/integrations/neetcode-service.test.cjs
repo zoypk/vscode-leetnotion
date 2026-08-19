@@ -28,14 +28,14 @@ function createDataRoot() {
         blind75: false,
     };
     const problems = {};
-    for (let index = 1; index <= 150; index += 1) {
+    for (let index = 1; index <= 250; index += 1) {
         const questionId = String(index);
         problems[questionId] = {
             questionId,
             title: `Problem ${index}`,
             titleSlug: `problem-${index}`,
             code: `${String(index).padStart(4, "0")}-problem-${index}`,
-            neetcode150: true,
+            neetcode150: index <= 150,
             blind75: index <= 75,
         };
     }
@@ -44,7 +44,7 @@ function createDataRoot() {
         schemaVersion: 2,
         generatedAt: "2026-08-19T00:00:00.000Z",
         source: { repository: "https://github.com/neetcode-gh/leetcode", revision: "a".repeat(40) },
-        problemCount: 151,
+        problemCount: 251,
         neetcode150Count: 150,
         blind75Count: 75,
         problems,
@@ -56,7 +56,7 @@ function createDataRoot() {
         articleMarkdown: "quad article",
     });
     const learningProblems = {};
-    for (let index = 1; index <= 150; index += 1) {
+    for (let index = 1; index <= 250; index += 1) {
         learningProblems[`problem-${index}`] = {
             sourceIndex: index,
             title: `Problem ${index}`,
@@ -69,7 +69,7 @@ function createDataRoot() {
     writeJson(root, "jit-learning-resources.json", {
         schemaVersion: 1,
         source: { name: "resources.md", sha256: "B".repeat(64) },
-        problemCount: 150,
+        problemCount: 250,
         problems: learningProblems,
     });
     return { root, metadata };

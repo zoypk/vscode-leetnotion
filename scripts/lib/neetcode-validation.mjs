@@ -187,8 +187,8 @@ export function validateJitLearningDataset(dataset, knownTitleSlugs) {
     if (!SHA256_PATTERN.test(dataset?.source?.sha256 || "")) {
         errors.push("source.sha256 must be a 64-character SHA-256 digest");
     }
-    if (dataset?.problemCount !== 150 || problemEntries.length !== 150) {
-        errors.push(`problem count must be 150 (metadata ${dataset?.problemCount}, actual ${problemEntries.length})`);
+    if (dataset?.problemCount !== 250 || problemEntries.length !== 250) {
+        errors.push(`problem count must be 250 (metadata ${dataset?.problemCount}, actual ${problemEntries.length})`);
     }
 
     for (const [titleSlug, problem] of problemEntries) {
@@ -203,8 +203,8 @@ export function validateJitLearningDataset(dataset, knownTitleSlugs) {
         if (!knownTitleSlugs?.has(titleSlug)) {
             errors.push(`${prefix} is not present in the NeetCode index`);
         }
-        if (!Number.isInteger(problem.sourceIndex) || problem.sourceIndex < 1 || problem.sourceIndex > 150) {
-            errors.push(`${prefix} sourceIndex must be an integer from 1 through 150`);
+        if (!Number.isInteger(problem.sourceIndex) || problem.sourceIndex < 1 || problem.sourceIndex > 250) {
+            errors.push(`${prefix} sourceIndex must be an integer from 1 through 250`);
         } else if (sourceIndexes.has(problem.sourceIndex)) {
             errors.push(`${prefix} duplicates sourceIndex ${problem.sourceIndex}`);
         } else {
@@ -228,7 +228,7 @@ export function validateJitLearningDataset(dataset, knownTitleSlugs) {
         }
     }
 
-    for (let index = 1; index <= 150; index += 1) {
+    for (let index = 1; index <= 250; index += 1) {
         if (!sourceIndexes.has(index)) {
             errors.push(`sourceIndex ${index} is missing`);
         }
