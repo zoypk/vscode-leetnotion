@@ -1,7 +1,7 @@
-import type { SubmissionBaseline, SubmissionCorrelationRequest, SubmissionSource, ValidatedSubmission } from "./types";
+import type { SubmissionBaseline, SubmissionCorrelationRequest, SubmissionSourceSnapshot, ValidatedSubmission } from "./types";
 
 export interface SubmitWorkflowDependencies {
-    readSource: (filePath: string) => Promise<SubmissionSource>;
+    createSourceSnapshot: (filePath: string) => Promise<SubmissionSourceSnapshot>;
     captureBaseline: (questionNumber: string) => Promise<SubmissionBaseline>;
     submit: (filePath: string) => Promise<string>;
     correlate: (request: SubmissionCorrelationRequest) => Promise<ValidatedSubmission>;
@@ -10,6 +10,7 @@ export interface SubmitWorkflowDependencies {
     syncToNotion: (submission: ValidatedSubmission) => Promise<void>;
     refreshExplorer: () => void | Promise<void>;
     reportCorrelationFailure: (error: unknown) => void;
+    showCorrelationWarning: () => void;
     now?: () => number;
 }
 
@@ -41,23 +42,25 @@ export function isAcceptedSubmission(submission: ValidatedSubmission): boolean {
 }
 
 export async function runSubmitWorkflow(filePath: string, dependencies: SubmitWorkflowDependencies): Promise<void> {
+    let sourceSnapshot: SubmissionSourceSnapshot | undefined;
     try {
-        const source = await dependencies.readSource(filePath);
-        await serializeQuestionWorkflow(source.questionNumber, async () => {
-            const baseline = await dependencies.captureBaseline(source.questionNumber);
+        sourceSnapshot = await dependencies.createSourceSnapshot(filePath);
+        await serializeQuestionWorkflow(sourceSnapshot.questionNumber, async () => {
+            const baseline = await dependencies.captureBaseline(sourceSnapshot.questionNumber);
             const startedAtMs = (dependencies.now ?? Date.now)();
-            const result = await dependencies.submit(filePath);
+            const result = await dependencies.submit(sourceSnapshot.filePath);
 
             let validatedSubmission: ValidatedSubmission;
             try {
                 validatedSubmission = await dependencies.correlate({
                     ...baseline,
-                    submittedCode: source.code,
+                    submittedCode: sourceSnapshot.code,
                     startedAtMs,
                 });
             } catch (error) {
                 dependencies.reportCorrelationFailure(error);
                 dependencies.showResult(result);
+                dependencies.showCorrelationWarning();
                 return;
             }
 
@@ -67,6 +70,10 @@ export async function runSubmitWorkflow(filePath: string, dependencies: SubmitWo
             }
         });
     } finally {
-        await dependencies.refreshExplorer();
+        try {
+            await sourceSnapshot?.dispose();
+        } finally {
+            await dependencies.refreshExplorer();
+        }
     }
 }

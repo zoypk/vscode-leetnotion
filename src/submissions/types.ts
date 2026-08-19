@@ -5,6 +5,11 @@ export interface SubmissionSource {
     code: string;
 }
 
+export interface SubmissionSourceSnapshot extends SubmissionSource {
+    filePath: string;
+    dispose: () => Promise<void>;
+}
+
 export interface SubmissionBaseline {
     questionNumber: string;
     expectedSlug: string;

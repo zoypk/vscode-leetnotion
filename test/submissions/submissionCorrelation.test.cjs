@@ -56,9 +56,9 @@ test("extracts marker identity and only the submitted code block", () => {
 
     assert.deepEqual(extractSubmissionSource("C:\\solutions\\custom.ts", source), {
         questionNumber: "42",
-        code: "function answer() {\n  return 42;\n}",
+        code: "function answer() {  \n  return 42;\n}",
     });
-    assert.equal(normalizeSubmissionCode("\uFEFFa();  \r\n"), "a();");
+    assert.equal(normalizeSubmissionCode("\uFEFFa();  \r\n"), "a();  \n");
 });
 
 test("rejects baseline, stale, other-problem, and different-code submissions", async () => {
@@ -76,7 +76,7 @@ test("rejects baseline, stale, other-problem, and different-code submissions", a
         questionNumber: "42",
         expectedSlug: "answer",
         submissionIds: [1],
-        submittedCode: "return 42;\n",
+        submittedCode: "return 42;",
         startedAtMs: 104_000,
         timeoutMs: 1_000,
         pollIntervalMs: 10,
@@ -156,4 +156,88 @@ test("retries transient list and detail failures until the exact submission is a
     assert.equal(result.submission.id, 10);
     assert.equal(listAttempts, 3);
     assert.equal(detailAttempts, 2);
+});
+
+test("waits for matching code to reach an authoritative terminal status", async () => {
+    let currentTime = 400_000;
+    let detailAttempts = 0;
+
+    const result = await correlateSubmission({
+        questionNumber: "42",
+        expectedSlug: "answer",
+        submissionIds: [],
+        submittedCode: "correct();",
+        startedAtMs: 399_000,
+        timeoutMs: 50,
+        pollIntervalMs: 10,
+        clockSkewMs: 0,
+    }, {
+        listProblemSubmissions: async () => [submission({ id: 11, timestamp: 400 })],
+        getSubmissionDetail: async () => {
+            detailAttempts += 1;
+            const status = detailAttempts === 1 ? null : detailAttempts === 2 ? "Pending" : "Accepted";
+            return detail("correct();", status);
+        },
+        now: () => currentTime,
+        sleep: async (ms) => { currentTime += ms; },
+    });
+
+    assert.equal(detailAttempts, 3);
+    assert.equal(result.detail.details.status_msg, "Accepted");
+});
+
+test("bounds never-settling list and detail requests by the overall deadline", async () => {
+    for (const stalledOperation of ["list", "detail"]) {
+        let aborted = false;
+        const startedAt = Date.now();
+        await assert.rejects(
+            correlateSubmission({
+                questionNumber: "42",
+                expectedSlug: "answer",
+                submissionIds: [],
+                submittedCode: "correct();",
+                startedAtMs: startedAt - 1_000,
+                timeoutMs: 30,
+                pollIntervalMs: 5,
+                clockSkewMs: 0,
+            }, {
+                listProblemSubmissions: stalledOperation === "list"
+                    ? async (signal) => new Promise(() => signal.addEventListener("abort", () => { aborted = true; }))
+                    : async () => [submission({ id: 12, timestamp: Math.floor(startedAt / 1000) })],
+                getSubmissionDetail: stalledOperation === "detail"
+                    ? async (_id, signal) => new Promise(() => signal.addEventListener("abort", () => { aborted = true; }))
+                    : async () => detail("correct();"),
+            }),
+            /submission-correlation-timeout/,
+        );
+        assert.equal(aborted, true, `${stalledOperation} request should be aborted`);
+        assert.ok(Date.now() - startedAt < 500, `${stalledOperation} request exceeded its deadline`);
+    }
+});
+
+test("preserves program-significant trailing whitespace when matching code", async () => {
+    const mismatches = [
+        ["const template = `line  `;", "const template = `line `;"],
+        ["value = '''\nline  \n''' ", "value = '''\nline  \n'''"],
+    ];
+
+    for (const [submittedCode, detailCode] of mismatches) {
+        let currentTime = 500_000;
+        assert.notEqual(normalizeSubmissionCode(submittedCode), normalizeSubmissionCode(detailCode));
+        await assert.rejects(correlateSubmission({
+            questionNumber: "42",
+            expectedSlug: "answer",
+            submissionIds: [],
+            submittedCode,
+            startedAtMs: 499_000,
+            timeoutMs: 10,
+            pollIntervalMs: 10,
+            clockSkewMs: 0,
+        }, {
+            listProblemSubmissions: async () => [submission({ id: 13, timestamp: 500 })],
+            getSubmissionDetail: async () => detail(detailCode),
+            now: () => currentTime,
+            sleep: async (ms) => { currentTime += ms; },
+        }), /13:code-mismatch/);
+    }
 });

@@ -12,8 +12,9 @@ import { leetCodeSubmissionProvider } from "../webview/leetCodeSubmissionProvide
 import { hasNotionIntegrationEnabled } from "../utils/settingUtils";
 import { leetnotionClient } from "../leetnotionClient";
 import { leetcodeClient } from "../leetCodeClient";
-import { extractSubmissionSource, readSubmissionSource } from "../submissions/submissionCorrelation";
+import { createSubmissionSourceSnapshot } from "../submissions/sourceSnapshot";
 import { runSubmitWorkflow } from "../submissions/submitWorkflow";
+import { toWslPath, useWsl } from "../utils/wslUtils";
 
 export async function submitSolution(uri?: vscode.Uri): Promise<void> {
     if (!leetCodeManager.getUser()) {
@@ -29,9 +30,20 @@ export async function submitSolution(uri?: vscode.Uri): Promise<void> {
 
     try {
         await runSubmitWorkflow(filePath, {
-            readSource: sourceText
-                ? async (path) => extractSubmissionSource(path, sourceText)
-                : readSubmissionSource,
+            createSourceSnapshot: async (path) => {
+                if (sourceText === undefined) {
+                    throw new Error("submission-source-document-not-available");
+                }
+                const snapshot = await createSubmissionSourceSnapshot(path, sourceText);
+                try {
+                    return useWsl()
+                        ? { ...snapshot, filePath: await toWslPath(snapshot.filePath) }
+                        : snapshot;
+                } catch (error) {
+                    await snapshot.dispose();
+                    throw error;
+                }
+            },
             captureBaseline: (questionNumber) => leetcodeClient.captureSubmissionBaseline(questionNumber),
             submit: (path) => leetCodeExecutor.submitSolution(path),
             correlate: (request) => leetcodeClient.waitForValidatedSubmission(request),
@@ -40,6 +52,11 @@ export async function submitSolution(uri?: vscode.Uri): Promise<void> {
             syncToNotion: (submission) => leetnotionClient.submitSolution(submission),
             refreshExplorer: () => leetCodeTreeDataProvider.refresh(),
             reportCorrelationFailure: (error) => leetCodeChannel.appendLine(`Failed to correlate the submitted solution: ${error}`),
+            showCorrelationWarning: () => {
+                void vscode.window.showWarningMessage(
+                    "The submission result could not be verified. Notion was not updated; see the Leetnotion output for details.",
+                );
+            },
         });
     } catch (error) {
         leetCodeChannel.appendLine(`Failed to submit the solution: ${error}`);

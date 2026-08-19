@@ -4,8 +4,8 @@ import { getQuestionNumber, sleep } from "../utils/toolUtils";
 import type { SubmissionCorrelationRequest, SubmissionSource, ValidatedSubmission } from "./types";
 
 export interface SubmissionCorrelationDependencies {
-    listProblemSubmissions: () => Promise<LeetcodeSubmission[]>;
-    getSubmissionDetail: (submissionId: number) => Promise<SubmissionDetailView>;
+    listProblemSubmissions: (signal?: AbortSignal) => Promise<LeetcodeSubmission[]>;
+    getSubmissionDetail: (submissionId: number, signal?: AbortSignal) => Promise<SubmissionDetailView>;
     now?: () => number;
     sleep?: (milliseconds: number) => Promise<unknown>;
 }
@@ -13,11 +13,7 @@ export interface SubmissionCorrelationDependencies {
 export function normalizeSubmissionCode(code: string): string {
     return code
         .replace(/^\uFEFF/, "")
-        .replace(/\r\n?/g, "\n")
-        .split("\n")
-        .map((line) => line.replace(/[\t ]+$/g, ""))
-        .join("\n")
-        .trim();
+        .replace(/\r\n?/g, "\n");
 }
 
 export function extractSubmissionSource(filePath: string, fileContent: string): SubmissionSource {
@@ -37,15 +33,58 @@ export function extractSubmissionSource(filePath: string, fileContent: string): 
         throw new Error(`submission-source-code-empty:${filePath}`);
     }
     const codeEndLineStart = fileContent.lastIndexOf("\n", codeEnd) + 1;
+    let contentEnd = codeEndLineStart;
+    if (contentEnd > contentStart && fileContent[contentEnd - 1] === "\n") {
+        contentEnd -= 1;
+        if (contentEnd > contentStart && fileContent[contentEnd - 1] === "\r") {
+            contentEnd -= 1;
+        }
+    }
 
     return {
         questionNumber,
-        code: normalizeSubmissionCode(fileContent.slice(contentStart + 1, codeEndLineStart)),
+        code: normalizeSubmissionCode(fileContent.slice(contentStart + 1, contentEnd)),
     };
 }
 
 export async function readSubmissionSource(filePath: string): Promise<SubmissionSource> {
     return extractSubmissionSource(filePath, await fs.readFile(filePath, "utf8"));
+}
+
+function isTerminalStatus(status: string | undefined): status is string {
+    if (!status || !status.trim()) {
+        return false;
+    }
+    return !["pending", "started", "judging"].includes(status.trim().toLowerCase());
+}
+
+async function callBeforeDeadline<T>(
+    label: string,
+    deadline: number,
+    now: () => number,
+    operation: (signal: AbortSignal) => Promise<T>,
+): Promise<T> {
+    const remainingMs = deadline - now();
+    if (remainingMs <= 0) {
+        throw new Error(`${label}-deadline-exceeded`);
+    }
+
+    const controller = new AbortController();
+    let timeout: NodeJS.Timeout | undefined;
+    const deadlinePromise = new Promise<never>((_resolve, reject) => {
+        timeout = setTimeout(() => {
+            controller.abort();
+            reject(new Error(`${label}-deadline-exceeded`));
+        }, remainingMs);
+    });
+
+    try {
+        return await Promise.race([operation(controller.signal), deadlinePromise]);
+    } finally {
+        if (timeout) {
+            clearTimeout(timeout);
+        }
+    }
 }
 
 export async function correlateSubmission(
@@ -65,7 +104,12 @@ export async function correlateSubmission(
     do {
         let submissions: LeetcodeSubmission[] = [];
         try {
-            submissions = await dependencies.listProblemSubmissions();
+            submissions = await callBeforeDeadline(
+                "submission-list",
+                deadline,
+                now,
+                (signal) => dependencies.listProblemSubmissions(signal),
+            );
         } catch (error) {
             rejectedReasons.add(`poll-error=${error instanceof Error ? error.message : String(error)}`);
         }
@@ -85,7 +129,12 @@ export async function correlateSubmission(
 
             let detail: SubmissionDetailView;
             try {
-                detail = await dependencies.getSubmissionDetail(candidate.id);
+                detail = await callBeforeDeadline(
+                    `submission-detail:${candidate.id}`,
+                    deadline,
+                    now,
+                    (signal) => dependencies.getSubmissionDetail(candidate.id, signal),
+                );
             } catch (error) {
                 rejectedReasons.add(`${candidate.id}:detail-unavailable`);
                 continue;
@@ -94,14 +143,19 @@ export async function correlateSubmission(
                 rejectedReasons.add(`${candidate.id}:code-mismatch`);
                 continue;
             }
+            const authoritativeStatus = detail.details.status_msg ?? detail.details.compare_result;
+            if (!isTerminalStatus(authoritativeStatus)) {
+                rejectedReasons.add(`${candidate.id}:detail-pending`);
+                continue;
+            }
 
             return {
                 questionNumber: request.questionNumber,
                 submission: {
                     ...candidate,
                     code: detail.code,
-                    compare_result: detail.details.compare_result ?? candidate.compare_result,
-                    status_display: detail.details.status_msg ?? candidate.status_display,
+                    compare_result: authoritativeStatus,
+                    status_display: authoritativeStatus,
                 },
                 detail,
             };

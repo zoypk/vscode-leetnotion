@@ -237,19 +237,20 @@ class LeetcodeClient {
 
     public async waitForValidatedSubmission(request: SubmissionCorrelationRequest): Promise<ValidatedSubmission> {
         return correlateSubmission(request, {
-            listProblemSubmissions: async () => {
-                const submissions = await this.getProblemSubmissionsBySlug(request.expectedSlug);
+            listProblemSubmissions: async (signal) => {
+                const submissions = await this.getProblemSubmissionsBySlug(request.expectedSlug, 0, 20, signal);
                 return submissions.map((submission) => this.normalizeProblemSubmission(submission, request.expectedSlug));
             },
-            getSubmissionDetail: (submissionId) => this.getSubmissionDetail(submissionId),
+            getSubmissionDetail: (submissionId, signal) => this.getSubmissionDetail(submissionId, signal),
         });
     }
 
-    public async getSubmissionDetail(id: number): Promise<SubmissionDetailView> {
+    public async getSubmissionDetail(id: number, signal?: AbortSignal): Promise<SubmissionDetailView> {
         const data = await this.graphqlRequest<SubmissionDetailsGraphqlData>(
             SUBMISSION_DETAILS_QUERY,
             { submissionId: id },
-            `${getUrl("base")}/submissions/detail/${id}/`
+            `${getUrl("base")}/submissions/detail/${id}/`,
+            signal,
         );
 
         if (!data.submissionDetails) {
@@ -389,8 +390,9 @@ class LeetcodeClient {
 
     private async getProblemSubmissionsBySlug(
         titleSlug: string,
-        offset: number,
-        limit: number
+        offset: number = 0,
+        limit: number = 20,
+        signal?: AbortSignal,
     ): Promise<ProblemSubmissionsApiResponse["submissions_dump"]> {
         const cookie = globalState.getCookie();
         if (!cookie) {
@@ -401,6 +403,8 @@ class LeetcodeClient {
         const baseUrl = getUrl("base");
         const response = await axios.get<ProblemSubmissionsApiResponse>(`${baseUrl}/api/submissions/${titleSlug}`, {
             params: { offset, limit },
+            signal,
+            timeout: 15_000,
             headers: {
                 "content-type": "application/json",
                 origin: baseUrl,
@@ -439,7 +443,7 @@ class LeetcodeClient {
         };
     }
 
-    private async graphqlRequest<T>(query: string, variables: Record<string, unknown>, referer: string): Promise<T> {
+    private async graphqlRequest<T>(query: string, variables: Record<string, unknown>, referer: string, signal?: AbortSignal): Promise<T> {
         if (!this.isSignedIn) {
             throw new Error("not-signed-in-to-leetcode");
         }
@@ -455,6 +459,8 @@ class LeetcodeClient {
             query,
             variables,
         }, {
+            signal,
+            timeout: 15_000,
             headers: {
                 "content-type": "application/json",
                 origin: baseUrl,
