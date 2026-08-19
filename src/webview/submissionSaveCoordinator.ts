@@ -88,7 +88,7 @@ export class SubmissionSaveCoordinator {
     }
 
     public markNotionUnavailable(identity: { submissionId: number; questionNumber: string }): boolean {
-        if (!matchesIdentity(this.submissionContext, identity)) {
+        if (!this.pending || !matchesIdentity(this.submissionContext, identity)) {
             return false;
         }
         this.pending = false;

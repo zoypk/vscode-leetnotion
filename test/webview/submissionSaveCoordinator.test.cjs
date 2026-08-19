@@ -43,7 +43,17 @@ test("pending Notion context blocks review edits until the exact context resolve
     assert.equal(coordinator.notionPending, true);
     assert.equal(coordinator.installNotionContext(notion(1)), true);
     assert.equal(coordinator.notionPending, false);
+    assert.equal(coordinator.markNotionUnavailable({ submissionId: 1, questionNumber: "42" }), false);
     assert.doesNotThrow(() => coordinator.snapshotForSave({ kind: "rating", value: "good" }));
+});
+
+test("a failed pending Notion sync unlocks local review without affecting another generation", () => {
+    const coordinator = new SubmissionSaveCoordinator();
+    coordinator.begin(submission(1), state(), true);
+    assert.equal(coordinator.markNotionUnavailable({ submissionId: 2, questionNumber: "42" }), false);
+    assert.equal(coordinator.notionPending, true);
+    assert.equal(coordinator.markNotionUnavailable({ submissionId: 1, questionNumber: "42" }), true);
+    assert.equal(coordinator.notionPending, false);
 });
 
 test("committed review results are reused only for the same operation and generation", () => {
