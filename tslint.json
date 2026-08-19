@@ -10,7 +10,7 @@
         "no-namespace": false,
         "max-line-length": [false, 120],
         "typedef": false,
-        "no-implicit-dependencies": [true, ["vscode"]],
+        "no-implicit-dependencies": [true, "dev", ["vscode"]],
         "trailing-comma": false,
         "no-any": false,
         "object-literal-key-quotes": [true, "consistent-as-needed"],
