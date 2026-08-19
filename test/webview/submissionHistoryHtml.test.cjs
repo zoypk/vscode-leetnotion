@@ -6,6 +6,7 @@ const {
     renderSubmissionHistoryHtml,
     resolveSubmissionHistoryMessage,
 } = require("../../out-test/webview/submissionHistoryHtml.js");
+const { keepTrustedSubmissionUrls } = require("../../out-test/submissions/submissionHistory.js");
 
 function submission(overrides = {}) {
     return {
@@ -89,4 +90,19 @@ test("resolves actions only against provider-owned submission state", () => {
     );
     assert.equal(resolveSubmissionHistoryMessage({ action: "open-external", submissionId: 99 }, submissionsById), undefined);
     assert.equal(resolveSubmissionHistoryMessage({ action: "open-external", submissionId: 42, url: "https://evil.example" }, submissionsById), undefined);
+});
+
+test("cannot resolve an action for an authoritative row with a malicious URL", () => {
+    const trusted = keepTrustedSubmissionUrls([
+        submission({ id: 42, url: "https://leetcode.com/submissions/detail/42/" }),
+        submission({ id: 43, url: "command:workbench.action.closeWindow" }),
+        submission({ id: 44, url: "file:///tmp/secret" }),
+        submission({ id: 45, url: "https://evil.example/submissions/detail/45/" }),
+    ], "https://leetcode.com");
+    const submissionsById = new Map(trusted.map((item) => [item.id, item]));
+
+    assert.equal(trusted.length, 1);
+    assert.equal(resolveSubmissionHistoryMessage({ action: "open-external", submissionId: 43 }, submissionsById), undefined);
+    assert.equal(resolveSubmissionHistoryMessage({ action: "open-external", submissionId: 44 }, submissionsById), undefined);
+    assert.equal(resolveSubmissionHistoryMessage({ action: "open-external", submissionId: 45 }, submissionsById), undefined);
 });

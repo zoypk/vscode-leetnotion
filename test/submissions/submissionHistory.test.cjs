@@ -1,7 +1,13 @@
 const assert = require("node:assert/strict");
 const test = require("node:test");
 
-const { collectSubmissionHistory } = require("../../out-test/submissions/submissionHistory.js");
+const {
+    collectSubmissionHistory,
+    keepTrustedSubmissionUrls,
+    resolveLeetCodeUrl,
+    returnToSubmissionHistory,
+    SubmissionDetailRequestGuard,
+} = require("../../out-test/submissions/submissionHistory.js");
 
 function row(id, timestamp = id) {
     return { id, timestamp };
@@ -71,3 +77,85 @@ test("ignores invalid identifiers and supports an empty partial page", async () 
     const result = await collectSubmissionHistory(async () => [row(0), row(-1)], { pageSize: 20 });
     assert.deepEqual(result, []);
 });
+
+test("prevents an older detail request from replacing a newer result", async () => {
+    const guard = new SubmissionDetailRequestGuard();
+    const first = deferred();
+    const second = deferred();
+    const shown = [];
+
+    async function loadDetail(id, detailPromise) {
+        const generation = guard.begin();
+        const detail = await detailPromise;
+        if (guard.isCurrent(generation)) {
+            shown.push([id, detail]);
+        }
+    }
+
+    const loadingFirst = loadDetail(1, first.promise);
+    const loadingSecond = loadDetail(2, second.promise);
+    second.resolve("second detail");
+    await loadingSecond;
+    first.resolve("stale first detail");
+    await loadingFirst;
+
+    assert.deepEqual(shown, [[2, "second detail"]]);
+});
+
+test("returns to an existing retained history panel without a network reload", async () => {
+    let reloads = 0;
+    const result = await returnToSubmissionHistory(
+        () => true,
+        async () => {
+            reloads += 1;
+            throw new Error("offline");
+        },
+    );
+
+    assert.equal(result, "revealed");
+    assert.equal(reloads, 0);
+});
+
+test("reloads history only when no matching retained panel exists", async () => {
+    let reloads = 0;
+    const result = await returnToSubmissionHistory(
+        () => false,
+        async () => { reloads += 1; },
+    );
+
+    assert.equal(result, "reloaded");
+    assert.equal(reloads, 1);
+});
+
+test("accepts only HTTPS URLs on the configured LeetCode origin", () => {
+    const baseUrl = "https://leetcode.com";
+    assert.equal(resolveLeetCodeUrl("/submissions/detail/42/", baseUrl), "https://leetcode.com/submissions/detail/42/");
+    assert.equal(resolveLeetCodeUrl("https://leetcode.com/submissions/detail/42/", baseUrl), "https://leetcode.com/submissions/detail/42/");
+    assert.equal(resolveLeetCodeUrl("http://leetcode.com/submissions/detail/42/", baseUrl), undefined);
+    assert.equal(resolveLeetCodeUrl("command:workbench.action.closeWindow", baseUrl), undefined);
+    assert.equal(resolveLeetCodeUrl("file:///etc/passwd", baseUrl), undefined);
+    assert.equal(resolveLeetCodeUrl("", baseUrl), undefined);
+    assert.equal(resolveLeetCodeUrl(null, baseUrl), undefined);
+    assert.equal(resolveLeetCodeUrl("https://leetcode.com.evil.example/submissions/detail/42/", baseUrl), undefined);
+    assert.equal(resolveLeetCodeUrl("https://evil.example/submissions/detail/42/", baseUrl), undefined);
+});
+
+test("drops authoritative API rows whose URLs are outside the configured host", () => {
+    const submissions = [
+        { id: 1, url: "/submissions/detail/1/" },
+        { id: 2, url: "command:workbench.action.closeWindow" },
+        { id: 3, url: "file:///tmp/submission" },
+        { id: 4, url: "https://evil.example/submissions/detail/4/" },
+    ];
+
+    assert.deepEqual(
+        keepTrustedSubmissionUrls(submissions, "https://leetcode.com"),
+        [{ id: 1, url: "https://leetcode.com/submissions/detail/1/" }],
+    );
+});
+
+function deferred() {
+    let resolve;
+    const promise = new Promise((resolvePromise) => { resolve = resolvePromise; });
+    return { promise, resolve };
+}

@@ -5,6 +5,8 @@ import { randomBytes } from "crypto";
 import { commands, ViewColumn } from "vscode";
 import { LeetcodeSubmission, SubmissionHistoryItem } from "../types";
 import { openUrl } from "../utils/uiUtils";
+import { getUrl } from "../shared";
+import { keepTrustedSubmissionUrls, resolveLeetCodeUrl } from "../submissions/submissionHistory";
 import { ILeetCodeWebviewOption, LeetCodeWebview } from "./LeetCodeWebview";
 import { renderSubmissionHistoryHtml, resolveSubmissionHistoryMessage } from "./submissionHistoryHtml";
 
@@ -25,7 +27,7 @@ class LeetCodePastSubmissionsProvider extends LeetCodeWebview {
     public show(problemTitle: string, questionNumber: string, submissions: LeetcodeSubmission[]): void {
         this.problemTitle = problemTitle;
         this.questionNumber = questionNumber;
-        this.submissions = submissions.slice();
+        this.submissions = keepTrustedSubmissionUrls(submissions, getUrl("base"));
         this.submissionsById = new Map(this.submissions.map((submission) => [submission.id, submission]));
         this.showWebviewInternal();
     }
@@ -41,6 +43,14 @@ class LeetCodePastSubmissionsProvider extends LeetCodeWebview {
             questionNumber: this.questionNumber,
             submission: toHistoryItem(submission, this.questionNumber),
         };
+    }
+
+    public revealExisting(questionNumber: string): boolean {
+        if (!this.panel || this.questionNumber !== questionNumber) {
+            return false;
+        }
+        this.panel.reveal(ViewColumn.Two, false);
+        return true;
     }
 
     protected getWebviewOption(): ILeetCodeWebviewOption {
@@ -68,7 +78,10 @@ class LeetCodePastSubmissionsProvider extends LeetCodeWebview {
         if (message.action === "open-detail") {
             await commands.executeCommand("leetnotion.showSubmissionDetail", message.submissionId);
         } else {
-            await openUrl(message.submission.url);
+            const url = resolveLeetCodeUrl(message.submission.url, getUrl("base"));
+            if (url) {
+                await openUrl(url);
+            }
         }
     }
 }

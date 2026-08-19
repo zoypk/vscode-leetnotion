@@ -36,6 +36,9 @@ import { globalState } from "../globalState";
 import { extractArrayElements, getCompanyTags, getLists, getSheets, getTopicTags } from "@/utils/dataUtils";
 import { CompanyTags, Lists, Sheets, TopicTags } from "@/types";
 import TrackData from "../utils/trackingUtils";
+import { SubmissionDetailRequestGuard } from "../submissions/submissionHistory";
+
+const submissionDetailRequestGuard = new SubmissionDetailRequestGuard();
 
 export async function previewProblem(input: IProblem | vscode.Uri, isSideMode: boolean = false): Promise<void> {
     let node: IProblem;
@@ -283,6 +286,7 @@ export async function showSubmissionDetail(submissionId: number): Promise<void> 
         return;
     }
 
+    const requestGeneration = submissionDetailRequestGuard.begin();
     try {
         const detail = await vscode.window.withProgress(
             {
@@ -292,6 +296,9 @@ export async function showSubmissionDetail(submissionId: number): Promise<void> 
             },
             async () => leetcodeClient.getSubmissionDetail(submissionId)
         );
+        if (!submissionDetailRequestGuard.isCurrent(requestGeneration)) {
+            return;
+        }
         leetCodeSubmissionDetailProvider.show(
             context.problemTitle,
             context.questionNumber,
@@ -299,6 +306,9 @@ export async function showSubmissionDetail(submissionId: number): Promise<void> 
             detail
         );
     } catch (error) {
+        if (!submissionDetailRequestGuard.isCurrent(requestGeneration)) {
+            return;
+        }
         if (isUnauthorizedLeetCodeError(error)) {
             await promptForSignIn();
             return;

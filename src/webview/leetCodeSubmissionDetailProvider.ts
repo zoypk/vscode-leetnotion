@@ -5,8 +5,11 @@ import { randomBytes } from "crypto";
 import { commands, ViewColumn } from "vscode";
 import { SubmissionDetailView, SubmissionHistoryItem } from "../types";
 import { openUrl } from "../utils/uiUtils";
+import { getUrl } from "../shared";
+import { resolveLeetCodeUrl, returnToSubmissionHistory } from "../submissions/submissionHistory";
 import { ILeetCodeWebviewOption, LeetCodeWebview } from "./LeetCodeWebview";
 import { renderSubmissionDetailHtml, resolveSubmissionDetailMessage } from "./submissionDetailHtml";
+import { leetCodePastSubmissionsProvider } from "./leetCodePastSubmissionsProvider";
 
 class LeetCodeSubmissionDetailProvider extends LeetCodeWebview {
     protected readonly viewType: string = "leetnotion.submissionDetail";
@@ -17,9 +20,13 @@ class LeetCodeSubmissionDetailProvider extends LeetCodeWebview {
     private detail: SubmissionDetailView;
 
     public show(problemTitle: string, questionNumber: string, submission: SubmissionHistoryItem, detail: SubmissionDetailView): void {
+        const url = resolveLeetCodeUrl(submission.url, getUrl("base"));
+        if (!url) {
+            return;
+        }
         this.problemTitle = problemTitle;
         this.questionNumber = questionNumber;
-        this.submission = submission;
+        this.submission = { ...submission, url };
         this.detail = detail;
         this.showWebviewInternal();
     }
@@ -48,13 +55,19 @@ class LeetCodeSubmissionDetailProvider extends LeetCodeWebview {
         }
 
         if (message.action === "back") {
-            await commands.executeCommand(
-                "leetnotion.showPastSubmissionsByQuestionNumber",
-                this.questionNumber,
-                this.problemTitle
+            await returnToSubmissionHistory(
+                () => leetCodePastSubmissionsProvider.revealExisting(this.questionNumber),
+                async () => commands.executeCommand(
+                    "leetnotion.showPastSubmissionsByQuestionNumber",
+                    this.questionNumber,
+                    this.problemTitle
+                )
             );
         } else {
-            await openUrl(this.submission.url);
+            const url = resolveLeetCodeUrl(this.submission.url, getUrl("base"));
+            if (url) {
+                await openUrl(url);
+            }
         }
     }
 }

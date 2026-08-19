@@ -18,7 +18,7 @@ import { leetCodeChannel } from "./leetCodeChannel";
 import { LeetcodeProblem, LeetcodeSubmission, ProblemRatingMap, SubmissionDetailView } from "./types";
 import { ProblemRating } from "./shared";
 import _ from "lodash";
-import { collectSubmissionHistory } from "./submissions/submissionHistory";
+import { collectSubmissionHistory, resolveLeetCodeUrl } from "./submissions/submissionHistory";
 
 type ProblemSubmissionsApiResponse = {
     submissions_dump: Array<{
@@ -207,10 +207,11 @@ class LeetcodeClient {
             throw new Error("not-signed-in-to-leetcode");
         }
 
-        return collectSubmissionHistory(async (offset, limit) => {
-            const submissions = await this.getProblemSubmissionsBySlug(titleSlug, offset, limit);
-            return submissions.map((submission) => this.normalizeProblemSubmission(submission, titleSlug));
+        const submissions = await collectSubmissionHistory(async (offset, limit) => {
+            const page = await this.getProblemSubmissionsBySlug(titleSlug, offset, limit);
+            return page.map((submission) => this.normalizeProblemSubmission(submission, titleSlug));
         });
+        return submissions.filter((submission) => Boolean(submission.url));
     }
 
     public async getSubmissionDetail(id: number): Promise<SubmissionDetailView> {
@@ -327,7 +328,9 @@ class LeetcodeClient {
         }
 
         const submissions = await this.leetcode.submissions(options);
-        return submissions.map((submission) => this.normalizeSubmission(submission));
+        return submissions
+            .map((submission) => this.normalizeSubmission(submission))
+            .filter((submission) => Boolean(submission.url));
     }
 
     private normalizeSubmission(submission: Submission): LeetcodeSubmission {
@@ -349,7 +352,7 @@ class LeetcodeClient {
             timestamp: submission.timestamp,
             title: submission.title,
             title_slug: submission.title_slug,
-            url: new URL(submission.url, getUrl("base")).toString(),
+            url: resolveLeetCodeUrl(submission.url, getUrl("base")) || "",
         };
     }
 
@@ -401,7 +404,7 @@ class LeetcodeClient {
             timestamp: submission.timestamp,
             title: submission.title,
             title_slug: titleSlug,
-            url: new URL(submission.url, getUrl("base")).toString(),
+            url: resolveLeetCodeUrl(submission.url, getUrl("base")) || "",
         };
     }
 
