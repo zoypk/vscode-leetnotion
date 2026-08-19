@@ -96,6 +96,87 @@ test("recovers a stale lock but preserves and times out on a fresh lock", async 
     assert.equal(await readFile(freshLock, "utf8"), "fresh");
 });
 
+test("never steals an old lock whose recorded process is still alive", async () => {
+    const fixture = await createStore({
+        isLockOwnerAlive: async (owner) => owner.pid === 4321,
+    });
+    const lockPath = `${fixture.filePath}.lock`;
+    const createdAt = new Date(Date.now() - 2000);
+    await writeFile(lockPath, JSON.stringify({
+        ownerToken: "live-owner",
+        pid: 4321,
+        createdAt: createdAt.toISOString(),
+        processStartedAt: new Date(createdAt.getTime() - 3600000).toISOString(),
+    }));
+    const old = new Date(Date.now() - 1000);
+    await utimes(lockPath, old, old);
+
+    await assert.rejects(() => fixture.store.transaction((state) => {
+        state.count = 1;
+    }), /Timed out waiting for state lock/);
+    assert.match(await readFile(lockPath, "utf8"), /live-owner/);
+    await unlink(lockPath);
+});
+
+test("recovers an old lock only after confirming its recorded process is dead", async () => {
+    const checkedOwners = [];
+    const fixture = await createStore({
+        isLockOwnerAlive: async (owner) => {
+            checkedOwners.push(owner);
+            return false;
+        },
+    });
+    const lockPath = `${fixture.filePath}.lock`;
+    const createdAt = new Date(Date.now() - 2000);
+    await writeFile(lockPath, JSON.stringify({
+        ownerToken: "dead-owner",
+        pid: 9876,
+        createdAt: createdAt.toISOString(),
+        processStartedAt: new Date(createdAt.getTime() - 3600000).toISOString(),
+    }));
+    const old = new Date(Date.now() - 1000);
+    await utimes(lockPath, old, old);
+
+    await fixture.store.transaction((state) => { state.count = 2; });
+    assert.equal((await fixture.store.read()).count, 2);
+    assert.equal(checkedOwners.length, 1);
+    assert.equal(checkedOwners[0].ownerToken, "dead-owner");
+    await assert.rejects(() => stat(lockPath), /ENOENT/);
+});
+
+test("uses process start metadata to distinguish current-PID reuse", async () => {
+    const fixture = await createStore();
+    const lockPath = `${fixture.filePath}.lock`;
+    const createdAt = new Date(Date.now() - 2000);
+    await writeFile(lockPath, JSON.stringify({
+        ownerToken: "prior-process-instance",
+        pid: process.pid,
+        createdAt: createdAt.toISOString(),
+        processStartedAt: new Date(createdAt.getTime() - 86400000).toISOString(),
+    }));
+    const old = new Date(Date.now() - 1000);
+    await utimes(lockPath, old, old);
+
+    await fixture.store.transaction((state) => { state.count = 3; });
+    assert.equal((await fixture.store.read()).count, 3);
+});
+
+test("conservatively preserves a legacy stale lock with a live PID", async () => {
+    const fixture = await createStore();
+    const lockPath = `${fixture.filePath}.lock`;
+    await writeFile(lockPath, JSON.stringify({
+        pid: process.pid,
+        createdAt: new Date(Date.now() - 2000).toISOString(),
+    }));
+    const old = new Date(Date.now() - 1000);
+    await utimes(lockPath, old, old);
+
+    await assert.rejects(() => fixture.store.transaction((state) => {
+        state.count = 4;
+    }), /Timed out waiting for state lock/);
+    await unlink(lockPath);
+});
+
 test("rereads state after acquiring the lock", async () => {
     const fixture = await createStore();
     let releaseFirst;
@@ -151,5 +232,15 @@ test("cleans the file handle and owned lock when setup fails after exclusive ope
         state.count = 1;
     }), /post-open setup failed/);
     assert.equal(opened, 1);
+    assert.deepEqual(await readdir(fixture.directory), []);
+});
+
+test("closes the handle and removes the exclusive lock when handle.stat fails", async () => {
+    const fixture = await createStore({
+        statLockHandle: async () => { throw new Error("injected stat failure"); },
+    });
+    await assert.rejects(() => fixture.store.transaction((state) => {
+        state.count = 1;
+    }), /injected stat failure/);
     assert.deepEqual(await readdir(fixture.directory), []);
 });

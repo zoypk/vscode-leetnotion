@@ -12,21 +12,35 @@ export interface VersionedJsonStoreOptions<T> {
     now?: () => number;
     onTempFile?: (tempPath: string) => void;
     onLockOpened?: (lockPath: string, ownerToken: string) => void;
+    isLockOwnerAlive?: (owner: LockOwnerMetadata) => boolean | Promise<boolean>;
+    statLockHandle?: (handle: import("fs").promises.FileHandle) => Promise<import("fs").Stats>;
+}
+
+export interface LockOwnerMetadata {
+    ownerToken?: string;
+    pid: number;
+    createdAt: string;
+    processStartedAt?: string;
 }
 
 const processQueues = new Map<string, Promise<void>>();
+const currentProcessStartedAtMs = Date.now() - process.uptime() * 1000;
 
 export class VersionedJsonStore<T> {
     private readonly lockRetryMs: number;
     private readonly lockTimeoutMs: number;
     private readonly staleLockMs: number;
     private readonly now: () => number;
+    private readonly isLockOwnerAlive: (owner: LockOwnerMetadata) => boolean | Promise<boolean>;
+    private readonly statLockHandle: (handle: import("fs").promises.FileHandle) => Promise<import("fs").Stats>;
 
     constructor(private readonly options: VersionedJsonStoreOptions<T>) {
         this.lockRetryMs = options.lockRetryMs ?? 25;
         this.lockTimeoutMs = options.lockTimeoutMs ?? 5000;
         this.staleLockMs = options.staleLockMs ?? 30000;
         this.now = options.now ?? Date.now;
+        this.isLockOwnerAlive = options.isLockOwnerAlive ?? this.defaultIsLockOwnerAlive;
+        this.statLockHandle = options.statLockHandle ?? ((handle) => handle.stat());
     }
 
     public async read(): Promise<T> {
@@ -106,11 +120,12 @@ export class VersionedJsonStore<T> {
                 let tokenWritten = false;
                 let setupError: unknown;
                 try {
-                    openedStats = await handle.stat();
+                    openedStats = await this.statLockHandle(handle);
                     await handle.writeFile(JSON.stringify({
                         ownerToken,
                         pid: process.pid,
                         createdAt: new Date(this.now()).toISOString(),
+                        processStartedAt: new Date(currentProcessStartedAtMs).toISOString(),
                     }));
                     tokenWritten = true;
                     this.options.onLockOpened?.(lockPath, ownerToken);
@@ -124,6 +139,10 @@ export class VersionedJsonStore<T> {
                         await this.releaseLockIfOwned(lockPath, ownerToken);
                     } else if (openedStats) {
                         await this.releaseCreatedLockIfSameFile(lockPath, openedStats);
+                    } else {
+                        // The path was created exclusively by this handle and is still fresh.
+                        // Cooperative owners cannot replace it before setup completes.
+                        await this.removeExclusiveSetupLock(lockPath);
                     }
                     throw setupError;
                 }
@@ -132,7 +151,7 @@ export class VersionedJsonStore<T> {
                 if (!this.isNodeError(error, "EEXIST")) {
                     throw new Error(`Failed to acquire state lock ${lockPath}: ${this.errorMessage(error)}`);
                 }
-                if (await this.isStaleLock(lockPath)) {
+                if (await this.canRecoverStaleLock(lockPath)) {
                     await fs.unlink(lockPath).catch((unlinkError) => {
                         if (!this.isNodeError(unlinkError, "ENOENT")) {
                             throw unlinkError;
@@ -167,16 +186,7 @@ export class VersionedJsonStore<T> {
     }
 
     private async readLockOwner(lockPath: string): Promise<string | undefined> {
-        try {
-            const raw = await fs.readFile(lockPath, "utf8");
-            const parsed = JSON.parse(raw) as { ownerToken?: unknown };
-            return typeof parsed.ownerToken === "string" ? parsed.ownerToken : undefined;
-        } catch (error) {
-            if (this.isNodeError(error, "ENOENT") || error instanceof SyntaxError) {
-                return undefined;
-            }
-            throw error;
-        }
+        return (await this.readLockMetadata(lockPath))?.ownerToken;
     }
 
     private async releaseCreatedLockIfSameFile(lockPath: string, openedStats: import("fs").Stats): Promise<void> {
@@ -195,16 +205,85 @@ export class VersionedJsonStore<T> {
         }
     }
 
-    private async isStaleLock(lockPath: string): Promise<boolean> {
+    private async canRecoverStaleLock(lockPath: string): Promise<boolean> {
         try {
             const lockStats = await fs.stat(lockPath);
-            return this.now() - lockStats.mtimeMs > this.staleLockMs;
+            if (this.now() - lockStats.mtimeMs <= this.staleLockMs) {
+                return false;
+            }
+
+            const owner = await this.readLockMetadata(lockPath);
+            if (!owner) {
+                // Recover stale pre-token/corrupt locks for backward compatibility.
+                return true;
+            }
+
+            // Protocol invariant: a cooperative stale takeover never removes a
+            // lock owned by the same live process instance. Consequently an
+            // owner retains its fencing token through read, rename, and release.
+            return !await this.isLockOwnerAlive(owner);
         } catch (error) {
             if (this.isNodeError(error, "ENOENT")) {
                 return true;
             }
             throw error;
         }
+    }
+
+    private async readLockMetadata(lockPath: string): Promise<LockOwnerMetadata | undefined> {
+        try {
+            const raw = await fs.readFile(lockPath, "utf8");
+            const parsed = JSON.parse(raw) as Partial<LockOwnerMetadata>;
+            const createdAtMs = typeof parsed.createdAt === "string" ? Date.parse(parsed.createdAt) : Number.NaN;
+            const hasProcessStart = typeof parsed.processStartedAt === "string";
+            const processStartedAtMs = hasProcessStart ? Date.parse(parsed.processStartedAt as string) : undefined;
+            const validTimes = Number.isFinite(createdAtMs)
+                && (!hasProcessStart || (Number.isFinite(processStartedAtMs) && (processStartedAtMs as number) <= createdAtMs))
+                && createdAtMs <= this.now() + 60000;
+            const validToken = parsed.ownerToken === undefined || typeof parsed.ownerToken === "string";
+            if (!validToken
+                || !Number.isInteger(parsed.pid)
+                || (parsed.pid as number) <= 0
+                || !validTimes) {
+                return undefined;
+            }
+            return parsed as LockOwnerMetadata;
+        } catch (error) {
+            if (this.isNodeError(error, "ENOENT") || error instanceof SyntaxError) {
+                return undefined;
+            }
+            throw error;
+        }
+    }
+
+    private defaultIsLockOwnerAlive(owner: LockOwnerMetadata): boolean {
+        if (owner.pid === process.pid) {
+            if (!owner.processStartedAt) {
+                // Legacy locks have no process-instance timestamp. Preserve a
+                // live matching PID rather than risking an unsafe takeover.
+                return true;
+            }
+            const recordedStart = Date.parse(owner.processStartedAt);
+            // A matching PID with a different start time is a reused PID, not
+            // the process instance that created this token.
+            return Math.abs(recordedStart - currentProcessStartedAtMs) < 5000;
+        }
+        try {
+            process.kill(owner.pid, 0);
+            // For other PIDs we conservatively treat access-denied/live results
+            // as alive; token and creation metadata still fence release.
+            return true;
+        } catch (error) {
+            return this.isNodeError(error, "EPERM");
+        }
+    }
+
+    private async removeExclusiveSetupLock(lockPath: string): Promise<void> {
+        await fs.unlink(lockPath).catch((error) => {
+            if (!this.isNodeError(error, "ENOENT")) {
+                throw error;
+            }
+        });
     }
 
     private createTempPath(filePath: string): string {
