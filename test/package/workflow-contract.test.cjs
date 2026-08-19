@@ -31,6 +31,11 @@ function assertSharedVerificationScript(manifest) {
         manifest.scripts.verify,
         "npm run typecheck && npm run lint && npm test && npm run validate:data && npm run compile",
     );
+    assert.equal(
+        manifest.scripts["verify:package"],
+        "npm run package && npm run verify:vsix && npm test -- test/package/manifest.test.cjs",
+    );
+    assert.equal(manifest.scripts["verify:package"].match(/npm run package/g).length, 1);
 }
 
 test("CI runs the shared local gates for pull requests and main before uploading the VSIX", async () => {
@@ -47,9 +52,7 @@ test("CI runs the shared local gates for pull requests and main before uploading
     assert.deepEqual(commands, [
         "npm ci",
         "npm run verify",
-        "npm run package",
-        "npm run verify:vsix",
-        "npm test -- test/package/manifest.test.cjs",
+        "npm run verify:package",
     ]);
 
     const upload = job.steps.find((step) => step.uses === "actions/upload-artifact@v4");
@@ -88,13 +91,11 @@ test("release validates and publishes one exact artifact without prerelease chur
     for (const command of [
         "npm ci",
         "npm run verify",
-        "npm run package",
-        `npm run verify:vsix -- "${artifactExpression}"`,
-        "npm test -- test/package/manifest.test.cjs",
+        "npm run verify:package",
     ]) {
         assert.ok(commands.includes(command), `release must run ${command}`);
     }
-    assert.equal(commands.filter((command) => command === "npm run package").length, 1);
+    assert.equal(commands.filter((command) => command === "npm run verify:package").length, 1);
 
     const upload = job.steps.find((step) => step.uses === "actions/upload-artifact@v4");
     const release = job.steps.find((step) => step.uses === "softprops/action-gh-release@v2");

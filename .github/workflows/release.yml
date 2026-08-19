@@ -47,14 +47,8 @@ jobs:
       - name: Validate source and data
         run: npm run verify
 
-      - name: Package extension once
-        run: npm run package
-
-      - name: Revalidate exact release artifact
-        run: npm run verify:vsix -- "${{ steps.contract.outputs.artifact }}"
-
-      - name: Validate release identity agreement
-        run: npm test -- test/package/manifest.test.cjs
+      - name: Package and revalidate exact release artifact
+        run: npm run verify:package
 
       - name: Upload validated workflow artifact
         uses: actions/upload-artifact@v4
