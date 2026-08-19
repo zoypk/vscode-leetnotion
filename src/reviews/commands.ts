@@ -189,8 +189,7 @@ export async function addProblemToReview(input?: LeetCodeNode | vscode.Uri): Pro
             name: problem?.name,
             difficulty: problem?.difficulty,
         };
-        const result = await reviewService.addProblem(questionNumber, snapshot);
-        await reviewService.applyRating(questionNumber, rating);
+        const { result } = await reviewService.addAndApplyRating(questionNumber, rating, snapshot);
         await reviewTreeDataProvider.refresh();
         await studyTreeDataProvider.refresh();
         const message = result === "added"
@@ -288,7 +287,7 @@ async function pickReviewOption(review: ReviewTarget): Promise<ReviewSchedulingO
     });
 }
 
-async function pickInitialReviewRating(review: ReviewTarget): Promise<ReviewRating | undefined> {
+export async function pickInitialReviewRating(review: ReviewTarget): Promise<ReviewRating | undefined> {
     const selection = await vscode.window.showQuickPick(reviewRatings, {
         placeHolder: `Choose an initial rating for [${review.questionNumber}] ${review.name}`,
         ignoreFocusOut: true,

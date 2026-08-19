@@ -4,6 +4,7 @@ import { explorerNodeManager } from "../explorer/explorerNodeManager";
 import { ReviewItem } from "../reviews/types";
 import { reviewService } from "../reviews/reviewService";
 import { SessionToken, sessionState } from "../sessions/sessionState";
+import { pickInitialReviewRating } from "../reviews/commands";
 import { getSheets, getTopicTags } from "../utils/dataUtils";
 import {
     getStudyNewProblemsPerDay,
@@ -20,6 +21,7 @@ import { studyService } from "./studyService";
 import { continueStudySession, openStudyTarget, previewStudyTarget, startStudySession as startStudySessionRunner } from "./session";
 import { reviewTreeDataProvider } from "../reviews/reviewTreeDataProvider";
 import { StudyNode } from "./studyNode";
+import { transferBacklogToReview } from "./backlogTransfer";
 
 const allSheetsFilterValue = "__all_sheets__";
 const allTopicsFilterValue = "__all_topics__";
@@ -124,10 +126,17 @@ export async function markStudyProblemDone(item: StudyBacklogItem | StudyNode): 
     try {
         switch (choice.value) {
             case "add-to-reviews":
-                await studyService.completeProblem(backlogItem.questionNumber);
-                await reviewService.addProblem(backlogItem.questionNumber, {
-                    name: backlogItem.name,
-                    difficulty: backlogItem.difficulty,
+                const initialRating = await pickInitialReviewRating(backlogItem);
+                if (!initialRating) {
+                    return;
+                }
+                await transferBacklogToReview(backlogItem, initialRating, {
+                    ensureReview: (questionNumber, snapshot, rating) => reviewService.ensureInitiallyScheduled(
+                        questionNumber,
+                        snapshot,
+                        rating,
+                    ),
+                    removeBacklog: (questionNumber) => studyService.removeProblem(questionNumber),
                 });
                 await reviewTreeDataProvider.refresh();
                 break;
