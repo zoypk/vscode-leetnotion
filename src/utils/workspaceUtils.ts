@@ -87,7 +87,7 @@ function isSubFolder(from: string, to: string): boolean {
 
 async function determineLeetCodeFolder(): Promise<string> {
     let result: string;
-    const picks: Array<IQuickItemEx<string>> = [];
+    const picks: IQuickItemEx<string>[] = [];
     picks.push(
         {
             label: `Default location`,

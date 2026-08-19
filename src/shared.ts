@@ -178,18 +178,18 @@ export const getUrl = (key: string) => {
 };
 
 export const defaultHeaders = {
-    "cpp": `#include <bits/stdc++.h>
+    cpp: `#include <bits/stdc++.h>
 using namespace std;
 
 `,
-    "java": `import java.util.*;
+    java: `import java.util.*;
 
 `
 }
 
 export const defaultFooters = {
-    "cpp": ``,
-    "java": ``
+    cpp: ``,
+    java: ``
 }
 
 export const LAST_30_DAYS = "Last 30 Days";

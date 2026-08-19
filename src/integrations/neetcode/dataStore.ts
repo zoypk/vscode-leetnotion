@@ -207,11 +207,12 @@ export class NeetCodeDataStore {
             }
             sourceIndexes.add(sourceIndex);
             const linkPattern = /\[[^\]]+\]\(([^)]+)\)/g;
-            let link: RegExpExecArray | null;
-            while ((link = linkPattern.exec(rawProblem.markdown)) !== null) {
+            let link = linkPattern.exec(rawProblem.markdown);
+            while (link !== null) {
                 if (!link[1].startsWith("https://")) {
                     throw this.invalidDataError(relativePath, `JIT problem ${titleSlug} contains a non-HTTPS link`);
                 }
+                link = linkPattern.exec(rawProblem.markdown);
             }
             if (/http:\/\//i.test(rawProblem.markdown)) {
                 throw this.invalidDataError(relativePath, `JIT problem ${titleSlug} contains an insecure HTTP URL`);

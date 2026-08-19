@@ -71,7 +71,7 @@ export async function getContests(): Promise<Record<string, string[]>> {
             }
         );
     } catch (error) {
-        console.error(`Failed to fetch contests: ${error}`);
+        leetCodeChannel.appendLine(`Failed to fetch contests: ${error}`);
         return {};
     }
 }

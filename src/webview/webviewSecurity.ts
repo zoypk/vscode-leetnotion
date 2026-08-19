@@ -233,9 +233,9 @@ export function sanitizeHtmlWithDiagnostics(
         closingBudget -= closeTag.length;
         output.push(closeTag);
         outputLength += closeTag.length;
-        const positions = openPositions.get(name)!;
-        positions.pop();
-        if (positions.length === 0) {
+        const openElementPositions = openPositions.get(name)!;
+        openElementPositions.pop();
+        if (openElementPositions.length === 0) {
             openPositions.delete(name);
         }
         stackOperations += 1;
@@ -299,11 +299,11 @@ export function sanitizeHtmlWithDiagnostics(
             continue;
         }
         if (tag.closing) {
-            const positions = openPositions.get(tag.name);
-            if (!positions || positions.length === 0) {
+            const closingPositions = openPositions.get(tag.name);
+            if (!closingPositions || closingPositions.length === 0) {
                 continue;
             }
-            const matchIndex = positions[positions.length - 1];
+            const matchIndex = closingPositions[closingPositions.length - 1];
             while (openElements.length > matchIndex) {
                 popOpenElement();
             }
@@ -331,9 +331,9 @@ export function sanitizeHtmlWithDiagnostics(
         if (!appendChunk(openTag, closeTag.length)) {
             continue;
         }
-        const positions = openPositions.get(tag.name) || [];
-        positions.push(openElements.length);
-        openPositions.set(tag.name, positions);
+        const openingPositions = openPositions.get(tag.name) || [];
+        openingPositions.push(openElements.length);
+        openPositions.set(tag.name, openingPositions);
         openElements.push(tag.name);
         closingBudget += closeTag.length;
         stackOperations += 1;

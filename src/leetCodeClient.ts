@@ -23,7 +23,7 @@ import { correlateSubmission } from "./submissions/submissionCorrelation";
 import type { SubmissionBaseline, SubmissionCorrelationRequest, ValidatedSubmission } from "./submissions/types";
 
 type ProblemSubmissionsApiResponse = {
-    submissions_dump: Array<{
+    submissions_dump: {
         id?: string | number;
         url: string;
         status_display: string;
@@ -32,14 +32,14 @@ type ProblemSubmissionsApiResponse = {
         timestamp: number;
         runtime: string;
         memory: string;
-    }>;
+    }[];
 };
 
 type LeetCodeGraphqlResponse<T> = {
     data?: T;
-    errors?: Array<{
+    errors?: {
         message: string;
-    }>;
+    }[];
 };
 
 type SubmissionDetailsGraphqlData = {
@@ -184,7 +184,7 @@ class LeetcodeClient {
         return await this.leetcode.recentSubmission();
     }
 
-    public async getAllSubmissions(progressCallback: (submissionCount: number) => void = () => { }): Promise<LeetcodeSubmission[]> {
+    public async getAllSubmissions(progressCallback: (submissionCount: number) => void = () => undefined): Promise<LeetcodeSubmission[]> {
         const batchSize = 100;
         const allSubmissions: LeetcodeSubmission[] = [];
 
@@ -304,7 +304,7 @@ class LeetcodeClient {
         return await this.leetcode.recent_user_submissions(username, limit);
     }
 
-    public async getLeetcodeProblems(progressCallback: (problems: LeetcodeProblem[]) => void = () => { }): Promise<LeetcodeProblem[]> {
+    public async getLeetcodeProblems(progressCallback: (problems: LeetcodeProblem[]) => void = () => undefined): Promise<LeetcodeProblem[]> {
         try {
             if (!this.isSignedIn) throw new Error(`not-signed-in-to-leetcode`);
             const problems = await this.leetcode.getLeetcodeProblems({ limit: 500, callbackFn: progressCallback });
@@ -407,8 +407,8 @@ class LeetcodeClient {
             timeout: 15_000,
             headers: {
                 "content-type": "application/json",
-                origin: baseUrl,
-                referer: `${baseUrl}/problems/${titleSlug}/`,
+                "origin": baseUrl,
+                "referer": `${baseUrl}/problems/${titleSlug}/`,
                 cookie,
                 "x-csrftoken": csrf || "",
                 "x-requested-with": "XMLHttpRequest",
@@ -463,7 +463,7 @@ class LeetcodeClient {
             timeout: 15_000,
             headers: {
                 "content-type": "application/json",
-                origin: baseUrl,
+                "origin": baseUrl,
                 referer,
                 cookie,
                 "x-csrftoken": csrf || "",

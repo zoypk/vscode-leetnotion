@@ -22,7 +22,7 @@ export async function testSolution(uri?: vscode.Uri): Promise<void> {
         if (!filePath) {
             return;
         }
-        const picks: Array<IQuickItemEx<string>> = [];
+        const picks: IQuickItemEx<string>[] = [];
         picks.push(
             {
                 label: "$(three-bars) Default test cases",

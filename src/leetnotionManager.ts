@@ -216,7 +216,7 @@ class LeetnotionManager {
             await templateUpdateSession.close();
             leetnotionClient.signOut();
         } catch (error) {
-
+            leetCodeChannel.appendLine(`Failed to clear extension data: ${error}`);
         }
     }
 }

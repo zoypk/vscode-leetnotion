@@ -25,7 +25,6 @@ export class TemplateUpdater {
             await templateUpdateSession.close();
         } catch (error) {
             leetCodeChannel.appendLine(error.message);
-            let str = "";
             if(error.message.includes("updating-cancelled")) {
                 promptForOpenOutputChannel(`Updating template cancelled. You can resume it later.`, DialogType.completed);
                 return;
@@ -49,11 +48,11 @@ export class TemplateUpdater {
                 },
                 async progress => {
                     progress.report({ increment: 0 });
-                    problems = await leetcodeClient.getLeetcodeProblems(problems => {
+                    problems = await leetcodeClient.getLeetcodeProblems(collectedProblems => {
                         progress.report({
-                            increment: (problems.length - noOfProblemsCollected) * 100 / noOfProblems
+                            increment: (collectedProblems.length - noOfProblemsCollected) * 100 / noOfProblems
                         })
-                        noOfProblemsCollected = problems.length;
+                        noOfProblemsCollected = collectedProblems.length;
                     });
                 }
 
@@ -78,7 +77,7 @@ export class TemplateUpdater {
         const newProblems = problems.filter(({ questionFrontendId }) => !(questionFrontendId in questionNumberPageIdMapping))
         let responses: ProblemPageResponse[] = [];
         let count = 0;
-        let noOfPages = newProblems.length;
+        const noOfPages = newProblems.length;
 
         await window.withProgress(
             {

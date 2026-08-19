@@ -102,14 +102,14 @@ export class StudyTreeDataProvider implements vscode.TreeDataProvider<StudyNode>
         }
 
         if (!element) {
-            return this.sections.map((section) => new StudyNode(
-                `study-${section.id}`,
-                section.label,
+            return this.sections.map((studySection) => new StudyNode(
+                `study-${studySection.id}`,
+                studySection.label,
                 "section",
                 vscode.TreeItemCollapsibleState.Expanded,
-                section.description,
-                this.getSectionTooltip(section),
-                section.id,
+                studySection.description,
+                this.getSectionTooltip(studySection),
+                studySection.id,
             ));
         }
 

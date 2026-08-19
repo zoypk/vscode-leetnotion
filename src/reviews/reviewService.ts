@@ -30,6 +30,11 @@ interface FsrsScheduler {
     get_retrievability(card: FsrsCard, now: Date, decimal: boolean): number;
 }
 
+// Load ts-fsrs at runtime so the extension host uses the package's native
+// CommonJS entrypoint instead of an inlined bundle transform.
+const runtimeRequire = module.require.bind(module);
+const fsrsPackage = runtimeRequire("ts-fsrs");
+
 interface ReviewServiceOptions {
     storage: ReviewStateStorage;
     clock: () => Date;
@@ -43,8 +48,6 @@ interface ReviewServiceOptions {
     activeFilters: () => string[];
 }
 
-// tslint:disable-next-line:no-eval
-const fsrsPackage = eval("require")("ts-fsrs");
 const defaultScheduler: FsrsScheduler = fsrsPackage.fsrs();
 const ratingValues: Record<ReviewRating, number> = {
     again: fsrsPackage.Rating.Again,

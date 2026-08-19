@@ -33,8 +33,8 @@ import { leetCodeSubmissionDetailProvider } from "../webview/leetCodeSubmissionD
 import * as list from "./list";
 import { getLeetCodeEndpoint } from "./plugin";
 import { globalState } from "../globalState";
-import { extractArrayElements, getCompanyTags, getLists, getSheets, getTopicTags } from "@/utils/dataUtils";
-import { CompanyTags, Lists, Sheets, TopicTags } from "@/types";
+import { extractArrayElements, getCompanyTags, getLists, getSheets, getTopicTags } from "../utils/dataUtils";
+import { CompanyTags, Lists, Sheets, TopicTags } from "../types";
 import TrackData from "../utils/trackingUtils";
 import { submissionNavigationGuard } from "../submissions/submissionHistory";
 
@@ -466,9 +466,9 @@ async function resolveProblemForSubmissionHistory(input?: LeetCodeNode | IProble
         title: input.name,
     };
 }
-async function parseProblemsToPicks(p: Promise<IProblem[]>): Promise<Array<IQuickItemEx<IProblem>>> {
-    return new Promise(async (resolve: (res: Array<IQuickItemEx<IProblem>>) => void): Promise<void> => {
-        const picks: Array<IQuickItemEx<IProblem>> = (await p).map((problem: IProblem) =>
+async function parseProblemsToPicks(p: Promise<IProblem[]>): Promise<IQuickItemEx<IProblem>[]> {
+    return new Promise(async (resolve: (res: IQuickItemEx<IProblem>[]) => void): Promise<void> => {
+        const picks: IQuickItemEx<IProblem>[] = (await p).map((problem: IProblem) =>
             Object.assign(
                 {},
                 {
@@ -488,7 +488,7 @@ async function parseCompaniesToPicks(companyTags: CompanyTags) {
     Object.keys(companyTags).forEach((key) => {
         lenMap[key] = companyTags[key][ALL_TIME] ? companyTags[key][ALL_TIME].length : (companyTags[key] as string[]).length;
     });
-    const picks: Array<IQuickItemEx<string>> = Object.keys(companyTags).sort((a, b) => lenMap[b] - lenMap[a]).map((company: string) =>
+    const picks: IQuickItemEx<string>[] = Object.keys(companyTags).sort((a, b) => lenMap[b] - lenMap[a]).map((company: string) =>
         Object.assign(
             {},
             {
@@ -506,7 +506,7 @@ async function parseSheetsToPicks(sheets: Sheets) {
     const pinnedSheets = new Set(globalState.getPinnedSheets());
     const sheetNames = Object.keys(sheets);
     const order = new Map<string, number>(sheetNames.map((sheet: string, index: number) => [sheet, index] as [string, number]));
-    const picks: Array<IQuickItemEx<string>> = [...sheetNames].sort((a: string, b: string) => {
+    const picks: IQuickItemEx<string>[] = [...sheetNames].sort((a: string, b: string) => {
         const pinnedDiff = Number(pinnedSheets.has(b)) - Number(pinnedSheets.has(a));
         if (pinnedDiff !== 0) {
             return pinnedDiff;
@@ -527,7 +527,7 @@ async function parseSheetsToPicks(sheets: Sheets) {
 }
 
 async function parseContestsToPicks(contests: Record<string, string[]>) {
-    const picks: Array<IQuickItemEx<string>> = Object.keys(contests).map((contest: string) =>
+    const picks: IQuickItemEx<string>[] = Object.keys(contests).map((contest: string) =>
         Object.assign(
             {},
             {
@@ -542,7 +542,7 @@ async function parseContestsToPicks(contests: Record<string, string[]>) {
 }
 
 async function parseTagsToPicks(tags: TopicTags) {
-    const picks: Array<IQuickItemEx<string>> = Object.keys(tags).map((tag: string) =>
+    const picks: IQuickItemEx<string>[] = Object.keys(tags).map((tag: string) =>
         Object.assign(
             {},
             {
@@ -557,13 +557,13 @@ async function parseTagsToPicks(tags: TopicTags) {
 }
 
 async function parseListsToPicks(lists: Lists) {
-    const picks: Array<IQuickItemEx<string>> = lists.map((list) =>
+    const picks: IQuickItemEx<string>[] = lists.map((listItem) =>
         Object.assign(
             {},
             {
-                label: list.name,
+                label: listItem.name,
                 description: "",
-                value: list.name,
+                value: listItem.name,
             }
         )
     );

@@ -94,7 +94,7 @@ class LeetCodeManager extends EventEmitter {
     }
 
     public async signIn(): Promise<void> {
-        const picks: Array<IQuickItemEx<string>> = []
+        const picks: IQuickItemEx<string>[] = []
         picks.push(
             {
                 label: 'Web Authorization',

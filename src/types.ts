@@ -188,8 +188,8 @@ export interface ProblemDifficulty extends MutationSelect {
 }
 
 export type TopicTags = Record<string, string[]>
-export type Lists = Array<List>;
-export type QuestionsOfList = Array<QuestionOfList>;
+export type Lists = List[];
+export type QuestionsOfList = QuestionOfList[];
 
 export type Sheets = Record<string, Record<string, string[]>>;
 export type ListsWithQuestions = Record<string, string[]>;
@@ -232,7 +232,7 @@ export type SelectTags = {
 export type MultiSelectDatabasePropertyConfigResponse = {
     type: "multi_select";
     multi_select: {
-        options: Array<SelectPropertyResponse>;
+        options: SelectPropertyResponse[];
     };
     id: string;
     name: string;

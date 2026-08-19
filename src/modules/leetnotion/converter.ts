@@ -14,7 +14,7 @@ export class LeetCodeToNotionConverter {
         }
 
         const problemPageProperties: CreateProblemPageProperties = {
-            Name: {
+            'Name': {
                 title: [
                     {
                         text: {
@@ -23,7 +23,7 @@ export class LeetCodeToNotionConverter {
                     },
                 ],
             },
-            Difficulty: {
+            'Difficulty': {
                 select: {
                     name: problem.difficulty as ProblemDifficulty,
                 },
@@ -36,7 +36,7 @@ export class LeetCodeToNotionConverter {
             'Company Tags': {
                 multi_select: [],
             },
-            Slug: {
+            'Slug': {
                 rich_text: [
                     {
                         text: {
@@ -45,16 +45,16 @@ export class LeetCodeToNotionConverter {
                     },
                 ],
             },
-            URL: {
+            'URL': {
                 url: `https://leetcode.com/problems/${problem.titleSlug}`,
             },
-            Frequency: {
+            'Frequency': {
                 number: 0,
             },
             'Question Number': {
                 number: parseInt(problem.questionFrontendId as string, 10),
             },
-            Solution: {
+            'Solution': {
                 url: `https://leetcode.com/problems/${problem.titleSlug}/editorial`,
             },
             'Free or Paid': {
@@ -70,10 +70,10 @@ export class LeetCodeToNotionConverter {
             'Video Solution': {
                 checkbox: videoSolutionAvailable,
             },
-            Likes: {
+            'Likes': {
                 number: problem.likes as number,
             },
-            Dislikes: {
+            'Dislikes': {
                 number: problem.dislikes as number,
             },
             'Total Submissions': {
@@ -82,7 +82,7 @@ export class LeetCodeToNotionConverter {
             'Total Accepted': {
                 number: (problem.stats as Stats).totalAcceptedRaw,
             },
-            Type: {
+            'Type': {
                 multi_select: (problem.type as string[]).map(type => ({
                     name: type,
                 })),
@@ -104,7 +104,7 @@ export class LeetCodeToNotionConverter {
         }
 
         const problemPageProperties: UpdateProblemPageProperties = {
-            Name: {
+            'Name': {
                 title: [
                     {
                         text: {
@@ -113,7 +113,7 @@ export class LeetCodeToNotionConverter {
                     },
                 ],
             },
-            Difficulty: {
+            'Difficulty': {
                 select: {
                     name: problem.difficulty as ProblemDifficulty,
                 },
@@ -123,7 +123,7 @@ export class LeetCodeToNotionConverter {
                     name: topicTag.name,
                 })),
             },
-            Slug: {
+            'Slug': {
                 rich_text: [
                     {
                         text: {
@@ -132,13 +132,13 @@ export class LeetCodeToNotionConverter {
                     },
                 ],
             },
-            URL: {
+            'URL': {
                 url: `https://leetcode.com/problems/${problem.titleSlug}`,
             },
             'Question Number': {
                 number: parseInt(problem.questionFrontendId as string, 10),
             },
-            Solution: {
+            'Solution': {
                 url: `https://leetcode.com/problems/${problem.titleSlug}/editorial`,
             },
             'Free or Paid': {
@@ -154,10 +154,10 @@ export class LeetCodeToNotionConverter {
             'Video Solution': {
                 checkbox: videoSolutionAvailable,
             },
-            Likes: {
+            'Likes': {
                 number: problem.likes as number,
             },
-            Dislikes: {
+            'Dislikes': {
                 number: problem.dislikes as number,
             },
             'Total Submissions': {
@@ -166,7 +166,7 @@ export class LeetCodeToNotionConverter {
             'Total Accepted': {
                 number: (problem.stats as Stats).totalAcceptedRaw,
             },
-            Type: {
+            'Type': {
                 multi_select: (problem.type as string[]).map(type => ({
                     name: type,
                 })),
@@ -182,7 +182,7 @@ export class LeetCodeToNotionConverter {
 
     static convertSubmissionToSubmissionPage(submission: LeetnotionSubmission, questionPageId: string) {
         return {
-            title: {
+            'title': {
                 title: [
                     {
                         text: {
@@ -196,19 +196,19 @@ export class LeetCodeToNotionConverter {
                     start: getISODate(submission.timestamp * 1000),
                 },
             },
-            Language: {
+            'Language': {
                 select: {
                     name: startCase(getNotionLang(submission.lang)),
                 },
             },
-            Question: {
+            'Question': {
                 relation: [
                     {
                         id: questionPageId,
                     },
                 ],
             },
-            Status: {
+            'Status': {
                 select: {
                     name: submission.status_display,
                 },

@@ -461,7 +461,7 @@ class LeetnotionClient {
                             start: reviewDate,
                         },
                     },
-                    Reviewed: {
+                    'Reviewed': {
                         checkbox: false,
                     },
                 },

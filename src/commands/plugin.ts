@@ -11,7 +11,7 @@ import { deleteCache } from "./cache";
 
 export async function switchEndpoint(): Promise<void> {
     const isCnEnabled: boolean = getLeetCodeEndpoint() === Endpoint.LeetCodeCN;
-    const picks: Array<IQuickItemEx<string>> = [];
+    const picks: IQuickItemEx<string>[] = [];
     picks.push(
         {
             label: `${isCnEnabled ? "" : "$(check) "}LeetCode`,
@@ -62,7 +62,7 @@ const SORT_ORDER: SortingStrategy[] = [
 
 export async function switchSortingStrategy(): Promise<void> {
     const currentStrategy: SortingStrategy = getSortingStrategy();
-    const picks: Array<IQuickItemEx<string>> = [];
+    const picks: IQuickItemEx<string>[] = [];
     picks.push(
         ...SORT_ORDER.map((s: SortingStrategy) => {
             return {

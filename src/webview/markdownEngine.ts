@@ -8,7 +8,7 @@ import * as path from "path";
 import * as vscode from "vscode";
 import { leetCodeChannel } from "../leetCodeChannel";
 import { isWindows } from "../utils/osUtils";
-import { globalState } from "@/globalState";
+import { globalState } from "../globalState";
 import { allowWebviewUrl, escapeAttribute, sanitizeHtml } from "./webviewSecurity";
 
 class MarkdownEngine implements vscode.Disposable {
