@@ -1,14 +1,19 @@
-import { readdir, rm } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
+import { mkdir, open, readdir, readFile, rm } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { spawnSync } from "node:child_process";
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const testRoot = path.join(repositoryRoot, "test");
-const compiledTestRoot = path.join(repositoryRoot, "out-test");
+const compiledTestBase = path.join(repositoryRoot, "out-test");
 const typescriptCompiler = path.join(repositoryRoot, "node_modules", "typescript", "bin", "tsc");
 const booleanTestOptions = new Set(["--test-only"]);
 const valuedTestOptions = new Set(["--test-name-pattern"]);
+const activeOutputEnvironmentKey = "LEETNOTION_TEST_ACTIVE_OUTPUT_ROOT";
+const requestedOutputEnvironmentKey = "LEETNOTION_TEST_OUTPUT_ROOT";
+const outputLockWaitMilliseconds = 120_000;
+const incompleteLockGraceMilliseconds = 500;
 
 export async function discoverTests(directory = testRoot) {
     const tests = [];
@@ -31,9 +36,10 @@ export async function discoverTests(directory = testRoot) {
     return tests;
 }
 
-function run(commandArguments) {
+function run(commandArguments, environment = process.env) {
     return spawnSync(process.execPath, commandArguments, {
         cwd: repositoryRoot,
+        env: environment,
         stdio: "inherit",
     });
 }
@@ -91,40 +97,180 @@ export function normalizeTestArguments(argumentsToNormalize) {
     return { runnerOptions, testFiles };
 }
 
-async function cleanCompiledTests() {
-    const relativeOutput = path.relative(repositoryRoot, compiledTestRoot);
-    const outsideRepository = relativeOutput === ""
-        || relativeOutput === ".."
+function assertSafeCompiledTestRoot(compiledTestRoot) {
+    const relativeOutput = path.relative(compiledTestBase, compiledTestRoot);
+    const outsideOutputBase = relativeOutput === ".."
         || relativeOutput.startsWith(`..${path.sep}`)
         || path.isAbsolute(relativeOutput);
-    if (outsideRepository) {
-        throw new Error(`Refusing to clean unsafe test output path: ${compiledTestRoot}`);
+    if (outsideOutputBase) {
+        throw new Error(`Refusing to use unsafe test output path: ${compiledTestRoot}`);
     }
+
+    const relativeRepositoryOutput = path.relative(repositoryRoot, compiledTestRoot);
+    const outsideRepository = relativeRepositoryOutput === ""
+        || relativeRepositoryOutput === ".."
+        || relativeRepositoryOutput.startsWith(`..${path.sep}`)
+        || path.isAbsolute(relativeRepositoryOutput);
+    if (outsideRepository) {
+        throw new Error(`Refusing to use unsafe test output path: ${compiledTestRoot}`);
+    }
+}
+
+export function resolveCompiledTestRoot(environment = process.env) {
+    const requestedOutput = environment[requestedOutputEnvironmentKey];
+    const activeParentOutput = environment[activeOutputEnvironmentKey];
+    const compiledTestRoot = requestedOutput
+        ? path.resolve(repositoryRoot, requestedOutput)
+        : activeParentOutput
+            ? path.join(compiledTestBase, ".nested", `${process.pid}-${randomUUID()}`)
+            : compiledTestBase;
+    assertSafeCompiledTestRoot(compiledTestRoot);
+    return compiledTestRoot;
+}
+
+async function cleanCompiledTests(compiledTestRoot) {
     await rm(compiledTestRoot, { recursive: true, force: true });
+}
+
+async function acquireOutputLock(compiledTestRoot) {
+    const lockPath = `${compiledTestRoot}.lock`;
+    await mkdir(path.dirname(lockPath), { recursive: true });
+    const deadline = Date.now() + outputLockWaitMilliseconds;
+    const token = randomUUID();
+
+    while (true) {
+        let handle;
+        try {
+            handle = await open(lockPath, "wx");
+            try {
+                await handle.writeFile(JSON.stringify({ pid: process.pid, token }), "utf8");
+            } finally {
+                await handle.close();
+            }
+            return async () => {
+                try {
+                    const owner = JSON.parse(await readFile(lockPath, "utf8"));
+                    if (owner.token === token) {
+                        await rm(lockPath, { force: true });
+                    }
+                } catch (error) {
+                    if (!error || error.code !== "ENOENT") {
+                        throw error;
+                    }
+                }
+            };
+        } catch (error) {
+            if (handle) {
+                await rm(lockPath, { force: true });
+            }
+            if (!error || error.code !== "EEXIST") {
+                throw error;
+            }
+
+            const owner = await readOutputLockOwner(lockPath, compiledTestRoot);
+            if (!owner) {
+                continue;
+            }
+            if (!isProcessRunning(owner.pid)) {
+                throw new Error(
+                    `Test output lock is stale: ${lockPath} `
+                    + `(owner PID ${owner.pid}, token ${owner.token}). `
+                    + `Remove this lock manually after confirming no test runner is using ${compiledTestRoot}.`,
+                );
+            }
+            if (Date.now() >= deadline) {
+                throw new Error(
+                    `Timed out waiting for test output lock: ${lockPath} `
+                    + `(live owner PID ${owner.pid}, token ${owner.token}).`,
+                );
+            }
+            await new Promise((resolve) => setTimeout(resolve, 25));
+        }
+    }
+}
+
+async function readOutputLockOwner(lockPath, compiledTestRoot) {
+    const deadline = Date.now() + incompleteLockGraceMilliseconds;
+    do {
+        try {
+            const owner = JSON.parse(await readFile(lockPath, "utf8"));
+            if (Number.isSafeInteger(owner.pid) && owner.pid > 0 && typeof owner.token === "string") {
+                return owner;
+            }
+        } catch (error) {
+            if (error && error.code === "ENOENT") {
+                return undefined;
+            }
+            if (!(error instanceof SyntaxError)) {
+                throw error;
+            }
+        }
+        await new Promise((resolve) => setTimeout(resolve, 25));
+    } while (Date.now() < deadline);
+
+    throw new Error(
+        `Test output lock is incomplete: ${lockPath}. `
+        + `Remove this lock manually after confirming no test runner is using ${compiledTestRoot}.`,
+    );
+}
+
+function isProcessRunning(pid) {
+    try {
+        process.kill(pid, 0);
+        return true;
+    } catch (error) {
+        return Boolean(error && error.code === "EPERM");
+    }
 }
 
 export async function runTests(requestedTests = []) {
     const { runnerOptions, testFiles } = normalizeTestArguments(requestedTests);
-    await cleanCompiledTests();
-    const compilation = run([typescriptCompiler, "--project", "tsconfig.test.json"]);
-    if (compilation.error) {
-        throw compilation.error;
-    }
-    if (compilation.status !== 0) {
-        return compilation.status ?? 1;
-    }
+    const compiledTestRoot = resolveCompiledTestRoot();
+    const releaseOutputLock = await acquireOutputLock(compiledTestRoot);
+    const removeOutputAfterRun = compiledTestRoot !== compiledTestBase;
 
-    const tests = testFiles.length > 0 ? testFiles : await discoverTests();
-    if (tests.length === 0) {
-        console.error("No test files matched test/**/*.test.cjs");
-        return 1;
-    }
+    try {
+        await cleanCompiledTests(compiledTestRoot);
+        const compilation = run([
+            typescriptCompiler,
+            "--project", "tsconfig.test.json",
+            "--outDir", compiledTestRoot,
+        ]);
+        if (compilation.error) {
+            throw compilation.error;
+        }
+        if (compilation.status !== 0) {
+            return compilation.status ?? 1;
+        }
 
-    const testRun = run(["--test", "--test-concurrency=1", ...runnerOptions, ...tests]);
-    if (testRun.error) {
-        throw testRun.error;
+        const tests = testFiles.length > 0 ? testFiles : await discoverTests();
+        if (tests.length === 0) {
+            console.error("No test files matched test/**/*.test.cjs");
+            return 1;
+        }
+
+        const testEnvironment = {
+            ...process.env,
+            [activeOutputEnvironmentKey]: compiledTestRoot,
+        };
+        delete testEnvironment[requestedOutputEnvironmentKey];
+        const testRun = run(
+            ["--test", "--test-concurrency=1", ...runnerOptions, ...tests],
+            testEnvironment,
+        );
+        if (testRun.error) {
+            throw testRun.error;
+        }
+        return testRun.status ?? 1;
+    } finally {
+        try {
+            if (removeOutputAfterRun) {
+                await rm(compiledTestRoot, { recursive: true, force: true });
+            }
+        } finally {
+            await releaseOutputLock();
+        }
     }
-    return testRun.status ?? 1;
 }
 
 const invokedAsScript = process.argv[1]
