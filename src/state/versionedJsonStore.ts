@@ -9,11 +9,14 @@ export interface VersionedJsonStoreOptions<T> {
     lockRetryMs?: number;
     lockTimeoutMs?: number;
     staleLockMs?: number;
+    hardLockExpiryMs?: number;
     now?: () => number;
     onTempFile?: (tempPath: string) => void;
     onLockOpened?: (lockPath: string, ownerToken: string) => void;
     isLockOwnerAlive?: (owner: LockOwnerMetadata) => boolean | Promise<boolean>;
     statLockHandle?: (handle: import("fs").promises.FileHandle) => Promise<import("fs").Stats>;
+    processQueueKey?: string;
+    onRecoveryGuardAcquired?: (guardPath: string) => void | Promise<void>;
 }
 
 export interface LockOwnerMetadata {
@@ -30,6 +33,7 @@ export class VersionedJsonStore<T> {
     private readonly lockRetryMs: number;
     private readonly lockTimeoutMs: number;
     private readonly staleLockMs: number;
+    private readonly hardLockExpiryMs: number;
     private readonly now: () => number;
     private readonly isLockOwnerAlive: (owner: LockOwnerMetadata) => boolean | Promise<boolean>;
     private readonly statLockHandle: (handle: import("fs").promises.FileHandle) => Promise<import("fs").Stats>;
@@ -38,6 +42,7 @@ export class VersionedJsonStore<T> {
         this.lockRetryMs = options.lockRetryMs ?? 25;
         this.lockTimeoutMs = options.lockTimeoutMs ?? 5000;
         this.staleLockMs = options.staleLockMs ?? 30000;
+        this.hardLockExpiryMs = Math.max(this.staleLockMs + 1, options.hardLockExpiryMs ?? 10 * 60 * 1000);
         this.now = options.now ?? Date.now;
         this.isLockOwnerAlive = options.isLockOwnerAlive ?? this.defaultIsLockOwnerAlive;
         this.statLockHandle = options.statLockHandle ?? ((handle) => handle.stat());
@@ -50,7 +55,7 @@ export class VersionedJsonStore<T> {
 
     public async transaction<R>(mutator: (state: T) => R extends PromiseLike<unknown> ? never : R): Promise<R> {
         const filePath = this.getFilePath();
-        return this.enqueue(filePath, async () => {
+        return this.enqueue(this.options.processQueueKey ?? filePath, async () => {
             await fs.mkdir(path.dirname(filePath), { recursive: true });
             const lockPath = `${filePath}.lock`;
             const ownerToken = await this.acquireLock(lockPath);
@@ -114,56 +119,127 @@ export class VersionedJsonStore<T> {
         const deadline = this.now() + this.lockTimeoutMs;
         while (true) {
             try {
-                const handle = await fs.open(lockPath, "wx");
-                const ownerToken = randomBytes(24).toString("hex");
-                let openedStats: import("fs").Stats | undefined;
-                let tokenWritten = false;
-                let setupError: unknown;
-                try {
-                    openedStats = await this.statLockHandle(handle);
-                    await handle.writeFile(JSON.stringify({
-                        ownerToken,
-                        pid: process.pid,
-                        createdAt: new Date(this.now()).toISOString(),
-                        processStartedAt: new Date(currentProcessStartedAtMs).toISOString(),
-                    }));
-                    tokenWritten = true;
-                    this.options.onLockOpened?.(lockPath, ownerToken);
-                } catch (error) {
-                    setupError = error;
-                } finally {
-                    await handle.close().catch(() => undefined);
-                }
-                if (setupError) {
-                    if (tokenWritten) {
-                        await this.releaseLockIfOwned(lockPath, ownerToken);
-                    } else if (openedStats) {
-                        await this.releaseCreatedLockIfSameFile(lockPath, openedStats);
-                    } else {
-                        // The path was created exclusively by this handle and is still fresh.
-                        // Cooperative owners cannot replace it before setup completes.
-                        await this.removeExclusiveSetupLock(lockPath);
-                    }
-                    throw setupError;
-                }
-                return ownerToken;
+                return await this.createOwnedLock(lockPath, true);
             } catch (error) {
                 if (!this.isNodeError(error, "EEXIST")) {
                     throw new Error(`Failed to acquire state lock ${lockPath}: ${this.errorMessage(error)}`);
                 }
-                if (await this.canRecoverStaleLock(lockPath)) {
-                    await fs.unlink(lockPath).catch((unlinkError) => {
-                        if (!this.isNodeError(unlinkError, "ENOENT")) {
-                            throw unlinkError;
-                        }
-                    });
-                    continue;
+                const recoveredOwner = await this.recoverStaleLockAndAcquire(lockPath);
+                if (recoveredOwner) {
+                    return recoveredOwner;
                 }
                 if (this.now() >= deadline) {
                     throw new Error(`Timed out waiting for state lock ${lockPath}. Another extension process may still be writing.`);
                 }
                 await new Promise((resolve) => setTimeout(resolve, this.lockRetryMs));
             }
+        }
+    }
+
+    private async createOwnedLock(lockPath: string, notifyOpened: boolean): Promise<string> {
+        const handle = await fs.open(lockPath, "wx");
+        const ownerToken = randomBytes(24).toString("hex");
+        let openedStats: import("fs").Stats | undefined;
+        let tokenWritten = false;
+        let setupError: unknown;
+        try {
+            openedStats = await this.statLockHandle(handle);
+            await handle.writeFile(JSON.stringify({
+                ownerToken,
+                pid: process.pid,
+                createdAt: new Date(this.now()).toISOString(),
+                processStartedAt: new Date(currentProcessStartedAtMs).toISOString(),
+            }));
+            tokenWritten = true;
+            if (notifyOpened) {
+                this.options.onLockOpened?.(lockPath, ownerToken);
+            }
+        } catch (error) {
+            setupError = error;
+        } finally {
+            await handle.close().catch(() => undefined);
+        }
+        if (setupError) {
+            if (tokenWritten) {
+                await this.releaseLockIfOwned(lockPath, ownerToken);
+            } else if (openedStats) {
+                await this.releaseCreatedLockIfSameFile(lockPath, openedStats);
+            } else {
+                // The path was created exclusively by this handle and is still fresh.
+                // Cooperative owners cannot replace it before setup completes.
+                await this.removeExclusiveSetupLock(lockPath);
+            }
+            throw setupError;
+        }
+        return ownerToken;
+    }
+
+    private async recoverStaleLockAndAcquire(lockPath: string): Promise<string | undefined> {
+        const guardPath = `${lockPath}.recovery`;
+        const guardOwner = await this.tryAcquireRecoveryGuard(guardPath);
+        if (!guardOwner) {
+            return undefined;
+        }
+
+        try {
+            await this.options.onRecoveryGuardAcquired?.(guardPath);
+            // Re-read and revalidate only while holding the exclusive recovery
+            // guard. A recoverer installs the replacement main lock before the
+            // guard is released, so a second waiter can never act on stale data.
+            if (!await this.canRecoverStaleLock(lockPath)) {
+                return undefined;
+            }
+            await fs.unlink(lockPath).catch((error) => {
+                if (!this.isNodeError(error, "ENOENT")) {
+                    throw error;
+                }
+            });
+            try {
+                return await this.createOwnedLock(lockPath, true);
+            } catch (error) {
+                if (this.isNodeError(error, "EEXIST")) {
+                    return undefined;
+                }
+                throw error;
+            }
+        } finally {
+            await this.releaseLockIfOwned(guardPath, guardOwner);
+        }
+    }
+
+    private async tryAcquireRecoveryGuard(guardPath: string): Promise<string | undefined> {
+        for (let attempt = 0; attempt < 2; attempt += 1) {
+            try {
+                return await this.createOwnedLock(guardPath, false);
+            } catch (error) {
+                if (!this.isNodeError(error, "EEXIST")) {
+                    throw error;
+                }
+                if (!await this.removeRecoverableLock(guardPath)) {
+                    return undefined;
+                }
+            }
+        }
+        return undefined;
+    }
+
+    private async removeRecoverableLock(lockPath: string): Promise<boolean> {
+        if (!await this.canRecoverStaleLock(lockPath)) {
+            return false;
+        }
+        // Revalidate immediately before deletion. Recovery guards are short
+        // lived; a fresh replacement fails this second stale check.
+        if (!await this.canRecoverStaleLock(lockPath)) {
+            return false;
+        }
+        try {
+            await fs.unlink(lockPath);
+            return true;
+        } catch (error) {
+            if (this.isNodeError(error, "ENOENT")) {
+                return true;
+            }
+            throw error;
         }
     }
 
@@ -215,6 +291,16 @@ export class VersionedJsonStore<T> {
             const owner = await this.readLockMetadata(lockPath);
             if (!owner) {
                 // Recover stale pre-token/corrupt locks for backward compatibility.
+                return true;
+            }
+
+            const metadataAge = this.now() - Date.parse(owner.createdAt);
+            if (metadataAge > this.hardLockExpiryMs) {
+                // Transactions have synchronous mutators and only short bounded
+                // file I/O after mutation. This much longer hard expiry is the
+                // conservative availability fallback for an unrelated live
+                // process that reused the recorded PID. The normal stale
+                // threshold never steals a lock from a reported-live owner.
                 return true;
             }
 

@@ -177,6 +177,113 @@ test("conservatively preserves a legacy stale lock with a live PID", async () =>
     await unlink(lockPath);
 });
 
+test("uses a separate hard expiry for bounded other-PID reuse recovery", async () => {
+    const liveOwner = async () => true;
+    const normalFixture = await createStore({
+        isLockOwnerAlive: liveOwner,
+        hardLockExpiryMs: 10000,
+    });
+    const normalLock = `${normalFixture.filePath}.lock`;
+    const normalCreatedAt = new Date(Date.now() - 2000);
+    await writeFile(normalLock, JSON.stringify({
+        ownerToken: "other-live-owner",
+        pid: 2468,
+        createdAt: normalCreatedAt.toISOString(),
+        processStartedAt: new Date(normalCreatedAt.getTime() - 1000).toISOString(),
+    }));
+    await utimes(normalLock, normalCreatedAt, normalCreatedAt);
+    await assert.rejects(() => normalFixture.store.transaction((state) => {
+        state.count = 1;
+    }), /Timed out waiting for state lock/);
+    await unlink(normalLock);
+
+    const expiredFixture = await createStore({
+        isLockOwnerAlive: liveOwner,
+        hardLockExpiryMs: 500,
+    });
+    const expiredLock = `${expiredFixture.filePath}.lock`;
+    const expiredCreatedAt = new Date(Date.now() - 2000);
+    await writeFile(expiredLock, JSON.stringify({
+        ownerToken: "reused-other-pid",
+        pid: 2468,
+        createdAt: expiredCreatedAt.toISOString(),
+        processStartedAt: new Date(expiredCreatedAt.getTime() - 1000).toISOString(),
+    }));
+    await utimes(expiredLock, expiredCreatedAt, expiredCreatedAt);
+    await expiredFixture.store.transaction((state) => { state.count = 2; });
+    assert.equal((await expiredFixture.store.read()).count, 2);
+});
+
+test("serializes two waiters racing to recover the same dead lock", async () => {
+    const fixture = await createStore();
+    const lockPath = `${fixture.filePath}.lock`;
+    const createdAt = new Date(Date.now() - 2000);
+    await writeFile(lockPath, JSON.stringify({
+        ownerToken: "dead-shared-owner",
+        pid: 7654,
+        createdAt: createdAt.toISOString(),
+        processStartedAt: new Date(createdAt.getTime() - 1000).toISOString(),
+    }));
+    await utimes(lockPath, createdAt, createdAt);
+
+    let announceGuard;
+    const guardAcquired = new Promise((resolve) => { announceGuard = resolve; });
+    let releaseGuard;
+    const guardGate = new Promise((resolve) => { releaseGuard = resolve; });
+    const commonOptions = {
+        filePath: fixture.filePath,
+        createEmpty: () => ({ version: 1, count: 0 }),
+        parse: parseCounter,
+        lockRetryMs: 2,
+        lockTimeoutMs: 200,
+        staleLockMs: 100,
+        isLockOwnerAlive: async () => false,
+    };
+    const firstStore = new VersionedJsonStore({
+        ...commonOptions,
+        processQueueKey: "recovery-waiter-a",
+        onRecoveryGuardAcquired: async () => {
+            announceGuard();
+            await guardGate;
+        },
+    });
+    const secondStore = new VersionedJsonStore({
+        ...commonOptions,
+        processQueueKey: "recovery-waiter-b",
+    });
+
+    const first = firstStore.transaction((state) => { state.count += 1; });
+    await guardAcquired;
+    const second = secondStore.transaction((state) => { state.count += 1; });
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    releaseGuard();
+    await Promise.all([first, second]);
+
+    assert.equal((await firstStore.read()).count, 2);
+    assert.deepEqual((await readdir(fixture.directory)).sort(), ["state.json"]);
+});
+
+test("recovers a dead stale recovery guard and cleans it after takeover", async () => {
+    const fixture = await createStore({ isLockOwnerAlive: async () => false });
+    const lockPath = `${fixture.filePath}.lock`;
+    const recoveryPath = `${lockPath}.recovery`;
+    const createdAt = new Date(Date.now() - 2000);
+    const metadata = JSON.stringify({
+        ownerToken: "dead-guard-owner",
+        pid: 8765,
+        createdAt: createdAt.toISOString(),
+        processStartedAt: new Date(createdAt.getTime() - 1000).toISOString(),
+    });
+    await writeFile(lockPath, metadata);
+    await writeFile(recoveryPath, metadata);
+    await utimes(lockPath, createdAt, createdAt);
+    await utimes(recoveryPath, createdAt, createdAt);
+
+    await fixture.store.transaction((state) => { state.count = 5; });
+    assert.equal((await fixture.store.read()).count, 5);
+    assert.deepEqual((await readdir(fixture.directory)).sort(), ["state.json"]);
+});
+
 test("rereads state after acquiring the lock", async () => {
     const fixture = await createStore();
     let releaseFirst;
