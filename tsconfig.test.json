@@ -1,0 +1,13 @@
+{
+    "extends": "./tsconfig.json",
+    "compilerOptions": {
+        "module": "CommonJS",
+        "moduleResolution": "Node",
+        "rootDir": "src",
+        "outDir": "out-test",
+        "noEmit": false,
+        "sourceMap": true
+    },
+    "include": ["src/**/*.ts"],
+    "exclude": ["node_modules", "dist", "out", "out-test", "build", "coverage", "__tests__"]
+}

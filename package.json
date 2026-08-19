@@ -1181,6 +1181,7 @@
         "vscode:prepublish": "npm run compile",
         "compile": "node ./scripts/build.mjs",
         "watch": "node ./scripts/watch.mjs",
+        "test": "node ./scripts/run-tests.mjs",
         "typecheck": "tsc --noEmit -p ./",
         "lint": "tslint --project tsconfig.json -e src/*.d.ts -t verbose",
         "sync:companies": "node ./scripts/sync-company-data.mjs",
