@@ -88,6 +88,19 @@ test("counts a created page even when optional code attachment fails", async () 
     assert.deepEqual(events, ["added-1", "code upload failed"]);
 });
 
+test("creates a duplicate submission ID at most once within the same batch", async () => {
+    const created = [];
+    const result = await runBulkImport({
+        submissions: [submission(1), submission(1)],
+        existingIds: new Set(),
+        malformed: 0,
+        resolveQuestion: () => ({ questionNumber: "1", pageId: "page" }),
+        create: async (row) => created.push(row.id),
+    });
+    assert.deepEqual(created, [1]);
+    assert.deepEqual(result, { added: 1, existing: 1, malformed: 0, missingQuestion: 0, cancelled: false });
+});
+
 test("zero-added and partial final messages are truthful", () => {
     assert.equal(formatBulkImportResult({ added: 0, existing: 3, malformed: 0, missingQuestion: 0, cancelled: false }),
         "No new submissions were added. 3 already existed.");

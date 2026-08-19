@@ -28,9 +28,37 @@ test("a save snapshot cannot mutate a newer submission generation", () => {
     const saveA = coordinator.snapshotForSave({ kind: "unchanged" });
     coordinator.begin(submission(2, "43"), state("B"), false);
 
-    assert.equal(coordinator.installSaved(saveA.generation, state("A saved")), false);
+    assert.equal(coordinator.installSaved(saveA.generation, state("A saved"), saveA.notionRevision), undefined);
     assert.equal(coordinator.currentState.notes, "B");
     assert.equal(coordinator.isCurrent(saveA.generation), false);
+});
+
+test("a message queued under A cannot bind to B when it is finally dequeued", () => {
+    const coordinator = new SubmissionSaveCoordinator();
+    const generationA = coordinator.begin(submission(1), state("A"), false);
+    coordinator.begin(submission(2, "43"), state("B"), false);
+    assert.throws(() => coordinator.snapshotForSave({ kind: "unchanged" }, generationA), /stale-submission-message/);
+    assert.equal(coordinator.currentState.notes, "B");
+});
+
+test("quick-save completion preserves Notion state installed during its await", () => {
+    const coordinator = new SubmissionSaveCoordinator();
+    coordinator.begin(submission(1), state("before"), true);
+    const quickSave = coordinator.snapshotForSave({ kind: "unchanged" });
+    const resolved = notion(1);
+    resolved.tags = [{ id: 1, text: "Graph", selected: true }];
+    resolved.reviewDate = "2026-09-09";
+    assert.equal(coordinator.installNotionContext(resolved, {
+        ...state("before"), tags: ["Graph"], reviewDate: "2026-09-09",
+    }), true);
+
+    const installed = coordinator.installSaved(quickSave.generation, {
+        ...state("quick note"), tags: [], reviewDate: null,
+    }, quickSave.notionRevision);
+    assert.deepEqual(installed, {
+        ...state("quick note"), tags: ["Graph"], reviewDate: "2026-09-09",
+    });
+    assert.deepEqual(coordinator.currentState.tags, ["Graph"]);
 });
 
 test("pending Notion context blocks review edits until the exact context resolves", () => {
@@ -76,6 +104,6 @@ test("successful completion clears the committed retry value", () => {
     const key = reviewEditKey({ kind: "clear" });
     coordinator.recordCommittedReview(snapshot.generation, key, null);
     assert.equal(coordinator.hasCommittedReview(snapshot.generation, key), true);
-    assert.equal(coordinator.installSaved(snapshot.generation, state("saved")), true);
+    assert.deepEqual(coordinator.installSaved(snapshot.generation, state("saved"), snapshot.notionRevision), state("saved"));
     assert.equal(coordinator.hasCommittedReview(snapshot.generation, key), false);
 });

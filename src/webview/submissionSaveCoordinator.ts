@@ -13,6 +13,7 @@ export interface SubmissionNotionContext {
 
 export interface SubmissionSaveSnapshot {
     generation: number;
+    notionRevision: number;
     notionContext?: SubmissionNotionContext;
     savedState: AuthoritativeSubmissionState;
     submissionContext?: SubmissionResultContext;
@@ -30,6 +31,7 @@ export class SubmissionSaveCoordinator {
     private notionContext?: SubmissionNotionContext;
     private savedState: AuthoritativeSubmissionState = emptyState();
     private pending = false;
+    private notionRevision = 0;
     private committedReview?: CommittedReview;
 
     public begin(
@@ -42,6 +44,7 @@ export class SubmissionSaveCoordinator {
         this.notionContext = undefined;
         this.savedState = cloneState(savedState);
         this.pending = notionPending;
+        this.notionRevision = 0;
         this.committedReview = undefined;
         return this.generation;
     }
@@ -62,12 +65,16 @@ export class SubmissionSaveCoordinator {
         return generation === this.generation;
     }
 
-    public snapshotForSave(edit: ReviewEdit): SubmissionSaveSnapshot {
+    public snapshotForSave(edit: ReviewEdit, expectedGeneration: number = this.generation): SubmissionSaveSnapshot {
+        if (!this.isCurrent(expectedGeneration)) {
+            throw new Error("stale-submission-message");
+        }
         if (this.pending && edit.kind !== "unchanged") {
             throw new Error("notion-context-pending");
         }
         return {
             generation: this.generation,
+            notionRevision: this.notionRevision,
             notionContext: this.notionContext ? cloneNotionContext(this.notionContext) : undefined,
             savedState: cloneState(this.savedState),
             submissionContext: this.submissionContext ? { ...this.submissionContext } : undefined,
@@ -84,6 +91,7 @@ export class SubmissionSaveCoordinator {
         this.notionContext = cloneNotionContext(context);
         this.savedState = cloneState(savedState);
         this.pending = false;
+        this.notionRevision += 1;
         return true;
     }
 
@@ -95,13 +103,25 @@ export class SubmissionSaveCoordinator {
         return true;
     }
 
-    public installSaved(generation: number, savedState: AuthoritativeSubmissionState): boolean {
+    public installSaved(
+        generation: number,
+        savedState: AuthoritativeSubmissionState,
+        expectedNotionRevision: number,
+    ): AuthoritativeSubmissionState | undefined {
         if (!this.isCurrent(generation)) {
-            return false;
+            return undefined;
         }
-        this.savedState = cloneState(savedState);
+        const nextState = expectedNotionRevision === this.notionRevision
+            ? cloneState(savedState)
+            : {
+                ...cloneState(savedState),
+                isOptimal: this.savedState.isOptimal,
+                tags: [...this.savedState.tags],
+                reviewDate: this.savedState.reviewDate,
+            };
+        this.savedState = nextState;
         this.committedReview = undefined;
-        return true;
+        return cloneState(nextState);
     }
 
     public recordCommittedReview(generation: number, key: string, reviewDate: string | null): void {

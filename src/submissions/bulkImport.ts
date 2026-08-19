@@ -77,6 +77,7 @@ export async function runBulkImport(dependencies: BulkImportDependencies): Promi
             continue;
         }
         const created = await dependencies.create(submission, question);
+        dependencies.existingIds.add(String(submission.id));
         counts.added += 1;
         dependencies.onCreated?.({ ...counts });
         if (dependencies.afterCreate) {

@@ -126,16 +126,20 @@ class LeetCodeSubmissionProvider extends LeetCodeWebview {
     }
 
     protected async onDidReceiveMessage(value: unknown): Promise<void> {
+        const receivedGeneration = this.saveCoordinator.currentGeneration;
+        let message: SubmissionPropertiesMessage;
+        try {
+            message = parseSubmissionPropertiesMessage(value);
+        } catch (error) {
+            leetCodeChannel.appendLine(`Rejected submission properties message: ${error}`);
+            this.getPanel()?.webview.postMessage({
+                command: "submission-properties-save-failed",
+                error: "The submitted properties were invalid.",
+            });
+            return;
+        }
         const run = async () => {
-            try {
-                await this.saveProperties(parseSubmissionPropertiesMessage(value));
-            } catch (error) {
-                leetCodeChannel.appendLine(`Rejected submission properties message: ${error}`);
-                this.getPanel()?.webview.postMessage({
-                    command: "submission-properties-save-failed",
-                    error: "The submitted properties were invalid.",
-                });
-            }
+            await this.saveProperties(message, receivedGeneration);
         };
         const queued = this.saveQueue.then(run, run);
         this.saveQueue = queued.catch(() => undefined);
@@ -336,10 +340,9 @@ class LeetCodeSubmissionProvider extends LeetCodeWebview {
         return this.renderSection("Errors", errors.join("\n\n"));
     }
 
-    private async saveProperties(message: SubmissionPropertiesMessage): Promise<void> {
-        const generation = this.saveCoordinator.currentGeneration;
+    private async saveProperties(message: SubmissionPropertiesMessage, generation: number): Promise<void> {
         try {
-            const snapshot = this.saveCoordinator.snapshotForSave(message.review);
+            const snapshot = this.saveCoordinator.snapshotForSave(message.review, generation);
             const hasSubmissionContext = Boolean(snapshot.submissionContext);
             const hasNotionProperties = Boolean(snapshot.notionContext);
 
@@ -375,25 +378,30 @@ class LeetCodeSubmissionProvider extends LeetCodeWebview {
                 },
             });
 
-            if (!this.saveCoordinator.installSaved(snapshot.generation, savedState)) {
+            const installedState = this.saveCoordinator.installSaved(
+                snapshot.generation,
+                savedState,
+                snapshot.notionRevision,
+            );
+            if (!installedState) {
                 leetCodeChannel.appendLine(`Suppressed stale save completion for submission generation ${snapshot.generation}.`);
                 return;
             }
-            this.savedState = savedState;
+            this.savedState = installedState;
 
             if (snapshot.submissionContext) {
                 this.submissionContext = {
                     ...snapshot.submissionContext,
-                    notes: savedState.notes,
-                    flagType: savedState.flagType,
+                    notes: installedState.notes,
+                    flagType: installedState.flagType,
                 };
             }
 
             this.getPanel()?.webview.postMessage({
                 command: "submission-properties-saved",
                 message: this.getSuccessMessage(hasSubmissionContext, hasNotionProperties),
-                state: savedState,
-                hasNotionProperties,
+                state: installedState,
+                hasNotionProperties: Boolean(this.notionContext),
                 notionPending: this.saveCoordinator.notionPending,
                 tagOptions: this.getTagOptions(),
             });

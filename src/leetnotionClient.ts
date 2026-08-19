@@ -304,7 +304,7 @@ class LeetnotionClient {
         // isolated commit runnable before that stream is cherry-picked.
         const service = reviewService as typeof reviewService & {
             addAndApplyRating?: (questionNumber: string, rating: "again" | "hard" | "good" | "easy") => Promise<{ dueAt: string }>;
-            addAndScheduleAt?: (questionNumber: string, date: Date) => Promise<void>;
+            addAndScheduleAt?: (questionNumber: string, date: Date) => Promise<{ result: "added" | "updated"; dueAt: string }>;
             removeProblem?: (questionNumber: string) => Promise<void>;
         };
         return {
