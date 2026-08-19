@@ -9,14 +9,14 @@ export interface VersionedJsonStoreOptions<T> {
     lockRetryMs?: number;
     lockTimeoutMs?: number;
     staleLockMs?: number;
-    hardLockExpiryMs?: number;
     now?: () => number;
     onTempFile?: (tempPath: string) => void;
     onLockOpened?: (lockPath: string, ownerToken: string) => void;
-    isLockOwnerAlive?: (owner: LockOwnerMetadata) => boolean | Promise<boolean>;
+    isLockOwnerAlive?: (owner: LockOwnerMetadata) => LockOwnerLiveness | boolean | Promise<LockOwnerLiveness | boolean>;
     statLockHandle?: (handle: import("fs").promises.FileHandle) => Promise<import("fs").Stats>;
     processQueueKey?: string;
-    onRecoveryGuardAcquired?: (guardPath: string) => void | Promise<void>;
+    onBeforeQuarantineRename?: (lockPath: string) => void | Promise<void>;
+    onLockQuarantined?: (quarantinePath: string) => void | Promise<void>;
 }
 
 export interface LockOwnerMetadata {
@@ -26,6 +26,13 @@ export interface LockOwnerMetadata {
     processStartedAt?: string;
 }
 
+export type LockOwnerLiveness = "alive" | "dead" | "unknown";
+
+type QuarantineResult =
+    | { status: "recovered" }
+    | { status: "busy" }
+    | { status: "unsafe"; message: string };
+
 const processQueues = new Map<string, Promise<void>>();
 const currentProcessStartedAtMs = Date.now() - process.uptime() * 1000;
 
@@ -33,16 +40,16 @@ export class VersionedJsonStore<T> {
     private readonly lockRetryMs: number;
     private readonly lockTimeoutMs: number;
     private readonly staleLockMs: number;
-    private readonly hardLockExpiryMs: number;
     private readonly now: () => number;
-    private readonly isLockOwnerAlive: (owner: LockOwnerMetadata) => boolean | Promise<boolean>;
+    private readonly isLockOwnerAlive: (
+        owner: LockOwnerMetadata,
+    ) => LockOwnerLiveness | boolean | Promise<LockOwnerLiveness | boolean>;
     private readonly statLockHandle: (handle: import("fs").promises.FileHandle) => Promise<import("fs").Stats>;
 
     constructor(private readonly options: VersionedJsonStoreOptions<T>) {
         this.lockRetryMs = options.lockRetryMs ?? 25;
         this.lockTimeoutMs = options.lockTimeoutMs ?? 5000;
         this.staleLockMs = options.staleLockMs ?? 30000;
-        this.hardLockExpiryMs = Math.max(this.staleLockMs + 1, options.hardLockExpiryMs ?? 10 * 60 * 1000);
         this.now = options.now ?? Date.now;
         this.isLockOwnerAlive = options.isLockOwnerAlive ?? this.defaultIsLockOwnerAlive;
         this.statLockHandle = options.statLockHandle ?? ((handle) => handle.stat());
@@ -117,6 +124,7 @@ export class VersionedJsonStore<T> {
 
     private async acquireLock(lockPath: string): Promise<string> {
         const deadline = this.now() + this.lockTimeoutMs;
+        let quarantineDeferred = false;
         while (true) {
             try {
                 return await this.createOwnedLock(lockPath, true);
@@ -124,9 +132,15 @@ export class VersionedJsonStore<T> {
                 if (!this.isNodeError(error, "EEXIST")) {
                     throw new Error(`Failed to acquire state lock ${lockPath}: ${this.errorMessage(error)}`);
                 }
-                const recoveredOwner = await this.recoverStaleLockAndAcquire(lockPath);
-                if (recoveredOwner) {
-                    return recoveredOwner;
+                if (!quarantineDeferred) {
+                    const quarantine = await this.quarantineStaleCandidate(lockPath);
+                    if (quarantine.status === "recovered") {
+                        continue;
+                    }
+                    if (quarantine.status === "unsafe") {
+                        throw new Error(quarantine.message);
+                    }
+                    quarantineDeferred = true;
                 }
                 if (this.now() >= deadline) {
                     throw new Error(`Timed out waiting for state lock ${lockPath}. Another extension process may still be writing.`);
@@ -174,70 +188,78 @@ export class VersionedJsonStore<T> {
         return ownerToken;
     }
 
-    private async recoverStaleLockAndAcquire(lockPath: string): Promise<string | undefined> {
-        const guardPath = `${lockPath}.recovery`;
-        const guardOwner = await this.tryAcquireRecoveryGuard(guardPath);
-        if (!guardOwner) {
-            return undefined;
+    private async quarantineStaleCandidate(lockPath: string): Promise<QuarantineResult> {
+        if (!await this.isLockStale(lockPath)) {
+            return { status: "busy" };
         }
-
+        await this.options.onBeforeQuarantineRename?.(lockPath);
+        const quarantinePath = this.createQuarantinePath(lockPath);
         try {
-            await this.options.onRecoveryGuardAcquired?.(guardPath);
-            // Re-read and revalidate only while holding the exclusive recovery
-            // guard. A recoverer installs the replacement main lock before the
-            // guard is released, so a second waiter can never act on stale data.
-            if (!await this.canRecoverStaleLock(lockPath)) {
-                return undefined;
-            }
-            await fs.unlink(lockPath).catch((error) => {
-                if (!this.isNodeError(error, "ENOENT")) {
-                    throw error;
-                }
-            });
-            try {
-                return await this.createOwnedLock(lockPath, true);
-            } catch (error) {
-                if (this.isNodeError(error, "EEXIST")) {
-                    return undefined;
-                }
-                throw error;
-            }
-        } finally {
-            await this.releaseLockIfOwned(guardPath, guardOwner);
-        }
-    }
-
-    private async tryAcquireRecoveryGuard(guardPath: string): Promise<string | undefined> {
-        for (let attempt = 0; attempt < 2; attempt += 1) {
-            try {
-                return await this.createOwnedLock(guardPath, false);
-            } catch (error) {
-                if (!this.isNodeError(error, "EEXIST")) {
-                    throw error;
-                }
-                if (!await this.removeRecoverableLock(guardPath)) {
-                    return undefined;
-                }
-            }
-        }
-        return undefined;
-    }
-
-    private async removeRecoverableLock(lockPath: string): Promise<boolean> {
-        if (!await this.canRecoverStaleLock(lockPath)) {
-            return false;
-        }
-        // Revalidate immediately before deletion. Recovery guards are short
-        // lived; a fresh replacement fails this second stale check.
-        if (!await this.canRecoverStaleLock(lockPath)) {
-            return false;
-        }
-        try {
-            await fs.unlink(lockPath);
-            return true;
+            await fs.rename(lockPath, quarantinePath);
         } catch (error) {
             if (this.isNodeError(error, "ENOENT")) {
-                return true;
+                return { status: "recovered" };
+            }
+            throw error;
+        }
+
+        try {
+            await this.options.onLockQuarantined?.(quarantinePath);
+            if (!await this.isLockStale(quarantinePath)) {
+                return await this.restoreQuarantinedLock(lockPath, quarantinePath, "Lock was replaced with a fresh owner before quarantine.");
+            }
+            const owner = await this.readLockMetadata(quarantinePath);
+            if (!owner) {
+                return await this.restoreQuarantinedLock(
+                    lockPath,
+                    quarantinePath,
+                    `Cannot verify the stale lock owner. After confirming no VS Code extension process is using it, manually remove ${lockPath}.`,
+                    true,
+                );
+            }
+            const liveness = await this.getLockOwnerLiveness(owner);
+            if (liveness === "dead") {
+                await fs.unlink(quarantinePath);
+                return { status: "recovered" };
+            }
+            if (liveness === "unknown") {
+                return await this.restoreQuarantinedLock(
+                    lockPath,
+                    quarantinePath,
+                    `Cannot safely verify whether PID ${owner.pid} still owns the stale lock. Close other VS Code windows, then manually remove ${lockPath} only after confirming the owner is gone.`,
+                    true,
+                );
+            }
+            return await this.restoreQuarantinedLock(lockPath, quarantinePath, "The stale-looking lock owner is still alive.");
+        } catch (error) {
+            await this.restoreQuarantinedLock(lockPath, quarantinePath, this.errorMessage(error)).catch(() => undefined);
+            throw error;
+        }
+    }
+
+    private async restoreQuarantinedLock(
+        lockPath: string,
+        quarantinePath: string,
+        reason: string,
+        unsafe: boolean = false,
+    ): Promise<QuarantineResult> {
+        try {
+            // link() creates the main path only if it is still absent, avoiding
+            // rename-overwrite semantics on Windows. Only the rename winner can
+            // restore or delete this exact quarantined inode.
+            await fs.link(quarantinePath, lockPath);
+            await fs.unlink(quarantinePath);
+            return unsafe ? { status: "unsafe", message: reason } : { status: "busy" };
+        } catch (error) {
+            if (this.isNodeError(error, "EEXIST")) {
+                return {
+                    status: "unsafe",
+                    message: `${reason} A new owner claimed ${lockPath} while the prior lock was quarantined. `
+                        + `The prior lock remains at ${quarantinePath}; close other VS Code windows before manual cleanup.`,
+                };
+            }
+            if (this.isNodeError(error, "ENOENT")) {
+                return { status: "busy" };
             }
             throw error;
         }
@@ -281,39 +303,27 @@ export class VersionedJsonStore<T> {
         }
     }
 
-    private async canRecoverStaleLock(lockPath: string): Promise<boolean> {
+    private async isLockStale(lockPath: string): Promise<boolean> {
         try {
             const lockStats = await fs.stat(lockPath);
-            if (this.now() - lockStats.mtimeMs <= this.staleLockMs) {
-                return false;
-            }
-
-            const owner = await this.readLockMetadata(lockPath);
-            if (!owner) {
-                // Recover stale pre-token/corrupt locks for backward compatibility.
-                return true;
-            }
-
-            const metadataAge = this.now() - Date.parse(owner.createdAt);
-            if (metadataAge > this.hardLockExpiryMs) {
-                // Transactions have synchronous mutators and only short bounded
-                // file I/O after mutation. This much longer hard expiry is the
-                // conservative availability fallback for an unrelated live
-                // process that reused the recorded PID. The normal stale
-                // threshold never steals a lock from a reported-live owner.
-                return true;
-            }
-
-            // Protocol invariant: a cooperative stale takeover never removes a
-            // lock owned by the same live process instance. Consequently an
-            // owner retains its fencing token through read, rename, and release.
-            return !await this.isLockOwnerAlive(owner);
+            return this.now() - lockStats.mtimeMs > this.staleLockMs;
         } catch (error) {
             if (this.isNodeError(error, "ENOENT")) {
-                return true;
+                return false;
             }
             throw error;
         }
+    }
+
+    private async getLockOwnerLiveness(owner: LockOwnerMetadata): Promise<LockOwnerLiveness> {
+        const result = await this.isLockOwnerAlive(owner);
+        if (result === true) {
+            return "alive";
+        }
+        if (result === false) {
+            return "dead";
+        }
+        return result;
     }
 
     private async readLockMetadata(lockPath: string): Promise<LockOwnerMetadata | undefined> {
@@ -342,25 +352,26 @@ export class VersionedJsonStore<T> {
         }
     }
 
-    private defaultIsLockOwnerAlive(owner: LockOwnerMetadata): boolean {
+    private defaultIsLockOwnerAlive(owner: LockOwnerMetadata): LockOwnerLiveness {
         if (owner.pid === process.pid) {
             if (!owner.processStartedAt) {
                 // Legacy locks have no process-instance timestamp. Preserve a
                 // live matching PID rather than risking an unsafe takeover.
-                return true;
+                return "alive";
             }
             const recordedStart = Date.parse(owner.processStartedAt);
             // A matching PID with a different start time is a reused PID, not
             // the process instance that created this token.
-            return Math.abs(recordedStart - currentProcessStartedAtMs) < 5000;
+            return Math.abs(recordedStart - currentProcessStartedAtMs) < 5000 ? "alive" : "dead";
         }
         try {
             process.kill(owner.pid, 0);
-            // For other PIDs we conservatively treat access-denied/live results
-            // as alive; token and creation metadata still fence release.
-            return true;
+            // Node can prove the PID exists but cannot portably prove that it is
+            // the process instance recorded in the lock. Conservatively block
+            // and surface a manual-cleanup diagnostic instead of stealing it.
+            return "unknown";
         } catch (error) {
-            return this.isNodeError(error, "EPERM");
+            return this.isNodeError(error, "ESRCH") ? "dead" : "unknown";
         }
     }
 
@@ -375,6 +386,11 @@ export class VersionedJsonStore<T> {
     private createTempPath(filePath: string): string {
         const uniquePart = `${process.pid}-${this.now()}-${Math.random().toString(16).slice(2)}`;
         return path.join(path.dirname(filePath), `.${path.basename(filePath)}.${uniquePart}.tmp`);
+    }
+
+    private createQuarantinePath(lockPath: string): string {
+        const uniquePart = `${process.pid}-${this.now()}-${randomBytes(12).toString("hex")}`;
+        return `${lockPath}.quarantine-${uniquePart}`;
     }
 
     private async readExistingText(filePath: string): Promise<string | undefined> {
