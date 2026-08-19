@@ -27,14 +27,27 @@ function createDataRoot() {
         neetcode150: false,
         blind75: false,
     };
+    const problems = {};
+    for (let index = 1; index <= 150; index += 1) {
+        const questionId = String(index);
+        problems[questionId] = {
+            questionId,
+            title: `Problem ${index}`,
+            titleSlug: `problem-${index}`,
+            code: `${String(index).padStart(4, "0")}-problem-${index}`,
+            neetcode150: true,
+            blind75: index <= 75,
+        };
+    }
+    problems["427"] = metadata;
     writeJson(root, "neetcode-index.json", {
         schemaVersion: 2,
         generatedAt: "2026-08-19T00:00:00.000Z",
         source: { repository: "https://github.com/neetcode-gh/leetcode", revision: "a".repeat(40) },
-        problemCount: 1,
-        neetcode150Count: 0,
-        blind75Count: 0,
-        problems: { 427: metadata },
+        problemCount: 151,
+        neetcode150Count: 150,
+        blind75Count: 75,
+        problems,
     });
     writeJson(root, "neetcode-content/427.json", {
         schemaVersion: 1,
@@ -42,20 +55,22 @@ function createDataRoot() {
         titleSlug: "construct-quad-tree",
         articleMarkdown: "quad article",
     });
+    const learningProblems = {};
+    for (let index = 1; index <= 150; index += 1) {
+        learningProblems[`problem-${index}`] = {
+            sourceIndex: index,
+            title: `Problem ${index}`,
+            titleSlug: `problem-${index}`,
+            section: "Arrays",
+            difficulty: "Easy",
+            markdown: `[Read](https://example.com/${index})`,
+        };
+    }
     writeJson(root, "jit-learning-resources.json", {
         schemaVersion: 1,
         source: { name: "resources.md", sha256: "B".repeat(64) },
-        problemCount: 1,
-        problems: {
-            "construct-quad-tree": {
-                sourceIndex: 1,
-                title: "Construct Quad Tree",
-                titleSlug: "construct-quad-tree",
-                section: "Trees",
-                difficulty: "Medium",
-                markdown: "learn quads",
-            },
-        },
+        problemCount: 150,
+        problems: learningProblems,
     });
     return { root, metadata };
 }
@@ -86,6 +101,81 @@ test("resolves checked-in installed data from unbundled test output", () => {
     const index = installedNeetCodeDataStore.getIndex();
     assert.equal(index.problemCount, 767);
     assert.equal(index.source.revision, "62d62811315e676691c4b8fef58af73494d58b79");
+});
+
+test("rejects null, array-backed, incomplete, and malformed installed indexes with actionable diagnostics", () => {
+    const cases = [
+        (root) => writeJson(root, "neetcode-index.json", null),
+        (root) => {
+            const index = JSON.parse(fs.readFileSync(path.join(root, "neetcode-index.json"), "utf8"));
+            index.problems = [];
+            writeJson(root, "neetcode-index.json", index);
+        },
+        (root) => {
+            const index = JSON.parse(fs.readFileSync(path.join(root, "neetcode-index.json"), "utf8"));
+            index.neetcode150Count = 149;
+            writeJson(root, "neetcode-index.json", index);
+        },
+        (root) => {
+            const index = JSON.parse(fs.readFileSync(path.join(root, "neetcode-index.json"), "utf8"));
+            index.problems["1"].code = 1;
+            index.problems["1"].difficulty = "Impossible";
+            index.problems["1"].neetcode150 = "yes";
+            index.problems["1"].articleMarkdown = "must not be inline";
+            writeJson(root, "neetcode-index.json", index);
+        },
+        (root) => {
+            const index = JSON.parse(fs.readFileSync(path.join(root, "neetcode-index.json"), "utf8"));
+            index.problems["427"].titleSlug = "wrong-quad-tree";
+            writeJson(root, "neetcode-index.json", index);
+        },
+    ];
+
+    for (const mutate of cases) {
+        const { root } = createDataRoot();
+        try {
+            mutate(root);
+            assert.throws(
+                () => new NeetCodeDataStore(root).getIndex(),
+                /Invalid installed NeetCode data.*neetcode-index\.json.*Reinstall.*validate:data/,
+            );
+        } finally {
+            fs.rmSync(root, { recursive: true, force: true });
+        }
+    }
+});
+
+test("strictly validates installed JIT provenance, counts, records, HTTPS links, and known slugs", () => {
+    const cases = [
+        (dataset) => { dataset.source.sha256 = "bad"; },
+        (dataset) => { dataset.problemCount = 149; },
+        (dataset) => { dataset.problems["problem-1"].sourceIndex = 2; },
+        (dataset) => { dataset.problems["problem-1"].markdown = "[Read](http://example.com/)"; },
+        (dataset) => { dataset.problems["problem-1"].markdown = "<http://example.com/insecure>"; },
+        (dataset) => {
+            dataset.problems["unknown-problem"] = {
+                ...dataset.problems["problem-1"],
+                titleSlug: "unknown-problem",
+            };
+            delete dataset.problems["problem-1"];
+        },
+    ];
+
+    for (const mutate of cases) {
+        const { root } = createDataRoot();
+        try {
+            const datasetPath = path.join(root, "jit-learning-resources.json");
+            const dataset = JSON.parse(fs.readFileSync(datasetPath, "utf8"));
+            mutate(dataset);
+            writeJson(root, "jit-learning-resources.json", dataset);
+            assert.throws(
+                () => new NeetCodeDataStore(root).getLearningDataset(),
+                /Invalid installed NeetCode data.*jit-learning-resources\.json.*Reinstall.*validate:data/,
+            );
+        } finally {
+            fs.rmSync(root, { recursive: true, force: true });
+        }
+    }
 });
 
 test("reports actionable installed-data diagnostics for missing, malformed, and unsafe content", () => {

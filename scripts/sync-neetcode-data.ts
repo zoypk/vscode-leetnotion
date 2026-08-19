@@ -179,10 +179,16 @@ const dataDirectory = path.join(extensionRoot, "data");
 const outputPath = path.join(dataDirectory, "neetcode-index.json");
 const contentOutputDirectory = path.join(dataDirectory, "neetcode-content");
 
-void main();
+if (require.main === module) {
+    void main();
+}
 
 async function main(): Promise<void> {
-    const { checkoutExactRevision, resolveRemoteHead, runGit } = await import("./lib/sync-utils.mjs");
+    const {
+        checkoutExactRevision,
+        resolveRemoteHead,
+        verifyCleanCheckoutAtRevision,
+    } = await import("./lib/sync-utils.mjs");
     const arguments_ = parseArguments(process.argv.slice(2));
     const liveRevision = resolveRemoteHead(SOURCE_GIT_URL, "main");
     if (arguments_.expectedRevision && arguments_.expectedRevision.toLowerCase() !== liveRevision) {
@@ -206,115 +212,29 @@ async function main(): Promise<void> {
             checkoutExactRevision(SOURCE_GIT_URL, liveRevision, sourceRoot);
         }
 
-        const sourceRevision = runGit(["-C", sourceRoot, "rev-parse", "HEAD"]);
-        if (sourceRevision.toLowerCase() !== liveRevision) {
-            throw new Error(`NeetCode source directory is at ${sourceRevision}, live main is ${liveRevision}`);
-        }
+        const sourceRevision = verifyCleanCheckoutAtRevision(sourceRoot, liveRevision, "NeetCode source");
 
-        const siteDataPath = path.join(sourceRoot, ".problemSiteData.json");
-        const articlesPath = path.join(sourceRoot, "articles");
-        const hintsPath = path.join(sourceRoot, "hints");
-        assertExists(siteDataPath, "NeetCode .problemSiteData.json");
-        assertExists(articlesPath, "NeetCode articles directory");
-        assertExists(hintsPath, "NeetCode hints directory");
-
-        const siteData = readSiteData(siteDataPath);
-        const articleFiles = new Set(readMarkdownBasenames(articlesPath));
-        const hintFiles = new Set(readMarkdownBasenames(hintsPath));
-        const identities = await loadLeetCodeIdentities(problemsFile);
-        const solutionSlugToId = readSolutionSlugToId(sourceRoot);
-        const siteProblemById = new Map<string, SiteProblem>();
-        for (const problem of siteData) {
-            const questionId = resolveSiteQuestionId(problem, identities.bySlug);
-            if (questionId) {
-                siteProblemById.set(questionId, problem);
-            }
-        }
-
-        const articleAssignments = resolveContentAssignments(
-            articleFiles,
-            siteData,
-            identities.bySlug,
-            solutionSlugToId,
-        );
-        const articleIdBySlug = invertAssignments(articleAssignments);
-        const hintAssignments = resolveContentAssignments(
-            hintFiles,
-            siteData,
-            identities.bySlug,
-            solutionSlugToId,
-            articleIdBySlug,
-        );
-
-        const dataset: Dataset = {
-            schemaVersion: 2,
-            generatedAt: new Date().toISOString(),
-            source: {
-                repository: SOURCE_REPO,
-                revision: liveRevision,
-            },
-            problemCount: 0,
-            neetcode150Count: 0,
-            blind75Count: 0,
-            problems: {},
+        const generated = await buildNeetCodeDataset(sourceRoot, problemsFile, sourceRevision);
+        const validateDataset = await loadDatasetValidator();
+        const publisherPath = path.join(extensionRoot, "scripts", "lib", "neetcode-publish.mjs");
+        const { publishNeetCodeDataset } = await import(pathToFileURL(publisherPath).href) as {
+            publishNeetCodeDataset(options: unknown): void;
         };
-        const contents = new Map<string, ProblemContent>();
-        const allQuestionIds = new Set<string>([
-            ...siteProblemById.keys(),
-            ...articleAssignments.keys(),
-            ...hintAssignments.keys(),
-        ]);
-
-        for (const questionId of [...allQuestionIds].sort(compareQuestionIds)) {
-            const siteProblem = siteProblemById.get(questionId);
-            const identity = identities.byId.get(questionId);
-            const articleSlug = articleAssignments.get(questionId)?.slug;
-            const hintSlug = hintAssignments.get(questionId)?.slug;
-            const solutionSlug = articleSlug || hintSlug || trimSlashes(siteProblem?.link) || codeSlug(siteProblem?.code);
-            const titleSlug = trimSlashes(siteProblem?.link) || identity?.titleSlug || solutionSlug;
-            const title = siteProblem?.problem || identity?.title || titleFromSlug(titleSlug);
-            const neetcode150 = Boolean(siteProblem?.neetcode150);
-            const blind75 = Boolean(siteProblem?.blind75);
-            const articleMarkdown = articleSlug ? readMarkdown(path.join(articlesPath, `${articleSlug}.md`)) : undefined;
-            const hintMarkdown = hintSlug ? readMarkdown(path.join(hintsPath, `${hintSlug}.md`)) : undefined;
-            const contentFile = articleMarkdown || hintMarkdown
-                ? `neetcode-content/${questionId}.json`
-                : undefined;
-
-            dataset.problems[questionId] = {
-                questionId,
-                title,
-                titleSlug,
-                code: siteProblem?.code && extractQuestionId(siteProblem.code) === questionId
-                    ? siteProblem.code
-                    : `${questionId.padStart(4, "0")}-${titleSlug}`,
-                pattern: siteProblem?.pattern || undefined,
-                difficulty: siteProblem?.difficulty || identity?.difficulty,
-                problemUrl: solutionSlug ? `https://neetcode.io/problems/${solutionSlug}` : undefined,
-                solutionSlug,
-                solutionUrl: buildSolutionUrl(solutionSlug, neetcode150, blind75),
-                videoUrl: siteProblem?.video ? `https://www.youtube.com/watch?v=${siteProblem.video}` : undefined,
-                contentFile,
-                neetcode150,
-                blind75,
-            };
-            if (contentFile) {
-                contents.set(questionId, {
-                    schemaVersion: 1,
-                    questionId,
-                    titleSlug,
-                    articleMarkdown,
-                    hintMarkdown,
-                });
-            }
-        }
-
-        dataset.problemCount = Object.keys(dataset.problems).length;
-        dataset.neetcode150Count = Object.values(dataset.problems).filter((problem) => problem.neetcode150).length;
-        dataset.blind75Count = Object.values(dataset.problems).filter((problem) => problem.blind75).length;
-        await validateGeneratedDataset(dataset, contents);
-        publishDataset(dataset, contents);
-        reportCoverage(dataset, siteProblemById, articleFiles, hintFiles, articleAssignments, hintAssignments);
+        publishNeetCodeDataset({
+            dataset: generated.dataset,
+            contents: generated.contents,
+            indexPath: outputPath,
+            contentDirectory: contentOutputDirectory,
+            validateDataset,
+        });
+        reportCoverage(
+            generated.dataset,
+            generated.siteProblemById,
+            generated.articleFiles,
+            generated.hintFiles,
+            generated.articleAssignments,
+            generated.hintAssignments,
+        );
     } finally {
         if (temporaryDirectory) {
             fs.rmSync(temporaryDirectory, { recursive: true, force: true });
@@ -322,84 +242,130 @@ async function main(): Promise<void> {
     }
 }
 
-async function validateGeneratedDataset(dataset: Dataset, contents: Map<string, ProblemContent>): Promise<void> {
+type DatasetValidator = (index: Dataset, contentFiles: Map<string, ProblemContent>) => unknown;
+
+async function loadDatasetValidator(): Promise<DatasetValidator> {
     const modulePath = path.join(extensionRoot, "scripts", "lib", "neetcode-validation.mjs");
     const validation = await import(pathToFileURL(modulePath).href) as {
-        validateNeetCodeDataset(
-            index: Dataset,
-            contentFiles: Map<string, ProblemContent>,
-        ): unknown;
+        validateNeetCodeDataset: DatasetValidator;
     };
-    const contentByPath = new Map<string, ProblemContent>();
-    for (const [questionId, content] of contents) {
-        contentByPath.set(`neetcode-content/${questionId}.json`, content);
-    }
-    validation.validateNeetCodeDataset(dataset, contentByPath);
+    return validation.validateNeetCodeDataset;
 }
 
-function publishDataset(dataset: Dataset, contents: Map<string, ProblemContent>): void {
-    const nonce = `${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-    const stagedIndexPath = path.join(dataDirectory, `.neetcode-index-${nonce}.tmp`);
-    const stagedContentDirectory = path.join(dataDirectory, `.neetcode-content-${nonce}.tmp`);
-    const backupIndexPath = path.join(dataDirectory, `.neetcode-index-${nonce}.bak`);
-    const backupContentDirectory = path.join(dataDirectory, `.neetcode-content-${nonce}.bak`);
-    let backedUpIndex = false;
-    let backedUpContent = false;
-    let publishedIndex = false;
-    let publishedContent = false;
-    let committed = false;
+export async function buildNeetCodeDataset(
+    sourceRoot: string,
+    problemsFile: string | undefined,
+    sourceRevision: string,
+    generatedAt = new Date().toISOString(),
+): Promise<{
+    dataset: Dataset;
+    contents: Map<string, ProblemContent>;
+    siteProblemById: Map<string, SiteProblem>;
+    articleFiles: Set<string>;
+    hintFiles: Set<string>;
+    articleAssignments: Map<string, ContentAssignment>;
+    hintAssignments: Map<string, ContentAssignment>;
+}> {
+    if (!/^[0-9a-f]{40}$/i.test(sourceRevision)) {
+        throw new Error(`Invalid NeetCode source revision: ${sourceRevision}`);
+    }
+    const siteDataPath = path.join(sourceRoot, ".problemSiteData.json");
+    const articlesPath = path.join(sourceRoot, "articles");
+    const hintsPath = path.join(sourceRoot, "hints");
+    assertExists(siteDataPath, "NeetCode .problemSiteData.json");
+    assertExists(articlesPath, "NeetCode articles directory");
+    assertExists(hintsPath, "NeetCode hints directory");
 
-    try {
-        fs.mkdirSync(stagedContentDirectory, { recursive: true });
-        fs.writeFileSync(stagedIndexPath, `${JSON.stringify(dataset, null, 2)}\n`, "utf8");
-        for (const [questionId, content] of contents) {
-            fs.writeFileSync(
-                path.join(stagedContentDirectory, `${questionId}.json`),
-                `${JSON.stringify(content, null, 2)}\n`,
-                "utf8",
-            );
+    const siteData = readSiteData(siteDataPath);
+    const articleFiles = new Set(readMarkdownBasenames(articlesPath));
+    const hintFiles = new Set(readMarkdownBasenames(hintsPath));
+    const identities = await loadLeetCodeIdentities(problemsFile);
+    const solutionSlugToId = readSolutionSlugToId(sourceRoot);
+    const siteProblemById = new Map<string, SiteProblem>();
+    for (const problem of siteData) {
+        const questionId = resolveSiteQuestionId(problem, identities.bySlug);
+        if (questionId) {
+            siteProblemById.set(questionId, problem);
         }
-
-        if (fs.existsSync(outputPath)) {
-            fs.renameSync(outputPath, backupIndexPath);
-            backedUpIndex = true;
-        }
-        if (fs.existsSync(contentOutputDirectory)) {
-            fs.renameSync(contentOutputDirectory, backupContentDirectory);
-            backedUpContent = true;
-        }
-        fs.renameSync(stagedContentDirectory, contentOutputDirectory);
-        publishedContent = true;
-        fs.renameSync(stagedIndexPath, outputPath);
-        publishedIndex = true;
-        committed = true;
-    } catch (error) {
-        if (publishedIndex && fs.existsSync(outputPath)) {
-            fs.rmSync(outputPath, { force: true });
-        }
-        if (publishedContent && fs.existsSync(contentOutputDirectory)) {
-            fs.rmSync(contentOutputDirectory, { recursive: true, force: true });
-        }
-        if (backedUpIndex && fs.existsSync(backupIndexPath)) {
-            fs.renameSync(backupIndexPath, outputPath);
-        }
-        if (backedUpContent && fs.existsSync(backupContentDirectory)) {
-            fs.renameSync(backupContentDirectory, contentOutputDirectory);
-        }
-        throw error;
-    } finally {
-        fs.rmSync(stagedIndexPath, { force: true });
-        fs.rmSync(stagedContentDirectory, { recursive: true, force: true });
     }
 
-    if (committed) {
-        if (backedUpIndex) {
-            fs.rmSync(backupIndexPath, { force: true });
-        }
-        if (backedUpContent) {
-            fs.rmSync(backupContentDirectory, { recursive: true, force: true });
+    const articleAssignments = resolveContentAssignments(articleFiles, siteData, identities.bySlug, solutionSlugToId);
+    const articleIdBySlug = invertAssignments(articleAssignments);
+    const hintAssignments = resolveContentAssignments(
+        hintFiles,
+        siteData,
+        identities.bySlug,
+        solutionSlugToId,
+        articleIdBySlug,
+    );
+    const dataset: Dataset = {
+        schemaVersion: 2,
+        generatedAt,
+        source: { repository: SOURCE_REPO, revision: sourceRevision.toLowerCase() },
+        problemCount: 0,
+        neetcode150Count: 0,
+        blind75Count: 0,
+        problems: {},
+    };
+    const contents = new Map<string, ProblemContent>();
+    const allQuestionIds = new Set<string>([
+        ...siteProblemById.keys(),
+        ...articleAssignments.keys(),
+        ...hintAssignments.keys(),
+    ]);
+
+    for (const questionId of [...allQuestionIds].sort(compareQuestionIds)) {
+        const siteProblem = siteProblemById.get(questionId);
+        const identity = identities.byId.get(questionId);
+        const articleSlug = articleAssignments.get(questionId)?.slug;
+        const hintSlug = hintAssignments.get(questionId)?.slug;
+        const solutionSlug = articleSlug || hintSlug || trimSlashes(siteProblem?.link) || codeSlug(siteProblem?.code);
+        const titleSlug = trimSlashes(siteProblem?.link) || identity?.titleSlug || solutionSlug;
+        const title = siteProblem?.problem || identity?.title || titleFromSlug(titleSlug);
+        const neetcode150 = Boolean(siteProblem?.neetcode150);
+        const blind75 = Boolean(siteProblem?.blind75);
+        const articleMarkdown = articleSlug ? readMarkdown(path.join(articlesPath, `${articleSlug}.md`)) : undefined;
+        const hintMarkdown = hintSlug ? readMarkdown(path.join(hintsPath, `${hintSlug}.md`)) : undefined;
+        const contentFile = articleMarkdown || hintMarkdown ? `neetcode-content/${questionId}.json` : undefined;
+        dataset.problems[questionId] = {
+            questionId,
+            title,
+            titleSlug,
+            code: siteProblem?.code && extractQuestionId(siteProblem.code) === questionId
+                ? siteProblem.code
+                : `${questionId.padStart(4, "0")}-${titleSlug}`,
+            pattern: siteProblem?.pattern || undefined,
+            difficulty: siteProblem?.difficulty || identity?.difficulty,
+            problemUrl: solutionSlug ? `https://neetcode.io/problems/${solutionSlug}` : undefined,
+            solutionSlug,
+            solutionUrl: buildSolutionUrl(solutionSlug, neetcode150, blind75),
+            videoUrl: siteProblem?.video ? `https://www.youtube.com/watch?v=${siteProblem.video}` : undefined,
+            contentFile,
+            neetcode150,
+            blind75,
+        };
+        if (contentFile) {
+            contents.set(questionId, {
+                schemaVersion: 1,
+                questionId,
+                titleSlug,
+                articleMarkdown,
+                hintMarkdown,
+            });
         }
     }
+    dataset.problemCount = Object.keys(dataset.problems).length;
+    dataset.neetcode150Count = Object.values(dataset.problems).filter((problem) => problem.neetcode150).length;
+    dataset.blind75Count = Object.values(dataset.problems).filter((problem) => problem.blind75).length;
+    return {
+        dataset,
+        contents,
+        siteProblemById,
+        articleFiles,
+        hintFiles,
+        articleAssignments,
+        hintAssignments,
+    };
 }
 
 function parseArguments(arguments_: string[]): {

@@ -179,14 +179,42 @@ export function atomicReplaceFile(targetPath, content, options = {}) {
     }
 }
 
+export function verifyCleanCheckoutAtRevision(sourceDirectory, liveRevision, sourceLabel = "Source") {
+    if (!/^[0-9a-f]{40}$/i.test(liveRevision)) {
+        throw new Error(`Invalid live revision for ${sourceLabel}: ${liveRevision}`);
+    }
+    const sourceRevision = runGit(["-C", sourceDirectory, "rev-parse", "HEAD"]).toLowerCase();
+    if (!/^[0-9a-f]{40}$/.test(sourceRevision)) {
+        throw new Error(`Could not verify ${sourceLabel} revision in ${sourceDirectory}`);
+    }
+    const workingTreeChanges = runGit(["-C", sourceDirectory, "status", "--porcelain"]);
+    if (workingTreeChanges) {
+        throw new Error(`${sourceLabel} checkout has uncommitted or untracked changes: ${sourceDirectory}`);
+    }
+    if (sourceRevision !== liveRevision.toLowerCase()) {
+        throw new Error(`${sourceLabel} checkout is at ${sourceRevision}, live main is ${liveRevision}`);
+    }
+    return sourceRevision;
+}
+
 export function atomicWriteFiles(outputs, options = {}) {
+    return atomicPublishEntries(outputs, options);
+}
+
+export function atomicPublishEntries(outputs, options = {}) {
     if (!Array.isArray(outputs) || outputs.length === 0) {
-        throw new Error("atomicWriteFiles requires at least one output");
+        throw new Error("atomicPublishEntries requires at least one output");
     }
     const targets = new Set();
     for (const output of outputs) {
         if (!output?.path || targets.has(output.path)) {
             throw new Error(`Duplicate or missing output path: ${output?.path ?? "<missing>"}`);
+        }
+        if (output.populate !== undefined && typeof output.populate !== "function") {
+            throw new Error(`Output populate must be a function: ${output.path}`);
+        }
+        if (output.populate === undefined && output.content === undefined) {
+            throw new Error(`File output is missing content: ${output.path}`);
         }
         targets.add(output.path);
     }
@@ -205,7 +233,11 @@ export function atomicWriteFiles(outputs, options = {}) {
     try {
         for (const entry of staged) {
             fsOperations.mkdirSync(dirname(entry.path), { recursive: true });
-            fsOperations.writeFileSync(entry.tempPath, entry.content, entry.encoding ?? "utf8");
+            if (entry.populate) {
+                entry.populate(entry.tempPath, fsOperations);
+            } else {
+                fsOperations.writeFileSync(entry.tempPath, entry.content, entry.encoding ?? "utf8");
+            }
         }
         options.validate?.(new Map(staged.map((entry) => [entry.path, entry.tempPath])));
         for (const entry of staged) {

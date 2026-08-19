@@ -55,6 +55,10 @@ export function validateNeetCodeDataset(index, contents) {
         if (!nonemptyString(problem.title)) {
             errors.push(`${prefix} title must be nonempty`);
         }
+        const codeMatch = /^(\d+)-[a-z0-9]+(?:-[a-z0-9]+)*$/.exec(problem.code || "");
+        if (!codeMatch || String(Number.parseInt(codeMatch[1], 10)) !== questionId) {
+            errors.push(`${prefix} code must contain its numeric ID and a safe lowercase slug`);
+        }
         if (!nonemptyString(problem.titleSlug) || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(problem.titleSlug)) {
             errors.push(`${prefix} titleSlug is invalid`);
         } else if (titleSlugs.has(problem.titleSlug)) {
@@ -66,6 +70,20 @@ export function validateNeetCodeDataset(index, contents) {
             if (Object.prototype.hasOwnProperty.call(problem, forbiddenField)) {
                 errors.push(`${prefix} embeds ${forbiddenField}; large content must remain in a per-problem file`);
             }
+        }
+        if (problem.pattern !== undefined && !nonemptyString(problem.pattern)) {
+            errors.push(`${prefix} pattern must be a nonempty string when present`);
+        }
+        if (problem.difficulty !== undefined && !["Easy", "Medium", "Hard"].includes(problem.difficulty)) {
+            errors.push(`${prefix} difficulty must be Easy, Medium, or Hard when present`);
+        }
+        if (problem.solutionSlug !== undefined
+            && (!nonemptyString(problem.solutionSlug)
+                || !/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(problem.solutionSlug))) {
+            errors.push(`${prefix} solutionSlug must be a safe lowercase slug when present`);
+        }
+        if (typeof problem.neetcode150 !== "boolean" || typeof problem.blind75 !== "boolean") {
+            errors.push(`${prefix} neetcode150 and blind75 must be booleans`);
         }
         for (const field of ["problemUrl", "solutionUrl", "videoUrl"]) {
             if (problem[field] !== undefined && !HTTPS_URL_PATTERN.test(problem[field])) {
@@ -97,6 +115,12 @@ export function validateNeetCodeDataset(index, contents) {
                     }
                     if (!nonemptyString(content.articleMarkdown) && !nonemptyString(content.hintMarkdown)) {
                         errors.push(`${problem.contentFile} must contain an article or hint`);
+                    }
+                    if (content.articleMarkdown !== undefined && !nonemptyString(content.articleMarkdown)) {
+                        errors.push(`${problem.contentFile} articleMarkdown must be a nonempty string when present`);
+                    }
+                    if (content.hintMarkdown !== undefined && !nonemptyString(content.hintMarkdown)) {
+                        errors.push(`${problem.contentFile} hintMarkdown must be a nonempty string when present`);
                     }
                 }
             }
@@ -213,4 +237,3 @@ export function validateJitLearningDataset(dataset, knownTitleSlugs) {
     fail("JIT learning resources", errors);
     return { problemCount: problemEntries.length };
 }
-
