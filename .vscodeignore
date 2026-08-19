@@ -1,5 +1,7 @@
 .vscode/**
 .vscode-test/**
+.git
+.git/**
 .github/**
 coverage/**
 out-test/**

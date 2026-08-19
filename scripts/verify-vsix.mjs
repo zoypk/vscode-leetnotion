@@ -61,6 +61,7 @@ const REQUIRED_RUNTIME_PATHS = Object.freeze([
 ]);
 
 const FORBIDDEN_PREFIXES = Object.freeze([
+    "extension/.git/",
     "extension/.github/",
     "extension/.vscode/",
     "extension/.vscode-test/",
@@ -79,6 +80,7 @@ const FORBIDDEN_PREFIXES = Object.freeze([
 ]);
 
 const FORBIDDEN_EXACT_PATHS = Object.freeze([
+    "extension/.git",
     "extension/data/neetcode-enrichment.json",
     "extension/esbuild.js",
     "extension/package-lock.json",
@@ -316,8 +318,8 @@ export async function readBoundedVsix(artifactPath, { statFile = stat, readFileB
 }
 
 export function readZipEntry(archive, entry) {
-    if (!entry || entry.name.endsWith("/")) {
-        throw new Error("Cannot read a missing or directory ZIP entry.");
+    if (!entry) {
+        throw new Error("Cannot read a missing ZIP entry.");
     }
     const offset = entry.localHeaderOffset;
     if (offset + 30 > archive.length || archive.readUInt32LE(offset) !== 0x04034b50) {
@@ -393,13 +395,20 @@ function resolveLockedDependency(packages, parentPackagePath, dependencyName) {
     throw new Error(`package-lock.json does not resolve ${dependencyName} from ${parentPackagePath || "the extension root"}`);
 }
 
+function requiredDependencyMap(packageRecord) {
+    const dependencies = packageRecord?.dependencies || {};
+    const optionalDependencies = packageRecord?.optionalDependencies || {};
+    return Object.fromEntries(Object.entries(dependencies)
+        .filter(([name]) => !Object.prototype.hasOwnProperty.call(optionalDependencies, name)));
+}
+
 export function productionDependencyClosure(lockfile) {
     const packages = lockfile?.packages;
     const root = packages?.[""];
     if (!packages || !root || !root.dependencies || typeof root.dependencies !== "object") {
         throw new Error("package-lock.json is missing the root production dependency map.");
     }
-    const queue = Object.keys(root.dependencies).map((name) => resolveLockedDependency(packages, "", name));
+    const queue = Object.keys(requiredDependencyMap(root)).map((name) => resolveLockedDependency(packages, "", name));
     const closure = new Set();
     while (queue.length > 0) {
         const packagePath = queue.shift();
@@ -411,7 +420,7 @@ export function productionDependencyClosure(lockfile) {
         if (!lockedPackage || lockedPackage.dev || lockedPackage.optional) {
             throw new Error(`Required production package is incorrectly marked dev/optional: ${packagePath}`);
         }
-        for (const dependencyName of Object.keys(lockedPackage.dependencies || {})) {
+        for (const dependencyName of Object.keys(requiredDependencyMap(lockedPackage))) {
             queue.push(resolveLockedDependency(packages, packagePath, dependencyName));
         }
     }
@@ -451,12 +460,12 @@ function resolvePackagedMain(packageBase, declaredMain, hasFile) {
     return candidates.find(hasFile);
 }
 
-function manifestDependencyMap(value, label, errors) {
+function manifestObjectMap(value, label, errors) {
     if (value === undefined) {
         return {};
     }
     if (!value || typeof value !== "object" || Array.isArray(value)) {
-        errors.push(`${label} dependencies must be an object`);
+        errors.push(`${label} must be an object`);
         return {};
     }
     return value;
@@ -482,8 +491,15 @@ export function validateProductionDependencies(lockfile, { hasFile, readPackageM
     const closure = productionDependencyClosure(lockfile);
     const lockClosure = new Set(closure);
     const manifestsByPath = new Map();
-    const rootDependencies = manifestDependencyMap(rootManifest?.dependencies, "packaged root package.json", errors);
-    reconcileDependencyMaps(rootDependencies, lockfile.packages[""].dependencies, "packaged root package.json", errors);
+    const manifestRequiredByPath = new Map();
+    const rootDeclaredDependencies = manifestObjectMap(rootManifest?.dependencies, "packaged root package.json dependencies", errors);
+    const rootDeclaredOptional = manifestObjectMap(rootManifest?.optionalDependencies, "packaged root package.json optionalDependencies", errors);
+    const rootLockedDependencies = lockfile.packages[""].dependencies || {};
+    const rootLockedOptional = lockfile.packages[""].optionalDependencies || {};
+    reconcileDependencyMaps(rootDeclaredDependencies, rootLockedDependencies, "packaged root package.json dependencies", errors);
+    reconcileDependencyMaps(rootDeclaredOptional, rootLockedOptional, "packaged root package.json optionalDependencies", errors);
+    const rootDependencies = requiredDependencyMap({ dependencies: rootDeclaredDependencies, optionalDependencies: rootDeclaredOptional });
+    reconcileDependencyMaps(rootDependencies, requiredDependencyMap(lockfile.packages[""]), "packaged root package.json required dependencies", errors);
     for (const packagePath of closure) {
         const packageBase = `extension/${packagePath}`;
         const manifestPath = `${packageBase}/package.json`;
@@ -507,8 +523,13 @@ export function validateProductionDependencies(lockfile, { hasFile, readPackageM
         if (manifest.version !== lockedPackage.version) {
             errors.push(`${manifestPath} version ${manifest.version} does not match lockfile ${lockedPackage.version}`);
         }
-        const manifestDependencies = manifestDependencyMap(manifest.dependencies, manifestPath, errors);
-        reconcileDependencyMaps(manifestDependencies, lockedPackage.dependencies || {}, manifestPath, errors);
+        const manifestDependencies = manifestObjectMap(manifest.dependencies, `${manifestPath} dependencies`, errors);
+        const manifestOptional = manifestObjectMap(manifest.optionalDependencies, `${manifestPath} optionalDependencies`, errors);
+        reconcileDependencyMaps(manifestDependencies, lockedPackage.dependencies || {}, `${manifestPath} dependencies`, errors);
+        reconcileDependencyMaps(manifestOptional, lockedPackage.optionalDependencies || {}, `${manifestPath} optionalDependencies`, errors);
+        const manifestRequired = requiredDependencyMap({ dependencies: manifestDependencies, optionalDependencies: manifestOptional });
+        reconcileDependencyMaps(manifestRequired, requiredDependencyMap(lockedPackage), `${manifestPath} required dependencies`, errors);
+        manifestRequiredByPath.set(packagePath, manifestRequired);
         if (manifest.main !== undefined) {
             try {
                 const resolvedMain = resolvePackagedMain(packageBase, manifest.main, hasFile);
@@ -561,7 +582,7 @@ export function validateProductionDependencies(lockfile, { hasFile, readPackageM
         if (!manifest) {
             continue;
         }
-        for (const dependencyName of Object.keys(manifest.dependencies || {})) {
+        for (const dependencyName of Object.keys(manifestRequiredByPath.get(packagePath) || {})) {
             try {
                 manifestQueue.push(resolveLockedDependency(lockfile.packages, packagePath, dependencyName));
             } catch (error) {
@@ -688,6 +709,7 @@ function parseXmlStartTag(rawTag) {
 function parseIdentityAttributes(vsixManifestText) {
     const stack = [];
     const identities = [];
+    let metadataCount = 0;
     let rootName = "";
     let cursor = 0;
     while (cursor < vsixManifestText.length) {
@@ -743,9 +765,17 @@ function parseIdentityAttributes(vsixManifestText) {
                 }
                 rootName = tag.name;
             }
-            if (tag.name.split(":").pop() === "Identity") {
-                if (stack.at(-1)?.split(":").pop() !== "Metadata") {
-                    throw new Error("extension.vsixmanifest Identity must be a direct child of Metadata.");
+            const localName = tag.name.split(":").pop();
+            const ancestry = stack.map((name) => name.split(":").pop());
+            if (localName === "Metadata") {
+                if (ancestry.length !== 1 || ancestry[0] !== "PackageManifest") {
+                    throw new Error("extension.vsixmanifest Metadata must be a direct child of PackageManifest.");
+                }
+                metadataCount += 1;
+            }
+            if (localName === "Identity") {
+                if (ancestry.length !== 2 || ancestry[0] !== "PackageManifest" || ancestry[1] !== "Metadata") {
+                    throw new Error("extension.vsixmanifest Identity must have exact PackageManifest/Metadata/Identity ancestry.");
                 }
                 identities.push(tag.attributes);
             }
@@ -763,6 +793,9 @@ function parseIdentityAttributes(vsixManifestText) {
     }
     if (rootName.split(":").pop() !== "PackageManifest") {
         throw new Error("extension.vsixmanifest root element must be PackageManifest.");
+    }
+    if (metadataCount !== 1) {
+        throw new Error(`extension.vsixmanifest must contain exactly one direct Metadata element; found ${metadataCount}.`);
     }
     if (identities.length !== 1) {
         throw new Error(`extension.vsixmanifest must contain exactly one Identity element; found ${identities.length}.`);
@@ -849,15 +882,17 @@ async function smokePackagedRuntime(archive, entries) {
     const extractionRoot = await mkdtemp(join(tmpdir(), "leetnotion-vsix-smoke-"));
     try {
         for (const entry of entries) {
-            if (entry.name.endsWith("/")) {
-                continue;
-            }
             const target = resolve(extractionRoot, ...entry.name.split("/"));
             if (!target.startsWith(`${resolve(extractionRoot)}${process.platform === "win32" ? "\\" : "/"}`)) {
                 throw new Error(`Refusing to extract outside smoke root: ${entry.name}`);
             }
+            const content = readZipEntry(archive, entry);
+            if (entry.name.endsWith("/")) {
+                await mkdir(target, { recursive: true });
+                continue;
+            }
             await mkdir(dirname(target), { recursive: true });
-            await writeFile(target, readZipEntry(archive, entry));
+            await writeFile(target, content);
         }
         const smokeCode = [
             "const path = require('path');",

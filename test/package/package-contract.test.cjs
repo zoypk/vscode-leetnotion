@@ -155,6 +155,12 @@ test("VSIX contract rejects missing, forbidden, oversized, and over-count artifa
         () => validateVsixEntries([{ name: "extension/app.js.map", uncompressedSize: 1 }], { requiredPaths: [], vsixSize: 1 }),
         /source map is forbidden/,
     );
+    for (const gitMetadataPath of ["extension/.git", "extension/.git/config"]) {
+        assert.throws(
+            () => validateVsixEntries([{ name: gitMetadataPath, uncompressedSize: 1 }], { requiredPaths: [], vsixSize: 1 }),
+            /forbidden packaged path/,
+        );
+    }
     assert.throws(
         () => validateVsixEntries([{ name: "extension/large.bin", uncompressedSize: 50 * 1024 * 1024 + 1 }], { requiredPaths: [], vsixSize: 1 }),
         /unpacked size/,
@@ -250,6 +256,7 @@ test("derives the non-optional runtime closure and requires every package main a
             name: "vsc",
             version: "1.0.0",
             dependencies: { underscore: "1.0.0" },
+            optionalDependencies: { jsdom: "1.0.0" },
             main: "lib/index",
             bin: { vsc: "bin/vsc" },
         },
@@ -285,6 +292,12 @@ test("derives the non-optional runtime closure and requires every package main a
         () => validateProductionDependencies(lockfile, options),
         /declares unlocked production dependency rogue|does not resolve rogue/,
     );
+    delete manifests["node_modules/vsc"].dependencies.rogue;
+    manifests["node_modules/vsc"].optionalDependencies.underscore = "1.0.0";
+    assert.throws(
+        () => validateProductionDependencies(lockfile, options),
+        /optionalDependencies.*underscore|required dependencies.*underscore|does not reach locked production package/,
+    );
 });
 
 test("requires repository, packaged manifest, VSIX identity, and filename agreement", async () => {
@@ -314,9 +327,23 @@ test("requires repository, packaged manifest, VSIX identity, and filename agreem
     assert.throws(
         () => validateManifestAgreement({
             ...valid,
-            vsixManifestText: `<PackageManifest><![CDATA[${vsixManifestText}]]></PackageManifest>`,
+            vsixManifestText: `<PackageManifest><Metadata><![CDATA[${vsixManifestText}]]></Metadata></PackageManifest>`,
         }),
         /exactly one Identity element; found 0/,
+    );
+    assert.throws(
+        () => validateManifestAgreement({
+            ...valid,
+            vsixManifestText: `<PackageManifest><Foo><Metadata>${vsixManifestText}</Metadata></Foo></PackageManifest>`,
+        }),
+        /Metadata must be a direct child of PackageManifest/,
+    );
+    assert.throws(
+        () => validateManifestAgreement({
+            ...valid,
+            vsixManifestText: `${vsixManifestText.replace("</PackageManifest>", "<Metadata /></PackageManifest>")}`,
+        }),
+        /exactly one direct Metadata element; found 2/,
     );
 });
 
@@ -390,7 +417,7 @@ test("requires the packaged NeetCode index bytes and content set to match exactl
 
 test("vscodeignore excludes first-party source and build inputs but keeps runtime data and output", () => {
     const ignored = fs.readFileSync(path.join(repositoryRoot, ".vscodeignore"), "utf8").split(/\r?\n/);
-    for (const requiredIgnore of ["src/**", "scripts/**", "test/**", "docs", ".github/**", "**/*.map", "package-lock.json", "tsconfig.json", "esbuild.js"]) {
+    for (const requiredIgnore of ["src/**", "scripts/**", "test/**", "docs", ".git", ".git/**", ".github/**", "**/*.map", "package-lock.json", "tsconfig.json", "esbuild.js"]) {
         assert.ok(ignored.includes(requiredIgnore), `${requiredIgnore} must be ignored`);
     }
     for (const runtimePath of ["out/**", "data/**", "public/**", "resources/**", "node_modules/**"]) {
