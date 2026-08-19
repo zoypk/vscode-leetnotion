@@ -10,6 +10,7 @@ import { areArraysEqual, getNotionLang, splitTextIntoChunks } from "./utils/tool
 import { leetCodeSubmissionProvider } from "./webview/leetCodeSubmissionProvider";
 import { LeetCodeToNotionConverter } from "./modules/leetnotion/converter";
 import Bottleneck from "bottleneck";
+import type { ValidatedSubmission } from "./submissions/types";
 import { reviewService } from "./reviews/reviewService";
 import { reviewTreeDataProvider } from "./reviews/reviewTreeDataProvider";
 import { selectWorkspaceFolder } from "./utils/workspaceUtils";
@@ -89,14 +90,11 @@ class LeetnotionClient {
         return mapping[normalizedQuestionNumber];
     }
 
-    public async submitSolution(questionNumber: string) {
+    public async submitSolution(validatedSubmission: ValidatedSubmission) {
         if (!hasNotionIntegrationEnabled()) return;
         try {
+            const { questionNumber, submission } = validatedSubmission;
             const updateResponse = await this.updateStatusOfQuestion(questionNumber);
-            const submission = await leetcodeClient.getRecentSubmission();
-            if (!submission) {
-                throw new Error(`no-recent-submission`);
-            }
             const submissionPageId = await this.createSubmissionPage(questionNumber, submission);
             this.updatePanel(questionNumber, updateResponse.id, submissionPageId, this.getSelectTags(updateResponse.properties.Tags.multi_select.map(tag => tag.name)));
             await this.addCodeToPage(submissionPageId, submission.lang, submission.code);

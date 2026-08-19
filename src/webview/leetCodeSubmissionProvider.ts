@@ -13,6 +13,7 @@ import { ILeetCodeWebviewOption, LeetCodeWebview } from "./LeetCodeWebview";
 import { markdownEngine } from "./markdownEngine";
 import { leetnotionEngine } from "./leetnotionEngine";
 import { leetnotionClient } from "../leetnotionClient";
+import type { ValidatedSubmission } from "../submissions/types";
 
 type SubmissionFlagOption = {
     value: string;
@@ -39,10 +40,16 @@ class LeetCodeSubmissionProvider extends LeetCodeWebview {
     private submissionContext?: SubmissionResultContext;
     private submissionDetail?: SubmissionDetailView;
 
-    public show(resultString: string, submissionContext?: SubmissionResultContext, submissionDetail?: SubmissionDetailView): void {
+    public show(resultString: string, validatedSubmission?: ValidatedSubmission): void {
         this.result = this.parseResult(resultString);
-        this.submissionContext = submissionContext;
-        this.submissionDetail = submissionDetail;
+        this.submissionContext = validatedSubmission ? {
+            questionNumber: validatedSubmission.questionNumber,
+            submissionId: validatedSubmission.submission.id,
+            title: validatedSubmission.submission.title,
+            notes: validatedSubmission.detail.notes,
+            flagType: validatedSubmission.detail.flag_type,
+        } : undefined;
+        this.submissionDetail = validatedSubmission?.detail;
         this.showWebviewInternal();
         this.showKeybindingsHint();
     }

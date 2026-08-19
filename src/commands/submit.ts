@@ -3,17 +3,17 @@
 
 import * as vscode from "vscode";
 import { leetCodeChannel } from "../leetCodeChannel";
-import { leetcodeClient } from "../leetCodeClient";
 import { leetCodeTreeDataProvider } from "../explorer/LeetCodeTreeDataProvider";
 import { leetCodeExecutor } from "../leetCodeExecutor";
 import { leetCodeManager } from "../leetCodeManager";
-import { SubmissionDetailView, SubmissionResultContext } from "../types";
 import { DialogType, promptForOpenOutputChannel, promptForSignIn } from "../utils/uiUtils";
 import { getActiveFilePath } from "../utils/workspaceUtils";
 import { leetCodeSubmissionProvider } from "../webview/leetCodeSubmissionProvider";
 import { hasNotionIntegrationEnabled } from "../utils/settingUtils";
 import { leetnotionClient } from "../leetnotionClient";
-import { getQuestionNumber } from "../utils/toolUtils";
+import { leetcodeClient } from "../leetCodeClient";
+import { extractSubmissionSource, readSubmissionSource } from "../submissions/submissionCorrelation";
+import { runSubmitWorkflow } from "../submissions/submitWorkflow";
 
 export async function submitSolution(uri?: vscode.Uri): Promise<void> {
     if (!leetCodeManager.getUser()) {
@@ -25,45 +25,24 @@ export async function submitSolution(uri?: vscode.Uri): Promise<void> {
     if (!filePath) {
         return;
     }
+    const sourceText = vscode.window.activeTextEditor?.document.getText();
 
     try {
-        const result: string = await leetCodeExecutor.submitSolution(filePath);
-        const questionNumber = getQuestionNumber(filePath);
-        const submissionData = questionNumber ? await resolveSubmissionResultContext(questionNumber) : undefined;
-
-        leetCodeSubmissionProvider.show(result, submissionData?.context, submissionData?.detail);
-        if(hasNotionIntegrationEnabled() && result.indexOf('Accepted') >= 0) {
-            if(!questionNumber) return;
-            await leetnotionClient.submitSolution(questionNumber);
-        }
+        await runSubmitWorkflow(filePath, {
+            readSource: sourceText
+                ? async (path) => extractSubmissionSource(path, sourceText)
+                : readSubmissionSource,
+            captureBaseline: (questionNumber) => leetcodeClient.captureSubmissionBaseline(questionNumber),
+            submit: (path) => leetCodeExecutor.submitSolution(path),
+            correlate: (request) => leetcodeClient.waitForValidatedSubmission(request),
+            showResult: (result, submission) => leetCodeSubmissionProvider.show(result, submission),
+            shouldSyncToNotion: hasNotionIntegrationEnabled,
+            syncToNotion: (submission) => leetnotionClient.submitSolution(submission),
+            refreshExplorer: () => leetCodeTreeDataProvider.refresh(),
+            reportCorrelationFailure: (error) => leetCodeChannel.appendLine(`Failed to correlate the submitted solution: ${error}`),
+        });
     } catch (error) {
+        leetCodeChannel.appendLine(`Failed to submit the solution: ${error}`);
         await promptForOpenOutputChannel("Failed to submit the solution. Please open the output channel for details.", DialogType.error);
-        return;
-    }
-
-    leetCodeTreeDataProvider.refresh();
-}
-
-async function resolveSubmissionResultContext(questionNumber: string): Promise<{ context: SubmissionResultContext; detail: SubmissionDetailView } | undefined> {
-    try {
-        const submission = await leetcodeClient.getRecentSubmission();
-        if (!submission) {
-            return undefined;
-        }
-
-        const detail = await leetcodeClient.getSubmissionDetail(submission.id);
-        return {
-            context: {
-                questionNumber,
-                submissionId: submission.id,
-                title: submission.title,
-                notes: detail.notes,
-                flagType: detail.flag_type,
-            },
-            detail,
-        };
-    } catch (error) {
-        leetCodeChannel.appendLine(`Failed to load submission note context: ${error}`);
-        return undefined;
     }
 }
