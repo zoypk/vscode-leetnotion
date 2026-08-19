@@ -6,10 +6,10 @@ This fork keeps the bundled company lists, NeetCode metadata, and inline learnin
 
 ## Install or upgrade
 
-Download `vscode-leetnotion-1.6.0.vsix` from the matching `v1.6.0` GitHub release, then install it from VS Code with **Extensions: Install from VSIX...**. You can also use the command line:
+Download `vscode-leetnotion-<version>.vsix` from the matching `v<version>` GitHub release, then install it from VS Code with **Extensions: Install from VSIX...**. You can also use the command line:
 
 ```powershell
-code --install-extension .\vscode-leetnotion-1.6.0.vsix --force
+code --install-extension ".\vscode-leetnotion-<version>.vsix" --force
 ```
 
 Reload VS Code after installation. The `--force` flag replaces an older installed build with the selected VSIX.

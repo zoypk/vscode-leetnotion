@@ -15,24 +15,15 @@ test("manifest preserves identity and publishes the fork metadata", async () => 
 
     assert.equal(manifest.name, "vscode-leetnotion");
     assert.equal(manifest.publisher, "Leetnotion");
-    assert.equal(manifest.version, "1.6.0");
+    assert.match(manifest.version, /^\d+\.\d+\.\d+$/);
     assert.deepEqual(manifest.repository, {
         type: "git",
         url: "https://github.com/zoypk/vscode-leetnotion",
     });
     assert.equal(manifest.homepage, "https://github.com/zoypk/vscode-leetnotion#readme");
     assert.equal(manifest.engines.vscode, "^1.74.0");
-    const contributionEvents = [
-        ...manifest.contributes.commands.map((command) => `onCommand:${command.command}`),
-        ...Object.values(manifest.contributes.views).flat().map((view) => `onView:${view.id}`),
-    ];
-    assert.deepEqual(
-        [...manifest.activationEvents].sort(),
-        [...contributionEvents, "onUri"].sort(),
-        "activation must be derived from every contributed command/view plus the registered URI handler",
-    );
-    assert.equal(new Set(manifest.activationEvents).size, manifest.activationEvents.length);
-    assert.equal(manifest.activationEvents.includes("*"), false);
+    assert.deepEqual(manifest.activationEvents, ["onUri"],
+        "VS Code 1.74 derives command/view activation; only the independent URI handler is explicit");
 });
 
 test("release identity is consistent across manifest, lockfile, and documented artifact", async () => {
@@ -41,14 +32,13 @@ test("release identity is consistent across manifest, lockfile, and documented a
         readJson("package-lock.json"),
         readFile(path.join(repositoryRoot, "README.md"), "utf8"),
     ]);
-    const expectedTag = `v${manifest.version}`;
-    const expectedArtifact = `${manifest.name}-${manifest.version}.vsix`;
-
     assert.equal(lockfile.version, manifest.version);
     assert.equal(lockfile.packages[""].version, manifest.version);
     assert.equal(lockfile.packages[""].engines.vscode, manifest.engines.vscode);
-    assert.match(readme, new RegExp(expectedTag.replaceAll(".", "\\.")));
-    assert.match(readme, new RegExp(expectedArtifact.replaceAll(".", "\\.")));
+    assert.match(readme, /v<version>/);
+    assert.match(readme, new RegExp(`${manifest.name}-<version>\\.vsix`));
+    assert.equal(readme.includes(manifest.version), false,
+        "installation documentation must not go stale on the next release");
 });
 
 test("built VSIX filename, manifests, installed identity, and release tag agree", async (context) => {
