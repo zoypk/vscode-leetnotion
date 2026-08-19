@@ -2,16 +2,15 @@ name: Release VSIX
 
 on:
   push:
-    branches:
-      - main
-  workflow_dispatch:
-
-concurrency:
-  group: release-${{ github.ref }}
-  cancel-in-progress: true
+    tags:
+      - "v*.*.*"
 
 permissions:
   contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
   release:
@@ -19,7 +18,7 @@ jobs:
     timeout-minutes: 30
 
     steps:
-      - name: Checkout repository
+      - name: Checkout tagged revision
         uses: actions/checkout@v4
 
       - name: Use Node.js
@@ -28,17 +27,57 @@ jobs:
           node-version: 22.x
           cache: npm
 
-      - name: Install dependencies
+      - name: Install locked dependencies
         run: npm ci
 
-      - name: Package extension
-        run: npx --yes @vscode/vsce package --out "${{ runner.temp }}/vscode-leetnotion-${{ github.sha }}.vsix"
+      - name: Validate release identity
+        id: contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          package_version="$(node -p "require('./package.json').version")"
+          expected_tag="v${package_version}"
+          if [[ "${GITHUB_REF_NAME}" != "${expected_tag}" ]]; then
+            echo "Tag ${GITHUB_REF_NAME} does not match package version ${package_version}." >&2
+            exit 1
+          fi
+          artifact="vscode-leetnotion-${package_version}.vsix"
+          echo "artifact=${artifact}" >> "${GITHUB_OUTPUT}"
 
-      - name: Publish GitHub Release
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Test
+        run: npm test
+
+      - name: Validate bundled data
+        run: npm run validate:data
+
+      - name: Compile
+        run: npm run compile
+
+      - name: Package extension once
+        run: npm run package
+
+      - name: Revalidate exact release artifact
+        run: npm run verify:vsix -- "${{ steps.contract.outputs.artifact }}"
+
+      - name: Upload validated workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: vscode-leetnotion-${{ github.ref_name }}
+          path: ${{ steps.contract.outputs.artifact }}
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publish GitHub release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: "main-${{ github.sha }}"
-          name: "Build ${{ github.run_number }}"
-          body: "Automated build from ${{ github.ref_name }} commit ${{ github.sha }}."
-          files: "${{ runner.temp }}/vscode-leetnotion-${{ github.sha }}.vsix"
-          prerelease: true
+          name: Leetnotion ${{ github.ref_name }}
+          files: ${{ steps.contract.outputs.artifact }}
+          fail_on_unmatched_files: true
+          generate_release_notes: true
+          prerelease: false
