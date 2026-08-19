@@ -3,6 +3,10 @@
     margin-top: 16px;
 }
 
+body {
+    tab-size: 4;
+}
+
 #submission-result {
     display: flex;
     flex-direction: column;
@@ -79,8 +83,8 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 20px;
-    height: 20px;
+    width: 32px;
+    height: 32px;
     padding: 3px;
     border: 1px solid var(--submission-flag-accent, var(--vscode-panel-border));
     border-radius: 999px;
@@ -121,12 +125,16 @@
 
 #review-container {
     display: flex;
+    min-width: 0;
     align-items: flex-start;
     margin: 10px 0;
+    padding: 12px;
+    border: 1px solid var(--vscode-panel-border);
     font-size: 1.2rem;
 }
-#review-label {
-    margin: 0 15px 0 0;
+
+#review-container legend {
+    padding: 0 6px;
 }
 #review-inputs {
     display: flex;
@@ -150,6 +158,29 @@
     font-family: Arial, sans-serif;
     font-size: 1.2rem;
 }
+
+#review-clear-button,
+#setPropertiesButton {
+    min-height: 32px;
+    border: 1px solid var(--vscode-button-border, transparent);
+    border-radius: 4px;
+    padding: 6px 12px;
+    background: var(--vscode-button-background);
+    color: var(--vscode-button-foreground);
+    cursor: pointer;
+}
+
+#review-clear-button {
+    align-self: flex-start;
+    background: var(--vscode-button-secondaryBackground, var(--vscode-button-background));
+    color: var(--vscode-button-secondaryForeground, var(--vscode-button-foreground));
+}
+
+#submission-flag-disclosure summary {
+    cursor: pointer;
+    font-size: 1.05rem;
+    margin-bottom: 8px;
+}
 #review-rating-buttons {
     display: flex;
     flex-wrap: wrap;
@@ -172,6 +203,17 @@
     border-color: var(--vscode-focusBorder);
     background-color: var(--vscode-button-background);
     color: var(--vscode-button-foreground);
+}
+
+.review-rating-button:focus-visible,
+#review-clear-button:focus-visible,
+#review-date-input:focus-visible,
+#setPropertiesButton:focus-visible,
+#notes-input:focus-visible,
+#optimal-checkbox-input:focus-visible,
+#submission-flag-disclosure summary:focus-visible {
+    outline: 2px solid var(--vscode-focusBorder);
+    outline-offset: 2px;
 }
 #review-hint {
     margin: 0;

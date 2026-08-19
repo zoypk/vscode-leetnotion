@@ -9,8 +9,13 @@ import { leetcodeClient } from "./leetCodeClient";
 import { leetCodeManager } from "./leetCodeManager";
 import { UserStatus } from "./shared";
 import { LeetcodeSubmission } from "./types";
-import { PageObjectResponse, QueryRichText } from '@leetnotion/notion-api';
+import { PageObjectResponse } from '@leetnotion/notion-api';
 import { templateUpdateSession } from './modules/leetnotion/session';
+import {
+    collectExistingSubmissionIds,
+    formatBulkImportResult,
+    parseSubmissionRows,
+} from "./submissions/bulkImport";
 
 class LeetnotionManager {
     public async enableNotionIntegration(): Promise<void> {
@@ -102,9 +107,15 @@ class LeetnotionManager {
                 return;
             }
             await leetcodeClient.ensureTitleSlugQuestionNumberMapping();
-            const submissions = await this.getLeetcodeSubmissions();
+            const source = await this.getLeetcodeSubmissions();
+            const submissions = source.submissions;
             if (submissions.length === 0) {
-                promptForOpenOutputChannel(`No submissions found to upload.`, DialogType.completed);
+                promptForOpenOutputChannel(
+                    source.malformed > 0
+                        ? `No valid submissions found. ${source.malformed} malformed rows were skipped.`
+                        : `No submissions found to upload.`,
+                    source.malformed > 0 ? DialogType.warning : DialogType.completed,
+                );
                 return;
             }
             let notionSubmissionPages: PageObjectResponse[] = [];
@@ -124,46 +135,27 @@ class LeetnotionManager {
                     });
                 }
             );
-            const existingSubmissions = new Set<string>();
-            notionSubmissionPages.forEach(submissionPage => {
-                const submissionIdProperty = submissionPage.properties['Submission ID'] as QueryRichText;
-                const submissionId = submissionIdProperty.rich_text[0].plain_text;
-                if (!submissionId) {
-                    return;
-                }
-                existingSubmissions.add(submissionId);
-            });
-            const newSubmissions = submissions.filter(submission => !existingSubmissions.has(submission.id.toString()));
-            if (newSubmissions.length === 0) {
-                promptForOpenOutputChannel(`No new submissions to add.`, DialogType.completed);
-                return;
-            }
-            await window.withProgress(
+            const existing = collectExistingSubmissionIds(notionSubmissionPages);
+            const result = await window.withProgress(
                 {
                     location: ProgressLocation.Notification,
                     cancellable: true,
                     title: 'Adding submissions to notion',
                 },
                 async (progress, cancellationToken) => {
-                    let count = 0;
-                    await leetnotionClient.addSubmissions(newSubmissions, () => {
-                        count += 1;
+                    return leetnotionClient.addSubmissions(submissions, existing.ids, source.malformed + existing.malformed, (counts) => {
                         progress.report({
-                            message: `(${count}/${newSubmissions.length}) added`,
-                            increment: (1 / newSubmissions.length) * 100,
-                        })
-                        if(cancellationToken.isCancellationRequested) {
-                            throw new Error(`adding-submissions-cancelled`);
-                        }
-                    });
+                            message: `(${counts.added}/${submissions.length}) added`,
+                            increment: (1 / submissions.length) * 100,
+                        });
+                    }, () => cancellationToken.isCancellationRequested);
                 }
             );
-            promptForOpenOutputChannel(`Added ${newSubmissions.length} submissions to notion.`, DialogType.completed);
+            promptForOpenOutputChannel(
+                formatBulkImportResult(result),
+                result.cancelled || result.malformed > 0 || result.missingQuestion > 0 ? DialogType.warning : DialogType.completed,
+            );
         } catch (error) {
-            if(error.message.includes("adding-submissions-cancelled")) {
-                promptForOpenOutputChannel(`Adding submissions cancelled`, DialogType.completed);
-                return;
-            }
             leetCodeChannel.appendLine(`Failed to upload submissions: ${error}`);
             promptForOpenOutputChannel(`Failed to upload submissions`, DialogType.error);
         }
@@ -172,20 +164,21 @@ class LeetnotionManager {
     public async getLeetcodeSubmissions() {
         if (leetCodeManager.getStatus() === UserStatus.SignedIn) {
             try {
-                return await window.withProgress(
+                const rows = await window.withProgress(
                     {
                         location: ProgressLocation.Notification,
                         cancellable: false,
                         title: "Fetching submissions from LeetCode...",
                     },
                     async (progress) => {
-                        return await leetcodeClient.getAllSubmissions((submissionCount) => {
+                        return leetcodeClient.getAllSubmissions((submissionCount) => {
                             progress.report({
                                 message: `${submissionCount} fetched`,
                             });
                         });
                     }
                 );
+                return parseSubmissionRows(rows);
             } catch (error) {
                 leetCodeChannel.appendLine(`Failed to fetch submissions from LeetCode API, falling back to file import: ${error}`);
                 window.showWarningMessage("Failed to fetch submissions from LeetCode. Falling back to submissions.json import.");
@@ -210,8 +203,7 @@ class LeetnotionManager {
         };
         const submissionsFile: Uri[] | undefined = await window.showOpenDialog(options);
         if (submissionsFile && submissionsFile.length) {
-            const submissions = fse.readJSONSync(submissionsFile[0].fsPath) as LeetcodeSubmission[];
-            return submissions;
+            return parseSubmissionRows(fse.readJSONSync(submissionsFile[0].fsPath) as unknown);
         }
         throw new Error(`Error at getting submission from submissions.json`);
     }

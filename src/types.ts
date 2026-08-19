@@ -26,7 +26,6 @@ import type {
     MutationUrl,
     PrimaryColor,
 } from '@leetnotion/notion-api';
-import { ReviewRating } from "./reviews/types";
 import { ALL_TIME, LAST_30_DAYS, LAST_3_MONTHS, LAST_6_MONTHS, MORE_THAN_6_MONTHS, ProblemRating } from './shared';
 
 export interface LeetcodeSubmission {
@@ -222,20 +221,6 @@ export type WebviewMessage = {
     questionPageId: string;
     submissionPageId: string;
     tags: string;
-}
-
-export type SetPropertiesMessage = {
-    command: string;
-    questionNumber: string;
-    questionPageId: string;
-    submissionPageId: string;
-    notes: string;
-    flagType: string;
-    reviewDate: string;
-    reviewRating?: ReviewRating;
-    isOptimal: boolean;
-    initialTags: string[];
-    finalTags: string[]
 }
 
 export type SelectTags = {

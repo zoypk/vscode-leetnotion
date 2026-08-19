@@ -1,12 +1,12 @@
 import AdvancedNotionClient, { PageObjectResponse, QueryDatabaseResponse, UpdatePageProperties } from "@leetnotion/notion-api";
 import { globalState } from "./globalState";
-import { LeetcodeProblem, LeetcodeSubmission, LeetnotionSubmission, Mapping, MultiSelectDatabasePropertyConfigResponse, ProblemPageResponse, QueryProblemPageProperties, SelectTags, SetPropertiesMessage } from "./types";
+import { LeetcodeProblem, LeetcodeSubmission, LeetnotionSubmission, Mapping, MultiSelectDatabasePropertyConfigResponse, ProblemPageResponse, QueryProblemPageProperties, SelectTags } from "./types";
 import { leetCodeChannel } from "./leetCodeChannel";
 import { hasNotionIntegrationEnabled, shouldAddCodeToSubmissionPage, shouldUpdateStatusWhenUploadingSubmissions } from "./utils/settingUtils";
 import { leetcodeClient } from "./leetCodeClient";
 import * as _ from 'lodash'
 import { DialogType, promptForOpenOutputChannel } from "./utils/uiUtils";
-import { areArraysEqual, getNotionLang, splitTextIntoChunks } from "./utils/toolUtils";
+import { getNotionLang, splitTextIntoChunks } from "./utils/toolUtils";
 import { leetCodeSubmissionProvider } from "./webview/leetCodeSubmissionProvider";
 import { LeetCodeToNotionConverter } from "./modules/leetnotion/converter";
 import Bottleneck from "bottleneck";
@@ -14,6 +14,14 @@ import type { ValidatedSubmission } from "./submissions/types";
 import { reviewService } from "./reviews/reviewService";
 import { reviewTreeDataProvider } from "./reviews/reviewTreeDataProvider";
 import { selectWorkspaceFolder } from "./utils/workspaceUtils";
+import type { SubmissionPropertiesMessage } from "./webview/submissionMessages";
+import {
+    applyReviewEdit,
+    AuthoritativeSubmissionState,
+    buildNotionPropertyUpdates,
+    ReviewSchedulePort,
+} from "./notion/submissionProperties";
+import { BulkImportCounts, runBulkImport } from "./submissions/bulkImport";
 
 const QuestionsDatabaseKey = "Questions Database";
 const SubmissionsDatabaseKey = "Submissions Database";
@@ -96,7 +104,14 @@ class LeetnotionClient {
             const { questionNumber, submission } = validatedSubmission;
             const updateResponse = await this.updateStatusOfQuestion(questionNumber);
             const submissionPageId = await this.createSubmissionPage(questionNumber, submission);
-            this.updatePanel(questionNumber, updateResponse.id, submissionPageId, this.getSelectTags(updateResponse.properties.Tags.multi_select.map(tag => tag.name)));
+            this.updatePanel(
+                validatedSubmission.submission.id,
+                questionNumber,
+                updateResponse.id,
+                submissionPageId,
+                this.getSelectTags(updateResponse.properties.Tags.multi_select.map(tag => tag.name)),
+                updateResponse.properties["Review Date"]?.date?.start ?? null,
+            );
             await this.addCodeToPage(submissionPageId, submission.lang, submission.code);
         } catch (error) {
             promptForOpenOutputChannel(`Failed to update notion for your submission`, DialogType.error);
@@ -104,13 +119,23 @@ class LeetnotionClient {
         }
     }
 
-    public updatePanel(questionNumber: string, questionPageId: string, submissionPageId: string, tags: SelectTags) {
+    public updatePanel(
+        submissionId: number,
+        questionNumber: string,
+        questionPageId: string,
+        submissionPageId: string,
+        tags: SelectTags,
+        reviewDate: string | null,
+    ) {
         try {
-            const panel = leetCodeSubmissionProvider.getPanel();
-            if (!panel) {
-                throw new Error('panel-not-available');
-            }
-            panel.webview.postMessage({ command: 'submission-done', questionNumber, questionPageId, submissionPageId, tags })
+            leetCodeSubmissionProvider.installNotionContext({
+                submissionId,
+                questionNumber,
+                questionPageId,
+                submissionPageId,
+                tags,
+                reviewDate,
+            });
         } catch (error) {
             throw new Error(`Failed to update submission panel: ${error}`);
         }
@@ -191,92 +216,92 @@ class LeetnotionClient {
         }
     }
 
-    public async setProperties(message: SetPropertiesMessage): Promise<boolean> {
-        if (message.command !== "set-properties") return false;
-        try {
-            const reviewDate = await this.syncReviewSchedule(message);
-            const hasReviewDate = !!reviewDate;
-            const hasNotionProperties = Boolean(
-                hasNotionIntegrationEnabled() &&
-                this.isSignedIn &&
-                this.notion &&
-                message.questionPageId &&
-                message.submissionPageId,
-            );
-            const tagsChanged = hasNotionProperties && !areArraysEqual(message.initialTags, message.finalTags);
+    public async setProperties(
+        message: SubmissionPropertiesMessage,
+        target: {
+            questionNumber: string;
+            questionPageId?: string;
+            submissionPageId?: string;
+        },
+        currentState: AuthoritativeSubmissionState,
+    ): Promise<AuthoritativeSubmissionState> {
+        const reviewDate = message.review.kind === "unchanged"
+            ? currentState.reviewDate
+            : await this.syncReviewSchedule(target.questionNumber, message.review, currentState.reviewDate);
+        const savedState: AuthoritativeSubmissionState = {
+            notes: message.notes,
+            flagType: message.flagType,
+            isOptimal: message.isOptimal,
+            tags: [...message.tags],
+            reviewDate,
+        };
 
-            if (hasNotionProperties) {
-                const notionClient = this.notion;
-                if (!notionClient) {
-                    throw new Error("notion-integration-not-enabled");
-                }
-
-                const questionPageProperties: UpdatePageProperties = {};
-                if (hasReviewDate) {
-                    questionPageProperties['Review Date'] = {
-                        date: {
-                            start: reviewDate
-                        }
-                    };
-                    questionPageProperties['Reviewed'] = {
-                        checkbox: false
-                    };
-                }
-                if (tagsChanged) {
-                    questionPageProperties['Tags'] = {
-                        multi_select: message.finalTags.map(name => ({ name }))
-                    };
-                }
-
-                const submissionPageProperties: UpdatePageProperties = {};
-                submissionPageProperties['Tags'] = {
-                    multi_select: message.isOptimal ? [{ name: 'Optimal' }] : []
-                };
-
-                if (hasReviewDate || tagsChanged) {
-                    await notionClient.pages.update({
-                        page_id: message.questionPageId,
-                        properties: questionPageProperties
-                    })
-                }
-                if (message.isOptimal) {
-                    await notionClient.pages.update({
-                        page_id: message.submissionPageId,
-                        properties: submissionPageProperties
-                    })
-                }
-
-                let prevTags = globalState.getUserQuestionTags();
-                if (!prevTags) prevTags = [];
-                const allTags = Array.from(new Set([...prevTags, ...message.finalTags]));
-                await globalState.setUserQuestionTags(allTags);
+        const hasNotionTarget = Boolean(target.questionPageId && target.submissionPageId);
+        if (hasNotionTarget) {
+            if (!hasNotionIntegrationEnabled() || !this.isSignedIn || !this.notion) {
+                throw new Error("notion-integration-not-enabled");
             }
-            return true;
-        } catch (error) {
-            leetCodeChannel.appendLine(`Failed to set properties: ${error}`);
-            promptForOpenOutputChannel(`Failed to set properties`, DialogType.error);
-            return false;
+            const updates = buildNotionPropertyUpdates(savedState);
+            await this.notion.pages.update({
+                page_id: target.questionPageId!,
+                properties: updates.question,
+            });
+            await this.notion.pages.update({
+                page_id: target.submissionPageId!,
+                properties: updates.submission,
+            });
+
+            const previousTags = globalState.getUserQuestionTags() ?? [];
+            globalState.setUserQuestionTags(Array.from(new Set([...previousTags, ...savedState.tags])));
         }
+        return savedState;
     }
 
-    private async syncReviewSchedule(message: SetPropertiesMessage): Promise<string | undefined> {
-        if (message.reviewRating) {
-            await this.ensureReviewWorkspaceConfigured();
-            await reviewService.addProblem(message.questionNumber);
-            const dueAt = await reviewService.applyRating(message.questionNumber, message.reviewRating);
-            await reviewTreeDataProvider.refresh();
-            return this.toDateInputValue(new Date(dueAt));
-        }
+    private async syncReviewSchedule(
+        questionNumber: string,
+        edit: Exclude<SubmissionPropertiesMessage["review"], { kind: "unchanged" }>,
+        currentReviewDate: string | null,
+    ): Promise<string | null> {
+        await this.ensureReviewWorkspaceConfigured();
+        return applyReviewEdit(questionNumber, edit, this.getReviewSchedulePort(), currentReviewDate);
+    }
 
-        if (message.reviewDate && message.reviewDate.length > 0) {
-            await this.ensureReviewWorkspaceConfigured();
-            await reviewService.addProblem(message.questionNumber);
-            await reviewService.snoozeReview(message.questionNumber, this.parseDateInput(message.reviewDate));
-            await reviewTreeDataProvider.refresh();
-            return message.reviewDate;
-        }
-
-        return undefined;
+    private getReviewSchedulePort(): ReviewSchedulePort {
+        // Integration seam: state-core supplies atomic addAndApplyRating,
+        // addAndScheduleAt, and removeProblem. The legacy fallbacks keep this
+        // isolated commit runnable before that stream is cherry-picked.
+        const service = reviewService as typeof reviewService & {
+            addAndApplyRating?: (questionNumber: string, rating: "again" | "hard" | "good" | "easy") => Promise<string>;
+            addAndScheduleAt?: (questionNumber: string, date: Date) => Promise<void>;
+            removeProblem?: (questionNumber: string) => Promise<void>;
+        };
+        return {
+            clear: async (questionNumber) => {
+                if (!service.removeProblem) {
+                    throw new Error("review-service-removeProblem-unavailable");
+                }
+                await service.removeProblem(questionNumber);
+            },
+            schedule: async (questionNumber, date) => {
+                const parsedDate = this.parseDateInput(date);
+                if (service.addAndScheduleAt) {
+                    await service.addAndScheduleAt(questionNumber, parsedDate);
+                    return;
+                }
+                await service.addProblem(questionNumber);
+                await service.snoozeReview(questionNumber, parsedDate);
+            },
+            rate: async (questionNumber, rating) => {
+                const dueAt = service.addAndApplyRating
+                    ? await service.addAndApplyRating(questionNumber, rating)
+                    : await (async () => {
+                        await service.addProblem(questionNumber);
+                        return service.applyRating(questionNumber, rating);
+                    })();
+                return this.toDateInputValue(new Date(dueAt));
+            },
+            refresh: async () => reviewTreeDataProvider.refresh(),
+        };
     }
 
     private async ensureReviewWorkspaceConfigured(): Promise<void> {
@@ -512,7 +537,13 @@ class LeetnotionClient {
         }
     }
 
-    public async addSubmissions(submissions: LeetcodeSubmission[], callbackFn: () => void = noop) {
+    public async addSubmissions(
+        submissions: LeetcodeSubmission[],
+        existingIds: Set<string>,
+        malformed: number,
+        callbackFn: (counts: BulkImportCounts) => void = noop,
+        isCancelled: () => boolean = () => false,
+    ): Promise<BulkImportCounts> {
         try {
             if (!this.isSignedIn || !this.notion) {
                 throw new Error(`notion-integration-not-enabled`);
@@ -533,31 +564,30 @@ class LeetnotionClient {
             if (!questionNumberPageIdMapping) {
                 throw new Error(`question-number-page-id-mapping-not-found`);
             }
-            let questionsMissing = false;
-            for (const submission of submissions) {
-                const questionNumber = titleSlugQuestionNumberMapping[submission.title_slug];
-                const pageId = questionNumberPageIdMapping[questionNumber];
-                if (!pageId) {
-                    questionsMissing = true;
-                    continue;
-                }
-                if (shouldUpdateStatusWhenUploadingSubmissions()) {
-                    await this.limiter.schedule(async () => await this.updateStatusOfQuestion(questionNumber))
-                    leetCodeChannel.appendLine(`Updated status of question: ${submission.title_slug}`)
-                }
-                const submissionPageId = await this.limiter.schedule(async () =>  await this.createSubmissionPage(questionNumber, submission));
-                leetCodeChannel.appendLine(`Created submission page for ${submission.id} submission`)
-                if (shouldAddCodeToSubmissionPage()) {
-                    await this.limiter.schedule(async () => await this.addCodeToPage(submissionPageId, submission.lang, submission.code))
-                    leetCodeChannel.appendLine(`Added code to submission page for ${submission.title_slug} question`)
-                }
-                callbackFn();
-            }
-            if(questionsMissing) {
-                promptForOpenOutputChannel(`Few questions are missing in the template. Submissions of other questions are added. Update the template using 'Update leetnotion template' command and run 'Add existing submissions to template' command again to add remaining submissions to template`, DialogType.warning);
-            } else {
-                promptForOpenOutputChannel(`Successfully added submissions to template`, DialogType.completed);
-            }
+            return await runBulkImport({
+                submissions,
+                existingIds,
+                malformed,
+                resolveQuestion: (submission) => {
+                    const questionNumber = titleSlugQuestionNumberMapping[submission.title_slug];
+                    const pageId = questionNumberPageIdMapping[questionNumber];
+                    return questionNumber && pageId ? { questionNumber, pageId } : undefined;
+                },
+                create: async (submission, { questionNumber }) => {
+                    if (shouldUpdateStatusWhenUploadingSubmissions()) {
+                        await this.limiter.schedule(async () => this.updateStatusOfQuestion(questionNumber));
+                        leetCodeChannel.appendLine(`Updated status of question: ${submission.title_slug}`);
+                    }
+                    const submissionPageId = await this.limiter.schedule(async () => this.createSubmissionPage(questionNumber, submission));
+                    leetCodeChannel.appendLine(`Created submission page for ${submission.id} submission`);
+                    if (shouldAddCodeToSubmissionPage()) {
+                        await this.limiter.schedule(async () => this.addCodeToPage(submissionPageId, submission.lang, submission.code));
+                        leetCodeChannel.appendLine(`Added code to submission page for ${submission.title_slug} question`);
+                    }
+                },
+                onCreated: callbackFn,
+                isCancelled,
+            });
         } catch (error) {
             throw new Error(`Failed to add submissions: ${error}`);
         }

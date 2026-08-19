@@ -7,13 +7,17 @@ import { ViewColumn } from "vscode";
 import { leetcodeClient } from "../leetCodeClient";
 import { leetCodeChannel } from "../leetCodeChannel";
 import { globalState } from "../globalState";
-import { SetPropertiesMessage, SubmissionDetailView, SubmissionResultContext } from "../types";
+import { SelectTags, SubmissionDetailView, SubmissionResultContext } from "../types";
 import { DialogType, openKeybindingsEditor, promptForOpenOutputChannel, promptHintMessage } from "../utils/uiUtils";
 import { ILeetCodeWebviewOption, LeetCodeWebview } from "./LeetCodeWebview";
 import { markdownEngine } from "./markdownEngine";
 import { leetnotionEngine } from "./leetnotionEngine";
 import { leetnotionClient } from "../leetnotionClient";
 import type { ValidatedSubmission } from "../submissions/types";
+import { AuthoritativeSubmissionState, buildLeetCodeSubmissionUpdate } from "../notion/submissionProperties";
+import { parseSubmissionPropertiesMessage, SubmissionPropertiesMessage } from "./submissionMessages";
+import { createNonce, createWebviewCsp, escapeAttribute, serializeJsonForHtml } from "./webviewSecurity";
+import { matchesSubmissionContext } from "./submissionFormState";
 
 type SubmissionFlagOption = {
     value: string;
@@ -33,12 +37,23 @@ const SUBMISSION_FLAG_OPTIONS: SubmissionFlagOption[] = [
     { value: "PURPLE", label: "Purple", accent: "#a855f7", background: "rgba(168, 85, 247, 0.16)" },
 ];
 
+interface NotionSubmissionContext {
+    submissionId: number;
+    questionNumber: string;
+    questionPageId: string;
+    submissionPageId: string;
+    tags: SelectTags;
+    reviewDate: string | null;
+}
+
 class LeetCodeSubmissionProvider extends LeetCodeWebview {
 
     protected readonly viewType: string = "leetnotion.submission";
     private result: IResult;
     private submissionContext?: SubmissionResultContext;
     private submissionDetail?: SubmissionDetailView;
+    private notionContext?: NotionSubmissionContext;
+    private savedState?: AuthoritativeSubmissionState;
 
     public show(resultString: string, validatedSubmission?: ValidatedSubmission): void {
         this.result = this.parseResult(resultString);
@@ -50,6 +65,14 @@ class LeetCodeSubmissionProvider extends LeetCodeWebview {
             flagType: validatedSubmission.detail.flag_type,
         } : undefined;
         this.submissionDetail = validatedSubmission?.detail;
+        this.notionContext = undefined;
+        this.savedState = this.submissionContext ? {
+            notes: this.submissionContext.notes,
+            flagType: this.submissionContext.flagType || "WHITE",
+            isOptimal: false,
+            tags: [],
+            reviewDate: null,
+        } : undefined;
         this.showWebviewInternal();
         this.showKeybindingsHint();
     }
@@ -63,51 +86,77 @@ class LeetCodeSubmissionProvider extends LeetCodeWebview {
 
     protected getWebviewContent(): string {
         const webview = this.panel.webview;
-        const styles: string = [markdownEngine.getStyles(webview), this.getStyles()].join("\n");
-        const scripts: string = this.getScripts();
+        const nonce = createNonce();
+        const styles: string = [markdownEngine.getStyles(webview, nonce), this.getStyles()].join("\n");
+        const scripts: string = this.getScripts(nonce);
         const body: string = this.renderResultBody();
-        const submissionFormConfig = this.renderSubmissionFormConfigScript();
         const leetnotionBody: string = leetnotionEngine.render(webview, {
             submissionContext: this.submissionContext,
             flagOptions: this.getOrderedFlagOptions(this.submissionContext?.flagType || "WHITE").map(({ value, label }) => ({ value, label })),
+            configJson: serializeJsonForHtml(this.getPublicFormConfig()),
+            nonce,
         });
 
         return `
             <!DOCTYPE html>
             <html>
             <head>
-                <meta http-equiv="Content-Security-Policy" content="
-                    default-src 'none';
-                    img-src ${webview.cspSource} https: data:;
-                    script-src ${webview.cspSource} 'unsafe-inline' 'unsafe-eval';
-                    style-src ${webview.cspSource} 'unsafe-inline' https://*.vscode-cdn.net https://cdnjs.cloudflare.com;
-                    font-src ${webview.cspSource} https://*.vscode-cdn.net https://cdnjs.cloudflare.com data:;
-                ">
+                <meta http-equiv="Content-Security-Policy" content="${escapeAttribute(createWebviewCsp(webview.cspSource, nonce))}">
                 <meta charset="UTF-8">
                 <meta name="viewport" content="width=device-width, initial-scale=1.0">
                 ${styles}
                 ${scripts}
             </head>
-            <body class="vscode-body 'scrollBeyondLastLine' 'wordWrap' 'showEditorSelection'" style="tab-size:4">
+            <body class="vscode-body scrollBeyondLastLine wordWrap showEditorSelection">
                 ${body}
                 <hr />
-                ${submissionFormConfig}
                 ${leetnotionBody}
             </body>
             </html>
         `;
     }
 
-    protected async onDidReceiveMessage(message: SetPropertiesMessage): Promise<void> {
-        switch (message.command) {
-            case "set-properties": {
-                await this.saveProperties(message);
-                break;
-            }
-            default: {
-                break;
-            }
+    protected async onDidReceiveMessage(value: unknown): Promise<void> {
+        try {
+            await this.saveProperties(parseSubmissionPropertiesMessage(value));
+        } catch (error) {
+            leetCodeChannel.appendLine(`Rejected submission properties message: ${error}`);
+            this.getPanel()?.webview.postMessage({
+                command: "submission-properties-save-failed",
+                error: "The submitted properties were invalid.",
+            });
         }
+    }
+
+    public installNotionContext(context: NotionSubmissionContext): void {
+        if (!matchesSubmissionContext(this.submissionContext, context)) {
+            throw new Error("stale-submission-panel-context");
+        }
+        this.notionContext = {
+            ...context,
+            tags: context.tags.map((tag) => ({ ...tag })),
+        };
+        this.savedState = {
+            ...(this.savedState ?? {
+                notes: this.submissionContext.notes,
+                flagType: this.submissionContext.flagType,
+                isOptimal: false,
+                tags: [],
+                reviewDate: null,
+            }),
+            tags: context.tags.filter(({ selected }) => selected).map(({ text }) => text),
+            reviewDate: context.reviewDate,
+        };
+        const panel = this.getPanel();
+        if (!panel) {
+            throw new Error("panel-not-available");
+        }
+        panel.webview.postMessage({
+            command: "submission-form-state",
+            state: this.savedState,
+            hasNotionProperties: true,
+            tagOptions: context.tags.map(({ text }) => text),
+        });
     }
 
     private async showKeybindingsHint(): Promise<void> {
@@ -259,35 +308,49 @@ class LeetCodeSubmissionProvider extends LeetCodeWebview {
         return this.renderSection("Errors", errors.join("\n\n"));
     }
 
-    private async saveProperties(message: SetPropertiesMessage): Promise<void> {
+    private async saveProperties(message: SubmissionPropertiesMessage): Promise<void> {
         try {
             const hasSubmissionContext = Boolean(this.submissionContext);
-            const hasNotionProperties = Boolean(message.questionPageId && message.submissionPageId);
+            const hasNotionProperties = Boolean(this.notionContext);
+
+            if (!this.savedState || (!this.submissionContext && !this.notionContext)) {
+                throw new Error("submission-properties-context-unavailable");
+            }
 
             if (this.submissionContext) {
-                await leetcodeClient.updateSubmissionNote(this.submissionContext.submissionId, message.notes || "", message.flagType || "WHITE");
+                const leetCodeUpdate = buildLeetCodeSubmissionUpdate({
+                    ...this.savedState,
+                    notes: message.notes,
+                    flagType: message.flagType,
+                });
+                await leetcodeClient.updateSubmissionNote(
+                    this.submissionContext.submissionId,
+                    leetCodeUpdate.notes,
+                    leetCodeUpdate.flagType,
+                );
             }
 
-            if (hasSubmissionContext || hasNotionProperties) {
-                const updated = await leetnotionClient.setProperties(message);
-                if (!updated) {
-                    throw new Error("notion-properties-not-updated");
-                }
-            }
+            const questionNumber = this.submissionContext?.questionNumber ?? this.notionContext!.questionNumber;
+            this.savedState = await leetnotionClient.setProperties(message, {
+                questionNumber,
+                questionPageId: this.notionContext?.questionPageId,
+                submissionPageId: this.notionContext?.submissionPageId,
+            }, this.savedState);
 
             if (this.submissionContext) {
                 this.submissionContext = {
                     ...this.submissionContext,
-                    notes: message.notes || "",
-                    flagType: message.flagType || "WHITE",
+                    notes: this.savedState.notes,
+                    flagType: this.savedState.flagType,
                 };
             }
 
             this.getPanel()?.webview.postMessage({
                 command: "submission-properties-saved",
                 message: this.getSuccessMessage(hasSubmissionContext, hasNotionProperties),
-                notes: this.submissionContext?.notes,
-                flagType: this.submissionContext?.flagType,
+                state: this.savedState,
+                hasNotionProperties,
+                tagOptions: this.getTagOptions(),
             });
         } catch (error) {
             leetCodeChannel.appendLine(`Failed to save submission properties: ${error}`);
@@ -334,16 +397,27 @@ class LeetCodeSubmissionProvider extends LeetCodeWebview {
         }, {});
     }
 
-    private renderSubmissionFormConfigScript(): string {
-        return `
-            <script>
-                window.__LEETNOTION_SUBMISSION_CONTEXT__ = ${JSON.stringify(this.submissionContext ?? null)};
-                window.__LEETNOTION_SUBMISSION_FLAG_STYLES__ = ${JSON.stringify(this.getSubmissionFlagStyles())};
-            </script>
-        `;
+    private getPublicFormConfig(): object {
+        return {
+            state: this.savedState ?? {
+                notes: "",
+                flagType: "WHITE",
+                isOptimal: false,
+                tags: [],
+                reviewDate: null,
+            },
+            hasLeetCodeProperties: Boolean(this.submissionContext),
+            hasNotionProperties: Boolean(this.notionContext),
+            tagOptions: this.getTagOptions(),
+            flagStyles: this.getSubmissionFlagStyles(),
+        };
     }
 
-    private getScripts() {
+    private getTagOptions(): string[] {
+        return this.notionContext?.tags.map(({ text }) => text) ?? [];
+    }
+
+    private getScripts(nonce: string) {
         let scripts: vscode.Uri[] = [];
         try {
             const scriptPaths = ["jquery.min.js", "select2.min.js"];
@@ -361,7 +435,7 @@ class LeetCodeSubmissionProvider extends LeetCodeWebview {
         } catch (error) {
             leetCodeChannel.appendLine("[Error] Failed to load built-in script file.");
         }
-        return scripts.map((script: vscode.Uri) => `<script src="${script.toString()}"></script>`).join(os.EOL);
+        return scripts.map((script: vscode.Uri) => `<script nonce="${escapeAttribute(nonce)}" src="${escapeAttribute(script.toString())}"></script>`).join(os.EOL);
     }
 
     public getStyles(): string {
