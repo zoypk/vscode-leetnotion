@@ -1,10 +1,13 @@
 import {
     closeSync,
     existsSync,
+    fstatSync,
     fsyncSync,
+    linkSync,
     mkdirSync,
     openSync,
     readFileSync,
+    renameSync,
     rmSync,
     statSync,
     writeFileSync,
@@ -20,8 +23,9 @@ export const COMPANY_PUBLICATION_LOCK_FILE = ".company-data-publication.lock";
 
 const DEFAULT_LOCK_WAIT_MS = 30_000;
 const DEFAULT_LOCK_POLL_MS = 25;
-const INVALID_LOCK_STALE_MS = 1_000;
+const DEFAULT_LOCK_STALE_MS = 30_000;
 const lockWaitBuffer = new Int32Array(new SharedArrayBuffer(4));
+const processStartedAtMs = Date.now() - process.uptime() * 1_000;
 
 const SIDECAR_FILES = Object.freeze({
     companyTags: "companyTags.json",
@@ -146,56 +150,85 @@ export function acquirePublicationLock(outputDirectory, options = {}) {
     const lockPath = join(outputDirectory, COMPANY_PUBLICATION_LOCK_FILE);
     const waitTimeoutMs = options.waitTimeoutMs ?? DEFAULT_LOCK_WAIT_MS;
     const pollIntervalMs = options.pollIntervalMs ?? DEFAULT_LOCK_POLL_MS;
+    const staleLockMs = options.staleLockMs ?? DEFAULT_LOCK_STALE_MS;
     const deadline = Date.now() + waitTimeoutMs;
+    let quarantineDeferred = false;
     while (true) {
         const owner = {
             schemaVersion: 1,
             token: randomUUID(),
             pid: process.pid,
             createdAt: new Date().toISOString(),
+            processStartedAt: new Date(processStartedAtMs).toISOString(),
         };
         let fileDescriptor;
+        let openedStats;
         try {
             fileDescriptor = openSync(lockPath, "wx");
+            openedStats = fstatSync(fileDescriptor);
+            options.onExclusiveCreate?.(lockPath);
             writeFileSync(fileDescriptor, `${JSON.stringify(owner)}\n`, "utf8");
             fsyncSync(fileDescriptor);
+            if (readLockOwner(lockPath)?.token !== owner.token) {
+                throw new Error(`Lost company publication lock during setup: ${lockPath}`);
+            }
             return { fileDescriptor, lockPath, owner };
         } catch (error) {
             if (fileDescriptor !== undefined) {
                 try { closeSync(fileDescriptor); } catch (_closeError) { /* best effort */ }
-                try { rmSync(lockPath, { force: true }); } catch (_removeError) { /* best effort */ }
+                if (openedStats) {
+                    removeCreatedLockIfSameFile(lockPath, openedStats);
+                } else {
+                    try { rmSync(lockPath, { force: true }); } catch (_removeError) { /* best effort */ }
+                }
             }
             if (error.code !== "EEXIST") {
                 throw error;
             }
-            const existingOwner = readLockOwner(lockPath);
-            if (existingOwner?.pid === process.pid) {
-                throw new Error(`Company publication lock is already held by this process: ${lockPath}`);
-            }
-            if (removeStaleLock(lockPath, existingOwner)) {
-                continue;
+            if (!quarantineDeferred) {
+                const quarantine = quarantineStaleCandidate(lockPath, staleLockMs, options);
+                if (quarantine.status === "recovered") {
+                    continue;
+                }
+                if (quarantine.status === "unsafe") {
+                    throw new Error(quarantine.message);
+                }
+                quarantineDeferred = true;
             }
             if (Date.now() >= deadline) {
                 throw new Error(`Timed out waiting for company publication lock: ${lockPath}`);
             }
-            options.onWait?.(existingOwner);
+            options.onWait?.(readLockOwner(lockPath));
             Atomics.wait(lockWaitBuffer, 0, 0, Math.min(pollIntervalMs, Math.max(1, deadline - Date.now())));
         }
     }
 }
 
 export function releasePublicationLock(lock) {
+    try { closeSync(lock.fileDescriptor); } catch (_closeError) { /* best effort */ }
+    const quarantinePath = `${lock.lockPath}.quarantine-release-${process.pid}-${Date.now()}-${randomUUID()}`;
     try {
-        closeSync(lock.fileDescriptor);
-    } finally {
-        try {
-            const currentOwner = readLockOwner(lock.lockPath);
-            if (currentOwner?.token === lock.owner.token) {
-                rmSync(lock.lockPath, { force: true });
-            }
-        } catch (_error) {
+        renameSync(lock.lockPath, quarantinePath);
+    } catch (error) {
+        if (error.code !== "ENOENT") {
             // A stale lock is recoverable by the next publisher after this process exits.
         }
+        return;
+    }
+    const quarantinedOwner = readLockOwner(quarantinePath);
+    if (quarantinedOwner?.token === lock.owner.token) {
+        rmSync(quarantinePath, { force: true });
+        return;
+    }
+    try {
+        restoreQuarantinedLock(
+            lock.lockPath,
+            quarantinePath,
+            "Release quarantined a lock owned by a different publication process",
+            true,
+        );
+    } catch (_error) {
+        // Never delete an occupant whose fencing token does not match this owner.
     }
 }
 
@@ -249,6 +282,10 @@ function readLockOwner(lockPath) {
             && Number.isSafeInteger(owner.pid)
             && owner.pid > 0
             && typeof owner.createdAt === "string"
+            && Number.isFinite(Date.parse(owner.createdAt))
+            && typeof owner.processStartedAt === "string"
+            && Number.isFinite(Date.parse(owner.processStartedAt))
+            && Date.parse(owner.processStartedAt) <= Date.parse(owner.createdAt)
             ? owner
             : undefined;
     } catch (_error) {
@@ -256,33 +293,121 @@ function readLockOwner(lockPath) {
     }
 }
 
-function removeStaleLock(lockPath, owner) {
-    if (owner && isProcessAlive(owner.pid)) {
-        return false;
+function quarantineStaleCandidate(lockPath, staleLockMs, options) {
+    if (!isLockStale(lockPath, staleLockMs)) {
+        return { status: "busy" };
     }
-    if (!owner) {
-        try {
-            const ageMs = Date.now() - statSync(lockPath).mtimeMs;
-            if (ageMs < INVALID_LOCK_STALE_MS) {
-                return false;
-            }
-        } catch (_error) {
-            return true;
+    options.onBeforeQuarantineRename?.(lockPath);
+    const quarantinePath = `${lockPath}.quarantine-${process.pid}-${Date.now()}-${randomUUID()}`;
+    try {
+        renameSync(lockPath, quarantinePath);
+    } catch (error) {
+        if (error.code === "ENOENT") {
+            return { status: "recovered" };
         }
+        throw error;
     }
     try {
-        rmSync(lockPath, { force: true });
-        return true;
-    } catch (_error) {
-        return false;
+        options.onLockQuarantined?.(quarantinePath);
+        if (!isLockStale(quarantinePath, staleLockMs)) {
+            return restoreQuarantinedLock(
+                lockPath,
+                quarantinePath,
+                "A fresh company publication lock was replaced immediately before quarantine",
+            );
+        }
+        const owner = readLockOwner(quarantinePath);
+        if (!owner) {
+            return restoreQuarantinedLock(
+                lockPath,
+                quarantinePath,
+                `Cannot verify the quarantined publication-lock owner; manually inspect ${lockPath}`,
+                true,
+            );
+        }
+        const liveness = getLockOwnerLiveness(owner);
+        if (liveness === "dead") {
+            rmSync(quarantinePath, { force: true });
+            return { status: "recovered" };
+        }
+        if (liveness === "unknown") {
+            return restoreQuarantinedLock(
+                lockPath,
+                quarantinePath,
+                `Cannot safely verify whether PID ${owner.pid} still owns the company publication lock`,
+                true,
+            );
+        }
+        return restoreQuarantinedLock(
+            lockPath,
+            quarantinePath,
+            "The stale-looking company publication lock owner is still alive",
+        );
+    } catch (error) {
+        try { restoreQuarantinedLock(lockPath, quarantinePath, String(error)); } catch (_restoreError) { /* best effort */ }
+        throw error;
     }
 }
 
-function isProcessAlive(pid) {
+function restoreQuarantinedLock(lockPath, quarantinePath, reason, unsafe = false) {
     try {
-        process.kill(pid, 0);
-        return true;
+        linkSync(quarantinePath, lockPath);
+        rmSync(quarantinePath, { force: true });
+        return unsafe ? { status: "unsafe", message: reason } : { status: "busy" };
     } catch (error) {
-        return error.code === "EPERM";
+        if (error.code === "EEXIST") {
+            return {
+                status: "unsafe",
+                message: `${reason}. A new owner claimed ${lockPath}; prior lock remains at ${quarantinePath}`,
+            };
+        }
+        if (error.code === "ENOENT") {
+            return { status: "busy" };
+        }
+        throw error;
+    }
+}
+
+function isLockStale(lockPath, staleLockMs) {
+    try {
+        return Date.now() - statSync(lockPath).mtimeMs > staleLockMs;
+    } catch (error) {
+        if (error.code === "ENOENT") {
+            return false;
+        }
+        throw error;
+    }
+}
+
+function getLockOwnerLiveness(owner) {
+    if (owner.pid === process.pid) {
+        return Math.abs(Date.parse(owner.processStartedAt) - processStartedAtMs) < 5_000
+            ? "alive"
+            : "dead";
+    }
+    try {
+        process.kill(owner.pid, 0);
+        return "unknown";
+    } catch (error) {
+        return error.code === "ESRCH" ? "dead" : "unknown";
+    }
+}
+
+function removeCreatedLockIfSameFile(lockPath, openedStats) {
+    if (!openedStats) {
+        return;
+    }
+    try {
+        const currentStats = statSync(lockPath);
+        const sameFile = currentStats.dev === openedStats.dev
+            && currentStats.ino === openedStats.ino
+            && currentStats.birthtimeMs === openedStats.birthtimeMs;
+        if (sameFile) {
+            rmSync(lockPath, { force: true });
+        }
+    } catch (error) {
+        if (error.code !== "ENOENT") {
+            throw error;
+        }
     }
 }
