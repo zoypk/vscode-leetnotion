@@ -1,14 +1,28 @@
 import { globalState } from "../../globalState";
-import { IProblem } from "../../shared";
-import { Mapping } from "../../types";
-import { getJitLearningDataset, getNeetCodeDataset } from "../../utils/dataUtils";
-import { JitLearningDataset, NeetCodeDataset, NeetCodeProblemMetadata } from "./types";
+import type { IProblem } from "../../shared";
+import type { Mapping } from "../../types";
+import { installedNeetCodeDataStore } from "./dataStore";
+import { JitLearningDataset, NeetCodeDataset, NeetCodeProblemContent, NeetCodeProblemMetadata } from "./types";
 
-class NeetCodeService {
+interface NeetCodeServiceDataAccess {
+    getIndex(): NeetCodeDataset;
+    getContent(problem: NeetCodeProblemMetadata): NeetCodeProblemContent | undefined;
+    getLearningDataset(): JitLearningDataset;
+}
+
+const installedDataAccess: NeetCodeServiceDataAccess = {
+    getIndex: () => installedNeetCodeDataStore.getIndex(),
+    getContent: (problem) => installedNeetCodeDataStore.getContent(problem),
+    getLearningDataset: () => installedNeetCodeDataStore.getLearningDataset(),
+};
+
+export class NeetCodeService {
     private dataset?: NeetCodeDataset;
     private learningDataset?: JitLearningDataset;
     private problemByTitleSlug?: Record<string, NeetCodeProblemMetadata>;
     private questionNumberTitleSlugMapping?: Mapping;
+
+    constructor(private readonly dataAccess: NeetCodeServiceDataAccess = installedDataAccess) {}
 
     public getProblemMetadata(problem: IProblem): NeetCodeProblemMetadata | undefined {
         const dataset = this.getDataset();
@@ -28,14 +42,14 @@ class NeetCodeService {
 
     private getDataset(): NeetCodeDataset {
         if (!this.dataset) {
-            this.dataset = getNeetCodeDataset();
+            this.dataset = this.dataAccess.getIndex();
         }
         return this.dataset;
     }
 
     private getLearningDataset(): JitLearningDataset {
         if (!this.learningDataset) {
-            this.learningDataset = getJitLearningDataset();
+            this.learningDataset = this.dataAccess.getLearningDataset();
         }
         return this.learningDataset;
     }
@@ -91,9 +105,15 @@ class NeetCodeService {
 
     private withDerivedMetadata(problem: NeetCodeProblemMetadata): NeetCodeProblemMetadata {
         const metadata = this.withDerivedSolutionUrl(problem);
+        const content = this.dataAccess.getContent(problem);
         const learningMarkdown = this.getLearningDataset().problems[problem.titleSlug]?.markdown;
 
-        return learningMarkdown ? { ...metadata, learningMarkdown } : metadata;
+        return {
+            ...metadata,
+            articleMarkdown: content?.articleMarkdown,
+            hintMarkdown: content?.hintMarkdown,
+            learningMarkdown,
+        };
     }
 }
 

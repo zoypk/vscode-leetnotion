@@ -9,6 +9,7 @@ export interface NeetCodeProblemMetadata {
     solutionSlug?: string;
     solutionUrl?: string;
     videoUrl?: string;
+    contentFile?: string;
     articleMarkdown?: string;
     hintMarkdown?: string;
     learningMarkdown?: string;
@@ -16,10 +17,27 @@ export interface NeetCodeProblemMetadata {
     blind75?: boolean;
 }
 
+export interface NeetCodeDatasetProvenance {
+    repository: string;
+    revision: string;
+}
+
 export interface NeetCodeDataset {
+    schemaVersion: 2;
     generatedAt: string;
-    sourceRepo: string;
+    source: NeetCodeDatasetProvenance;
+    problemCount: number;
+    neetcode150Count: number;
+    blind75Count: number;
     problems: Record<string, NeetCodeProblemMetadata>;
+}
+
+export interface NeetCodeProblemContent {
+    schemaVersion: 1;
+    questionId: string;
+    titleSlug: string;
+    articleMarkdown?: string;
+    hintMarkdown?: string;
 }
 
 export interface JitLearningProblemMetadata {

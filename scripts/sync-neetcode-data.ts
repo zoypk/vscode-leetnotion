@@ -1,7 +1,7 @@
-import * as childProcess from "child_process";
 import * as fs from "fs";
 import * as os from "os";
 import * as path from "path";
+import { pathToFileURL } from "url";
 
 interface SiteProblem {
     code?: string;
@@ -52,16 +52,30 @@ interface EnrichedProblem {
     solutionSlug?: string;
     solutionUrl?: string;
     videoUrl?: string;
-    articleMarkdown?: string;
-    hintMarkdown?: string;
+    contentFile?: string;
     neetcode150: boolean;
     blind75: boolean;
 }
 
 interface Dataset {
+    schemaVersion: 2;
     generatedAt: string;
-    sourceRepo: string;
+    source: {
+        repository: string;
+        revision: string;
+    };
+    problemCount: number;
+    neetcode150Count: number;
+    blind75Count: number;
     problems: Record<string, EnrichedProblem>;
+}
+
+interface ProblemContent {
+    schemaVersion: 1;
+    questionId: string;
+    titleSlug: string;
+    articleMarkdown?: string;
+    hintMarkdown?: string;
 }
 
 const SOURCE_REPO = "https://github.com/neetcode-gh/leetcode";
@@ -161,27 +175,25 @@ const CONTENT_SLUG_TO_QUESTION_ID: Record<string, string> = {
     "validate-parentheses": "20",
 };
 const extensionRoot = process.cwd();
-const outputPath = path.join(extensionRoot, "data", "neetcode-enrichment.json");
+const dataDirectory = path.join(extensionRoot, "data");
+const outputPath = path.join(dataDirectory, "neetcode-index.json");
+const contentOutputDirectory = path.join(dataDirectory, "neetcode-content");
 
 void main();
 
 async function main(): Promise<void> {
-    const { atomicWriteFiles, checkoutExactRevision, resolveRemoteHead, runGit } = await import("./lib/sync-utils.mjs");
-    const argumentsToParse = process.argv.slice(2);
-    const expectedRevisionIndex = argumentsToParse.indexOf("--expected-source-revision");
-    const expectedSourceRevision = expectedRevisionIndex >= 0 ? argumentsToParse[expectedRevisionIndex + 1] : undefined;
-    if (expectedRevisionIndex >= 0) {
-        if (!expectedSourceRevision) {
-            throw new Error("--expected-source-revision requires a value");
-        }
-        argumentsToParse.splice(expectedRevisionIndex, 2);
+    const { checkoutExactRevision, resolveRemoteHead, runGit } = await import("./lib/sync-utils.mjs");
+    const arguments_ = parseArguments(process.argv.slice(2));
+    const liveRevision = resolveRemoteHead(SOURCE_GIT_URL, "main");
+    if (arguments_.expectedRevision && arguments_.expectedRevision.toLowerCase() !== liveRevision) {
+        throw new Error(
+            `NeetCode source revision drifted: expected ${arguments_.expectedRevision}, live main is ${liveRevision}`,
+        );
     }
-    const sourceArgument = argumentsToParse[0];
-    const problemsFile = argumentsToParse[1] ? path.resolve(extensionRoot, argumentsToParse[1]) : undefined;
-    const liveSourceRevision = resolveRemoteHead(SOURCE_GIT_URL, "main");
-    if (expectedSourceRevision && expectedSourceRevision.toLowerCase() !== liveSourceRevision) {
-        throw new Error(`Requested NeetCode revision ${expectedSourceRevision} is stale; live main is ${liveSourceRevision}`);
-    }
+    const sourceArgument = arguments_.sourcePath;
+    const problemsFile = arguments_.problemsFile
+        ? path.resolve(extensionRoot, arguments_.problemsFile)
+        : undefined;
     let temporaryDirectory: string | undefined;
     let sourceRoot: string;
 
@@ -191,12 +203,12 @@ async function main(): Promise<void> {
         } else {
             temporaryDirectory = fs.mkdtempSync(path.join(os.tmpdir(), "vscode-leetnotion-neetcode-"));
             sourceRoot = path.join(temporaryDirectory, "source");
-            checkoutExactRevision(SOURCE_GIT_URL, liveSourceRevision, sourceRoot);
+            checkoutExactRevision(SOURCE_GIT_URL, liveRevision, sourceRoot);
         }
 
         const sourceRevision = runGit(["-C", sourceRoot, "rev-parse", "HEAD"]);
-        if (expectedSourceRevision && sourceRevision.toLowerCase() !== liveSourceRevision) {
-            throw new Error(`NeetCode source directory is at ${sourceRevision}, live main is ${liveSourceRevision}`);
+        if (sourceRevision.toLowerCase() !== liveRevision) {
+            throw new Error(`NeetCode source directory is at ${sourceRevision}, live main is ${liveRevision}`);
         }
 
         const siteDataPath = path.join(sourceRoot, ".problemSiteData.json");
@@ -235,10 +247,18 @@ async function main(): Promise<void> {
         );
 
         const dataset: Dataset = {
+            schemaVersion: 2,
             generatedAt: new Date().toISOString(),
-            sourceRepo: getSourceReference(sourceRoot),
+            source: {
+                repository: SOURCE_REPO,
+                revision: liveRevision,
+            },
+            problemCount: 0,
+            neetcode150Count: 0,
+            blind75Count: 0,
             problems: {},
         };
+        const contents = new Map<string, ProblemContent>();
         const allQuestionIds = new Set<string>([
             ...siteProblemById.keys(),
             ...articleAssignments.keys(),
@@ -255,6 +275,11 @@ async function main(): Promise<void> {
             const title = siteProblem?.problem || identity?.title || titleFromSlug(titleSlug);
             const neetcode150 = Boolean(siteProblem?.neetcode150);
             const blind75 = Boolean(siteProblem?.blind75);
+            const articleMarkdown = articleSlug ? readMarkdown(path.join(articlesPath, `${articleSlug}.md`)) : undefined;
+            const hintMarkdown = hintSlug ? readMarkdown(path.join(hintsPath, `${hintSlug}.md`)) : undefined;
+            const contentFile = articleMarkdown || hintMarkdown
+                ? `neetcode-content/${questionId}.json`
+                : undefined;
 
             dataset.problems[questionId] = {
                 questionId,
@@ -269,27 +294,141 @@ async function main(): Promise<void> {
                 solutionSlug,
                 solutionUrl: buildSolutionUrl(solutionSlug, neetcode150, blind75),
                 videoUrl: siteProblem?.video ? `https://www.youtube.com/watch?v=${siteProblem.video}` : undefined,
-                articleMarkdown: articleSlug ? readMarkdown(path.join(articlesPath, `${articleSlug}.md`)) : undefined,
-                hintMarkdown: hintSlug ? readMarkdown(path.join(hintsPath, `${hintSlug}.md`)) : undefined,
+                contentFile,
                 neetcode150,
                 blind75,
             };
+            if (contentFile) {
+                contents.set(questionId, {
+                    schemaVersion: 1,
+                    questionId,
+                    titleSlug,
+                    articleMarkdown,
+                    hintMarkdown,
+                });
+            }
         }
 
-        atomicWriteFiles([{ path: outputPath, content: `${JSON.stringify(dataset, null, 2)}\n` }], {
-            validate: (stagedPaths: Map<string, string>) => {
-                const staged = JSON.parse(fs.readFileSync(stagedPaths.get(outputPath) as string, "utf8")) as Dataset;
-                if (!staged.sourceRepo || !staged.problems || Object.keys(staged.problems).length === 0) {
-                    throw new Error("Generated NeetCode dataset failed staged validation");
-                }
-            },
-        });
+        dataset.problemCount = Object.keys(dataset.problems).length;
+        dataset.neetcode150Count = Object.values(dataset.problems).filter((problem) => problem.neetcode150).length;
+        dataset.blind75Count = Object.values(dataset.problems).filter((problem) => problem.blind75).length;
+        await validateGeneratedDataset(dataset, contents);
+        publishDataset(dataset, contents);
         reportCoverage(dataset, siteProblemById, articleFiles, hintFiles, articleAssignments, hintAssignments);
     } finally {
         if (temporaryDirectory) {
             fs.rmSync(temporaryDirectory, { recursive: true, force: true });
         }
     }
+}
+
+async function validateGeneratedDataset(dataset: Dataset, contents: Map<string, ProblemContent>): Promise<void> {
+    const modulePath = path.join(extensionRoot, "scripts", "lib", "neetcode-validation.mjs");
+    const validation = await import(pathToFileURL(modulePath).href) as {
+        validateNeetCodeDataset(
+            index: Dataset,
+            contentFiles: Map<string, ProblemContent>,
+        ): unknown;
+    };
+    const contentByPath = new Map<string, ProblemContent>();
+    for (const [questionId, content] of contents) {
+        contentByPath.set(`neetcode-content/${questionId}.json`, content);
+    }
+    validation.validateNeetCodeDataset(dataset, contentByPath);
+}
+
+function publishDataset(dataset: Dataset, contents: Map<string, ProblemContent>): void {
+    const nonce = `${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    const stagedIndexPath = path.join(dataDirectory, `.neetcode-index-${nonce}.tmp`);
+    const stagedContentDirectory = path.join(dataDirectory, `.neetcode-content-${nonce}.tmp`);
+    const backupIndexPath = path.join(dataDirectory, `.neetcode-index-${nonce}.bak`);
+    const backupContentDirectory = path.join(dataDirectory, `.neetcode-content-${nonce}.bak`);
+    let backedUpIndex = false;
+    let backedUpContent = false;
+    let publishedIndex = false;
+    let publishedContent = false;
+    let committed = false;
+
+    try {
+        fs.mkdirSync(stagedContentDirectory, { recursive: true });
+        fs.writeFileSync(stagedIndexPath, `${JSON.stringify(dataset, null, 2)}\n`, "utf8");
+        for (const [questionId, content] of contents) {
+            fs.writeFileSync(
+                path.join(stagedContentDirectory, `${questionId}.json`),
+                `${JSON.stringify(content, null, 2)}\n`,
+                "utf8",
+            );
+        }
+
+        if (fs.existsSync(outputPath)) {
+            fs.renameSync(outputPath, backupIndexPath);
+            backedUpIndex = true;
+        }
+        if (fs.existsSync(contentOutputDirectory)) {
+            fs.renameSync(contentOutputDirectory, backupContentDirectory);
+            backedUpContent = true;
+        }
+        fs.renameSync(stagedContentDirectory, contentOutputDirectory);
+        publishedContent = true;
+        fs.renameSync(stagedIndexPath, outputPath);
+        publishedIndex = true;
+        committed = true;
+    } catch (error) {
+        if (publishedIndex && fs.existsSync(outputPath)) {
+            fs.rmSync(outputPath, { force: true });
+        }
+        if (publishedContent && fs.existsSync(contentOutputDirectory)) {
+            fs.rmSync(contentOutputDirectory, { recursive: true, force: true });
+        }
+        if (backedUpIndex && fs.existsSync(backupIndexPath)) {
+            fs.renameSync(backupIndexPath, outputPath);
+        }
+        if (backedUpContent && fs.existsSync(backupContentDirectory)) {
+            fs.renameSync(backupContentDirectory, contentOutputDirectory);
+        }
+        throw error;
+    } finally {
+        fs.rmSync(stagedIndexPath, { force: true });
+        fs.rmSync(stagedContentDirectory, { recursive: true, force: true });
+    }
+
+    if (committed) {
+        if (backedUpIndex) {
+            fs.rmSync(backupIndexPath, { force: true });
+        }
+        if (backedUpContent) {
+            fs.rmSync(backupContentDirectory, { recursive: true, force: true });
+        }
+    }
+}
+
+function parseArguments(arguments_: string[]): {
+    sourcePath?: string;
+    problemsFile?: string;
+    expectedRevision?: string;
+} {
+    const positional: string[] = [];
+    let expectedRevision: string | undefined;
+    for (let index = 0; index < arguments_.length; index += 1) {
+        const argument = arguments_[index];
+        if (argument === "--expected-revision" || argument === "--expected-source-revision") {
+            expectedRevision = arguments_[index + 1];
+            if (!expectedRevision || !/^[0-9a-f]{40}$/i.test(expectedRevision)) {
+                throw new Error(`${argument} requires a 40-character Git SHA`);
+            }
+            index += 1;
+        } else if (argument.startsWith("-")) {
+            throw new Error(`Unknown option: ${argument}`);
+        } else {
+            positional.push(argument);
+        }
+    }
+    if (positional.length > 2) {
+        throw new Error(
+            "Usage: sync-neetcode-data [source-path] [leetcode-problems.json] [--expected-source-revision <sha>]",
+        );
+    }
+    return { sourcePath: positional[0], problemsFile: positional[1], expectedRevision };
 }
 
 function assertExists(targetPath: string, description: string): void {
@@ -507,15 +646,6 @@ function buildSolutionUrl(solutionSlug: string | undefined, neetcode150: boolean
 
 function difficultyName(level?: number): string | undefined {
     return level === 1 ? "Easy" : level === 2 ? "Medium" : level === 3 ? "Hard" : undefined;
-}
-
-function getSourceReference(sourceRoot: string): string {
-    try {
-        const revision = childProcess.execFileSync("git", ["-C", sourceRoot, "rev-parse", "HEAD"], { encoding: "utf8" }).trim();
-        return `${SOURCE_REPO}/tree/${revision}`;
-    } catch (_error) {
-        return path.relative(extensionRoot, sourceRoot) || ".";
-    }
 }
 
 function reportCoverage(

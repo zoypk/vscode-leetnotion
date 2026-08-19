@@ -1,0 +1,11 @@
+[
+  {
+    "neetcode150": false,
+    "blind75": false,
+    "problem": "Construct Quad Tree",
+    "code": "0427-construct-quad-tree",
+    "link": "construct-quad-tree",
+    "pattern": "Trees",
+    "difficulty": "Medium"
+  }
+]

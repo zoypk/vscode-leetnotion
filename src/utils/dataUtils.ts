@@ -3,7 +3,8 @@
 
 import * as fsExtra from 'fs-extra';
 import * as path from 'path';
-import { JitLearningDataset, NeetCodeDataset } from '../integrations/neetcode/types';
+import { JitLearningDataset, NeetCodeDataset, NeetCodeProblemContent, NeetCodeProblemMetadata } from '../integrations/neetcode/types';
+import { installedNeetCodeDataStore } from '../integrations/neetcode/dataStore';
 import { leetcodeClient } from '../leetCodeClient';
 import { globalState } from '../globalState';
 import { leetCodeChannel } from '../leetCodeChannel';
@@ -13,8 +14,6 @@ import axios from 'axios';
 
 const sheetsPath = '../../data/sheets.json';
 const companyDataPath = '../../data/company-data.json';
-const neetCodeDatasetPath = '../../data/neetcode-enrichment.json';
-const jitLearningDatasetPath = '../../data/jit-learning-resources.json';
 
 export function getSheets(): Sheets {
     const sheets = fsExtra.readJSONSync(path.join(__dirname, sheetsPath)) as Sheets;
@@ -49,27 +48,15 @@ function getCompanyDataBundle(): CompanyDataBundle {
 }
 
 export function getNeetCodeDataset(): NeetCodeDataset {
-    try {
-        return fsExtra.readJSONSync(path.join(__dirname, neetCodeDatasetPath)) as NeetCodeDataset;
-    } catch (_error) {
-        return {
-            generatedAt: '',
-            sourceRepo: '',
-            problems: {},
-        };
-    }
+    return installedNeetCodeDataStore.getIndex();
 }
 
 export function getJitLearningDataset(): JitLearningDataset {
-    try {
-        return fsExtra.readJSONSync(path.join(__dirname, jitLearningDatasetPath)) as JitLearningDataset;
-    } catch (_error) {
-        return {
-            source: '',
-            problemCount: 0,
-            problems: {},
-        };
-    }
+    return installedNeetCodeDataStore.getLearningDataset();
+}
+
+export function getNeetCodeProblemContent(problem: NeetCodeProblemMetadata): NeetCodeProblemContent | undefined {
+    return installedNeetCodeDataStore.getContent(problem);
 }
 
 export async function getContests(): Promise<Record<string, string[]>> {

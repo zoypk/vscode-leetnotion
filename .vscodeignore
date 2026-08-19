@@ -14,3 +14,4 @@ ACKNOWLEDGEMENTS.md
 docs
 .github
 public/scripts/.gitignore
+data/neetcode-enrichment.json
