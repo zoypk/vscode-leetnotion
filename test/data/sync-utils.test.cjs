@@ -80,6 +80,43 @@ test("downloadText allows no more than the configured redirects", async () => {
     });
 });
 
+test("rejected redirect, error, and declared-oversize responses are destroyed without draining endless bodies", async () => {
+    const sync = await syncUtils();
+    const closed = {};
+    const closedPromises = {};
+    for (const name of ["redirect", "error", "oversize"]) {
+        closedPromises[name] = new Promise((resolve) => { closed[name] = resolve; });
+    }
+    await withServer((request, response) => {
+        if (request.url === "/ok") {
+            response.end("ok");
+            return;
+        }
+        const name = request.url.slice(1);
+        const interval = setInterval(() => response.write("endless-body"), 5);
+        response.on("close", () => {
+            clearInterval(interval);
+            closed[name]();
+        });
+        if (name === "redirect") {
+            response.writeHead(302, { Location: "/ok" });
+        } else if (name === "error") {
+            response.writeHead(503);
+        } else {
+            response.writeHead(200, { "Content-Length": "1000000" });
+        }
+        response.write("start");
+    }, async (baseUrl) => {
+        assert.equal(await sync.downloadText(`${baseUrl}/redirect`, { maxBytes: 100 }), "ok");
+        await assert.rejects(sync.downloadText(`${baseUrl}/error`, { maxBytes: 100 }), /HTTP 503/);
+        await assert.rejects(sync.downloadText(`${baseUrl}/oversize`, { maxBytes: 100 }), /exceeded 100 bytes/);
+        await Promise.all(Object.values(closedPromises).map((promise) => Promise.race([
+            promise,
+            new Promise((_, reject) => setTimeout(() => reject(new Error("response socket did not close")), 500)),
+        ])));
+    });
+});
+
 test("sibling temp paths are unique and stay beside the target", async () => {
     const sync = await syncUtils();
     const target = path.join("some", "directory", "output.json");
@@ -88,6 +125,27 @@ test("sibling temp paths are unique and stay beside the target", async () => {
     assert.notEqual(first, second);
     assert.equal(path.dirname(first), path.dirname(target));
     assert.equal(path.dirname(second), path.dirname(target));
+});
+
+test("atomicReplaceFile keeps the old authoritative file when replacement fails", async () => {
+    const sync = await syncUtils();
+    const temporaryRoot = fs.mkdtempSync(path.join(tmpdir(), "atomic-replace-"));
+    const target = path.join(temporaryRoot, "company-data.json");
+    try {
+        fs.writeFileSync(target, "old-generation");
+        assert.throws(() => sync.atomicReplaceFile(target, "new-generation", {
+            fsOperations: {
+                renameSync: () => { throw new Error("simulated replace failure"); },
+            },
+        }), /simulated replace failure/);
+        assert.equal(fs.readFileSync(target, "utf8"), "old-generation");
+        assert.deepEqual(fs.readdirSync(temporaryRoot), ["company-data.json"]);
+
+        sync.atomicReplaceFile(target, "new-generation");
+        assert.equal(fs.readFileSync(target, "utf8"), "new-generation");
+    } finally {
+        fs.rmSync(temporaryRoot, { recursive: true, force: true });
+    }
 });
 
 test("atomicWriteFiles replaces all outputs and cleans temporary files", async () => {

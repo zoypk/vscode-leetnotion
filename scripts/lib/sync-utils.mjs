@@ -64,27 +64,28 @@ async function downloadBufferWithRedirects(url, options) {
             const statusCode = response.statusCode ?? 0;
             const location = response.headers.location;
             if (location && statusCode >= 300 && statusCode < 400) {
-                response.resume();
                 if (options.maxRedirects <= 0) {
                     fail(new Error(`Too many redirects while downloading ${url}`));
+                    response.destroy();
                     return;
                 }
                 settled = true;
                 clearDeadline();
+                response.destroy();
                 resolve(downloadBufferWithRedirects(new URL(location, url).toString(), {
                     ...options, maxRedirects: options.maxRedirects - 1,
                 }));
                 return;
             }
             if (statusCode !== 200) {
-                response.resume();
                 fail(new Error(`Failed to download ${url}: HTTP ${statusCode}`));
+                response.destroy();
                 return;
             }
             const contentLength = Number(response.headers["content-length"]);
             if (Number.isFinite(contentLength) && contentLength > options.maxBytes) {
-                response.resume();
                 fail(new Error(`Download exceeded ${options.maxBytes} bytes: ${url}`));
+                response.destroy();
                 return;
             }
             const chunks = [];
@@ -153,6 +154,28 @@ export function checkoutExactRevision(repositoryUrl, revision, targetDirectory, 
     const checkedOutRevision = runGit(["-C", targetDirectory, "rev-parse", "HEAD"], options).toLowerCase();
     if (checkedOutRevision !== revision.toLowerCase()) {
         throw new Error(`Expected checkout ${revision}, received ${checkedOutRevision}`);
+    }
+}
+
+export function atomicReplaceFile(targetPath, content, options = {}) {
+    const fsOperations = {
+        existsSync, mkdirSync, renameSync, rmSync, writeFileSync,
+        ...options.fsOperations,
+    };
+    const tempPath = createSiblingTempPath(targetPath, "tmp");
+    try {
+        fsOperations.mkdirSync(dirname(targetPath), { recursive: true });
+        fsOperations.writeFileSync(tempPath, content, options.encoding ?? "utf8");
+        options.validate?.(tempPath);
+        fsOperations.renameSync(tempPath, targetPath);
+    } finally {
+        try {
+            if (fsOperations.existsSync(tempPath)) {
+                fsOperations.rmSync(tempPath, { force: true });
+            }
+        } catch (_cleanupError) {
+            // The replacement result is authoritative; temporary cleanup is best effort.
+        }
     }
 }
 

@@ -1,22 +1,12 @@
-import { readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { COMPANY_PRODUCTION_MINIMUMS, validateCompanyDataset } from "./lib/data-validation.mjs";
+import { COMPANY_PRODUCTION_MINIMUMS } from "./lib/data-validation.mjs";
+import { validatePublishedCompanyData } from "./lib/company-publication.mjs";
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
-function readJson(relativePath) {
-    try {
-        return JSON.parse(readFileSync(join(repositoryRoot, relativePath), "utf8"));
-    } catch (error) {
-        throw new Error(`Could not read ${relativePath}: ${error.message}`);
-    }
-}
-
-const companyStats = validateCompanyDataset(
-    readJson("data/companyTags.json"),
-    readJson("data/questionCompanyTags.json"),
-    readJson("data/company-data-provenance.json"),
+const companyStats = validatePublishedCompanyData(
+    join(repositoryRoot, "data"),
     { minimums: COMPANY_PRODUCTION_MINIMUMS },
 );
 console.log(

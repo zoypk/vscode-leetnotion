@@ -13,11 +13,16 @@ export function compareNames(left, right) {
 }
 
 export function compareQuestionIds(left, right) {
-    const leftNumber = Number(left);
-    const rightNumber = Number(right);
-    return Number.isFinite(leftNumber) && Number.isFinite(rightNumber)
-        ? leftNumber - rightNumber
-        : compareNames(left, right);
+    if (isCanonicalQuestionId(left) && isCanonicalQuestionId(right)) {
+        const leftNumber = BigInt(left);
+        const rightNumber = BigInt(right);
+        return leftNumber < rightNumber ? -1 : leftNumber > rightNumber ? 1 : 0;
+    }
+    return compareNames(left, right);
+}
+
+export function isCanonicalQuestionId(questionId) {
+    return typeof questionId === "string" && /^[1-9][0-9]*$/.test(questionId);
 }
 
 export function validateCompanyDataset(companyTags, questionCompanyTags, provenance, options = {}) {
@@ -47,8 +52,11 @@ export function validateCompanyDataset(companyTags, questionCompanyTags, provena
             }
             const seen = new Set();
             for (const questionId of questionIds) {
-                if (typeof questionId !== "string" || questionId.length === 0) {
-                    errors.push(`Company ${companyName} window ${window} contains a non-string question ID`);
+                if (!isCanonicalQuestionId(questionId)) {
+                    errors.push(
+                        `Company ${companyName} window ${window} question ID ${JSON.stringify(questionId)} `
+                        + "must be a canonical positive decimal question ID",
+                    );
                 } else if (seen.has(questionId)) {
                     errors.push(`Company ${companyName} window ${window} repeats question ${questionId}`);
                 } else {
@@ -67,6 +75,9 @@ export function validateCompanyDataset(companyTags, questionCompanyTags, provena
     const reverseQuestionIds = Object.keys(questionCompanyTags);
     assertOrdered(reverseQuestionIds, compareQuestionIds, "questionCompanyTags question IDs", errors);
     for (const questionId of reverseQuestionIds) {
+        if (!isCanonicalQuestionId(questionId)) {
+            errors.push(`Reverse question ID ${JSON.stringify(questionId)} must be a canonical positive decimal question ID`);
+        }
         const companies = questionCompanyTags[questionId];
         if (!Array.isArray(companies) || companies.some((company) => typeof company !== "string")) {
             errors.push(`Reverse entry ${questionId} must be an array of company names`);

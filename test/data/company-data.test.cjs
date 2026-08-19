@@ -111,6 +111,26 @@ test("validator rejects unexpected reverse question IDs even when their company 
     );
 });
 
+test("validator requires canonical positive decimal question IDs", async () => {
+    const { company, validation } = await modules();
+    const dataset = company.buildCompanyData(sourceFixture, slugMap());
+    for (const invalidId of [" 1", "1 ", "01", "-1", "abc"]) {
+        const invalidForward = structuredClone(dataset.companyTags);
+        invalidForward.Alpha["Last 30 Days"] = [invalidId];
+        assert.throws(
+            () => validation.validateCompanyDataset(invalidForward, dataset.questionCompanyTags),
+            /must be a canonical positive decimal question ID/,
+            `forward ID ${JSON.stringify(invalidId)} should fail`,
+        );
+        const invalidReverse = { ...dataset.questionCompanyTags, [invalidId]: [] };
+        assert.throws(
+            () => validation.validateCompanyDataset(dataset.companyTags, invalidReverse),
+            /must be a canonical positive decimal question ID/,
+            `reverse ID ${JSON.stringify(invalidId)} should fail`,
+        );
+    }
+});
+
 test("production floors and provenance counts reject consistently truncated data", async () => {
     const { company, validation } = await modules();
     const dataset = company.buildCompanyData(sourceFixture, slugMap());

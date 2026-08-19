@@ -3,12 +3,16 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import {
-    atomicWriteFiles,
     checkoutExactRevision,
     downloadText,
     resolveRemoteHead,
     runGit,
 } from "./lib/sync-utils.mjs";
+import {
+    createCompanyGeneration,
+    publishCompanyGeneration,
+    recoverCompanyPublication,
+} from "./lib/company-publication.mjs";
 import {
     COMPANY_WINDOWS,
     COMPANY_PRODUCTION_MINIMUMS,
@@ -248,6 +252,10 @@ export function createCompanyProvenance(sourceRevision, counts, generatedAt = ne
 }
 
 export async function synchronizeCompanyData(options = {}) {
+    const outputDirectory = options.outputDirectory ?? join(repositoryRoot, "data");
+    recoverCompanyPublication(outputDirectory, {
+        validationOptions: { minimums: COMPANY_PRODUCTION_MINIMUMS },
+    });
     const liveRevision = resolveRemoteHead(SOURCE_GIT_URL, "main");
     if (options.expectedSourceRevision && options.expectedSourceRevision.toLowerCase() !== liveRevision) {
         throw new Error(`Requested company source revision ${options.expectedSourceRevision} is stale; live main is ${liveRevision}`);
@@ -273,24 +281,13 @@ export async function synchronizeCompanyData(options = {}) {
             minimums: COMPANY_PRODUCTION_MINIMUMS,
         });
 
-        const outputDirectory = options.outputDirectory ?? join(repositoryRoot, "data");
-        const outputPaths = {
-            companyTags: join(outputDirectory, "companyTags.json"),
-            questionCompanyTags: join(outputDirectory, "questionCompanyTags.json"),
-            provenance: join(outputDirectory, "company-data-provenance.json"),
-        };
-        atomicWriteFiles([
-            { path: outputPaths.companyTags, content: `${JSON.stringify(companyTags)}\n` },
-            { path: outputPaths.questionCompanyTags, content: `${JSON.stringify(questionCompanyTags)}\n` },
-            { path: outputPaths.provenance, content: `${JSON.stringify(provenance, null, 2)}\n` },
-        ], {
-            validate: (stagedPaths) => validateCompanyDataset(
-                JSON.parse(readFileSync(stagedPaths.get(outputPaths.companyTags), "utf8")),
-                JSON.parse(readFileSync(stagedPaths.get(outputPaths.questionCompanyTags), "utf8")),
-                JSON.parse(readFileSync(stagedPaths.get(outputPaths.provenance), "utf8")),
-                { minimums: COMPANY_PRODUCTION_MINIMUMS },
-            ),
-        });
+        publishCompanyGeneration(
+            outputDirectory,
+            createCompanyGeneration(companyTags, questionCompanyTags, provenance),
+            {
+                validationOptions: { minimums: COMPANY_PRODUCTION_MINIMUMS },
+            },
+        );
         return {
             companies: Object.keys(companyTags).length,
             questions: Object.keys(questionCompanyTags).length,

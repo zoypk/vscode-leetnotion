@@ -12,8 +12,7 @@ import { sleep } from './toolUtils';
 import axios from 'axios';
 
 const sheetsPath = '../../data/sheets.json';
-const companyTagsPath = '../../data/companyTags.json';
-const questionCompanyTagsPath = '../../data/questionCompanyTags.json';
+const companyDataPath = '../../data/company-data.json';
 const neetCodeDatasetPath = '../../data/neetcode-enrichment.json';
 const jitLearningDatasetPath = '../../data/jit-learning-resources.json';
 
@@ -23,12 +22,30 @@ export function getSheets(): Sheets {
 }
 
 export function getCompanyTags(): CompanyTags {
-    const companyTags = fsExtra.readJSONSync(path.join(__dirname, companyTagsPath)) as CompanyTags;
-    return companyTags;
+    return getCompanyDataBundle().companyTags;
 }
 
 export function getQuestionCompanyTags(): QuestionCompanyTags {
-    return fsExtra.readJSONSync(path.join(__dirname, questionCompanyTagsPath)) as QuestionCompanyTags;
+    return getCompanyDataBundle().questionCompanyTags;
+}
+
+interface CompanyDataBundle {
+    schemaVersion: number;
+    companyTags: CompanyTags;
+    questionCompanyTags: QuestionCompanyTags;
+}
+
+let companyDataBundle: CompanyDataBundle | undefined;
+
+function getCompanyDataBundle(): CompanyDataBundle {
+    if (!companyDataBundle) {
+        const loaded = fsExtra.readJSONSync(path.join(__dirname, companyDataPath)) as CompanyDataBundle;
+        if (loaded?.schemaVersion !== 1 || !loaded.companyTags || !loaded.questionCompanyTags) {
+            throw new Error(`Installed company data bundle is malformed: ${companyDataPath}`);
+        }
+        companyDataBundle = loaded;
+    }
+    return companyDataBundle;
 }
 
 export function getNeetCodeDataset(): NeetCodeDataset {
