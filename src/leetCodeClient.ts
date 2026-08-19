@@ -18,6 +18,7 @@ import { leetCodeChannel } from "./leetCodeChannel";
 import { LeetcodeProblem, LeetcodeSubmission, ProblemRatingMap, SubmissionDetailView } from "./types";
 import { ProblemRating } from "./shared";
 import _ from "lodash";
+import { collectSubmissionHistory } from "./submissions/submissionHistory";
 
 type ProblemSubmissionsApiResponse = {
     submissions_dump: Array<{
@@ -206,8 +207,10 @@ class LeetcodeClient {
             throw new Error("not-signed-in-to-leetcode");
         }
 
-        const submissions = await this.getProblemSubmissionsBySlug(titleSlug);
-        return submissions.map((submission) => this.normalizeProblemSubmission(submission, titleSlug));
+        return collectSubmissionHistory(async (offset, limit) => {
+            const submissions = await this.getProblemSubmissionsBySlug(titleSlug, offset, limit);
+            return submissions.map((submission) => this.normalizeProblemSubmission(submission, titleSlug));
+        });
     }
 
     public async getSubmissionDetail(id: number): Promise<SubmissionDetailView> {
@@ -350,7 +353,11 @@ class LeetcodeClient {
         };
     }
 
-    private async getProblemSubmissionsBySlug(titleSlug: string): Promise<ProblemSubmissionsApiResponse["submissions_dump"]> {
+    private async getProblemSubmissionsBySlug(
+        titleSlug: string,
+        offset: number,
+        limit: number
+    ): Promise<ProblemSubmissionsApiResponse["submissions_dump"]> {
         const cookie = globalState.getCookie();
         if (!cookie) {
             throw new Error("not-signed-in-to-leetcode");
@@ -359,6 +366,7 @@ class LeetcodeClient {
         const { csrf } = extractCookie(cookie);
         const baseUrl = getUrl("base");
         const response = await axios.get<ProblemSubmissionsApiResponse>(`${baseUrl}/api/submissions/${titleSlug}`, {
+            params: { offset, limit },
             headers: {
                 "content-type": "application/json",
                 origin: baseUrl,

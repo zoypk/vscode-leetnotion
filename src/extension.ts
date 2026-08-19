@@ -28,7 +28,9 @@ import { studyTreeDataProvider } from "./study/studyTreeDataProvider";
 import { leetCodeStatusBarController } from "./statusbar/leetCodeStatusBarController";
 import { DialogType, promptForOpenOutputChannel } from "./utils/uiUtils";
 import { leetCodePreviewProvider } from "./webview/leetCodePreviewProvider";
+import { leetCodePastSubmissionsProvider } from "./webview/leetCodePastSubmissionsProvider";
 import { leetCodeSolutionProvider } from "./webview/leetCodeSolutionProvider";
+import { leetCodeSubmissionDetailProvider } from "./webview/leetCodeSubmissionDetailProvider";
 import { leetCodeSubmissionProvider } from "./webview/leetCodeSubmissionProvider";
 import { markdownEngine } from "./webview/markdownEngine";
 import TrackData from "./utils/trackingUtils";
@@ -94,7 +96,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
             leetCodeStatusBarController,
             leetCodeChannel,
             leetCodePreviewProvider,
+            leetCodePastSubmissionsProvider,
             leetCodeSubmissionProvider,
+            leetCodeSubmissionDetailProvider,
             leetCodeSolutionProvider,
             leetCodeExecutor,
             markdownEngine,
@@ -147,6 +151,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
             vscode.commands.registerCommand("leetnotion.showSolution", (input: LeetCodeNode | vscode.Uri) => show.showSolution(input)),
             vscode.commands.registerCommand("leetnotion.showPastSubmissions", (input?: LeetCodeNode | vscode.Uri) => show.showPastSubmissions(input)),
             vscode.commands.registerCommand("leetnotion.showPastSubmissionsByQuestionNumber", (questionNumber: string, title?: string) => show.showPastSubmissionsByQuestionNumber(questionNumber, title)),
+            vscode.commands.registerCommand("leetnotion.showSubmissionDetail", (submissionId: number) => show.showSubmissionDetail(submissionId)),
             vscode.commands.registerCommand("leetnotion.refreshExplorer", () => leetCodeTreeDataProvider.refresh()),
             vscode.commands.registerCommand("leetnotion.refreshReviews", () => reviewTreeDataProvider.refresh()),
             vscode.commands.registerCommand("leetnotion.testSolution", (uri?: vscode.Uri) => {
