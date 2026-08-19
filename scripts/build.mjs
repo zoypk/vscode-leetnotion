@@ -67,6 +67,24 @@ const buildTargets = [
         ],
         outputFile: "public/scripts/webview-actions.js",
     },
+    {
+        label: "profile dashboard",
+        args: [
+            "src/home/profileDashboardClient.mts",
+            "-o",
+            "public/scripts/profile-dashboard.js",
+            "-f",
+            "esm",
+            "-p",
+            "browser",
+            "-m",
+            "--transform.target",
+            "es2020",
+            "--tsconfig",
+            "tsconfig.json",
+        ],
+        outputFile: "public/scripts/profile-dashboard.js",
+    },
 ];
 
 async function main() {
