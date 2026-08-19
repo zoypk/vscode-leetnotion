@@ -26,8 +26,17 @@ function runCommands(job) {
     return job.steps.filter((step) => typeof step.run === "string").map((step) => step.run);
 }
 
-test("CI runs every local gate for pull requests and main before uploading the VSIX", async () => {
+function assertSharedVerificationScript(manifest) {
+    assert.equal(
+        manifest.scripts.verify,
+        "npm run typecheck && npm run lint && npm test && npm run validate:data && npm run compile",
+    );
+}
+
+test("CI runs the shared local gates for pull requests and main before uploading the VSIX", async () => {
     const { document: workflow } = await readWorkflow("ci.yml");
+    const manifest = require("../../package.json");
+    assertSharedVerificationScript(manifest);
 
     assert.deepEqual(Object.keys(workflow.on).sort(), ["pull_request", "push"]);
     assert.deepEqual(workflow.on.push.branches, ["main"]);
@@ -37,13 +46,10 @@ test("CI runs every local gate for pull requests and main before uploading the V
     const commands = runCommands(job);
     assert.deepEqual(commands, [
         "npm ci",
-        "npm run typecheck",
-        "npm run lint",
-        "npm test",
-        "npm run validate:data",
-        "npm run compile",
+        "npm run verify",
         "npm run package",
         "npm run verify:vsix",
+        "npm test -- test/package/manifest.test.cjs",
     ]);
 
     const upload = job.steps.find((step) => step.uses === "actions/upload-artifact@v4");
@@ -73,19 +79,18 @@ test("release runs only for semantic version tags and rejects manifest drift", a
 
 test("release validates and publishes one exact artifact without prerelease churn", async () => {
     const { document: workflow, text } = await readWorkflow("release.yml");
+    const manifest = require("../../package.json");
+    assertSharedVerificationScript(manifest);
     const job = onlyJob(workflow);
     const commands = runCommands(job);
     const artifactExpression = "${{ steps.contract.outputs.artifact }}";
 
     for (const command of [
         "npm ci",
-        "npm run typecheck",
-        "npm run lint",
-        "npm test",
-        "npm run validate:data",
-        "npm run compile",
+        "npm run verify",
         "npm run package",
         `npm run verify:vsix -- "${artifactExpression}"`,
+        "npm test -- test/package/manifest.test.cjs",
     ]) {
         assert.ok(commands.includes(command), `release must run ${command}`);
     }

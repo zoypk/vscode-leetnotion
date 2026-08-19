@@ -31,26 +31,17 @@ jobs:
       - name: Install locked dependencies
         run: npm ci
 
-      - name: Typecheck
-        run: npm run typecheck
-
-      - name: Lint
-        run: npm run lint
-
-      - name: Test
-        run: npm test
-
-      - name: Validate bundled data
-        run: npm run validate:data
-
-      - name: Compile
-        run: npm run compile
+      - name: Validate source and data
+        run: npm run verify
 
       - name: Package extension
         run: npm run package
 
       - name: Validate VSIX
         run: npm run verify:vsix
+
+      - name: Validate release identity agreement
+        run: npm test -- test/package/manifest.test.cjs
 
       - name: Upload validated VSIX
         uses: actions/upload-artifact@v4
