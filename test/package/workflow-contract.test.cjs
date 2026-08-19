@@ -41,7 +41,11 @@ function assertSharedVerificationScript(manifest) {
 test("CI runs the shared local gates for pull requests and main before uploading the VSIX", async () => {
     const { document: workflow } = await readWorkflow("ci.yml");
     const manifest = require("../../package.json");
+    const lockfile = require("../../package-lock.json");
     assertSharedVerificationScript(manifest);
+    assert.equal(manifest.devDependencies["js-yaml"], "^3.14.1");
+    assert.equal(lockfile.packages[""].devDependencies["js-yaml"], "^3.14.1");
+    assert.equal(lockfile.packages["node_modules/js-yaml"].version, "3.14.1");
 
     assert.deepEqual(Object.keys(workflow.on).sort(), ["pull_request", "push"]);
     assert.deepEqual(workflow.on.push.branches, ["main"]);

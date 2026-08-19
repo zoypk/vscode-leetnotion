@@ -25,7 +25,7 @@ Session actions use the exact problem and submission selected by the extension. 
 
 ## Accounts and local storage
 
-LeetCode cookies and the Notion integration token are stored in VS Code SecretStorage. Larger downloaded caches are stored as versioned files under the extension's VS Code global storage directory. Small preferences and scheduling state remain in VS Code's global state.
+LeetCode cookies and the Notion integration token are stored in VS Code SecretStorage. Larger downloaded caches are stored as versioned files under the extension's VS Code global storage directory. Small preferences remain in VS Code global state. Review and study schedules are workspace data under `.leetnotion/reviews.json` and `.leetnotion/study.json` in the configured problem workspace, so include that directory when backing up or moving a study setup.
 
 Signing out or clearing extension data removes the corresponding extension-managed values. The extension does not place credentials in workspace files.
 

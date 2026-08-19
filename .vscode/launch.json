@@ -10,7 +10,7 @@
             "stopOnEntry": false,
             "sourceMaps": true,
             "outFiles": [ "${workspaceFolder}/out/src/**/*.js" ],
-            "preLaunchTask": "npm: watch"
+            "preLaunchTask": "npm: compile"
         }
     ]
 }

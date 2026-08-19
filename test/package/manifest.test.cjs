@@ -100,7 +100,13 @@ test("VS Code tasks and launch documents reference existing development scripts"
     assert.equal(launch.configurations.length, 1);
     assert.equal(launch.configurations[0].name, "Launch Extension");
     assert.equal(launch.configurations.some((configuration) => configuration.name === "Launch Tests"), false);
-    assert.ok(tasks.tasks.some((taskDefinition) => taskDefinition.label === launch.configurations[0].preLaunchTask));
+    const preLaunchTask = tasks.tasks.find(
+        (taskDefinition) => taskDefinition.label === launch.configurations[0].preLaunchTask,
+    );
+    assert.ok(preLaunchTask);
+    assert.equal(preLaunchTask.label, "npm: compile");
+    assert.notEqual(preLaunchTask.isBackground, true,
+        "extension launch must not wait indefinitely for a background task readiness signal");
 });
 
 test("README covers operating, storage, provenance, diagnostics, and safe-test boundaries", async () => {
@@ -111,6 +117,8 @@ test("README covers operating, storage, provenance, diagnostics, and safe-test b
         "Stop Session",
         "SecretStorage",
         "global storage",
+        "\\.leetnotion/reviews\\.json",
+        "\\.leetnotion/study\\.json",
         "Data refresh and provenance",
         "Diagnostics",
         "must not make live LeetCode submissions",
