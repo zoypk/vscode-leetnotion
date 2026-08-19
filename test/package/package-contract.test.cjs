@@ -189,6 +189,10 @@ test("validates Windows-canonical paths for files and directory entries", async 
         "extension/trailing /",
         "extension/file:stream/",
         "extension/NUL.txt/",
+        "extension/CONIN$/",
+        "extension/CONOUT$/",
+        "extension/COM¹.txt/",
+        "extension/LPT².txt/",
         "extension/nul\0name/",
     ]) {
         assert.throws(() => validate([{ name: invalidDirectory, uncompressedSize: 0 }]), /archive path|Windows|ADS|device/i);
@@ -201,6 +205,13 @@ test("validates Windows-canonical paths for files and directory entries", async 
         () => validate([
             { name: "extension/Foo.txt", uncompressedSize: 1 },
             { name: "extension/foo.txt", uncompressedSize: 1 },
+        ]),
+        /case-insensitive archive collision/,
+    );
+    assert.throws(
+        () => validate([
+            { name: "extension/Σ.txt", uncompressedSize: 1 },
+            { name: "extension/ς.txt", uncompressedSize: 1 },
         ]),
         /case-insensitive archive collision/,
     );
@@ -238,6 +249,7 @@ test("derives the non-optional runtime closure and requires every package main a
         "node_modules/vsc": {
             name: "vsc",
             version: "1.0.0",
+            dependencies: { underscore: "1.0.0" },
             main: "lib/index",
             bin: { vsc: "bin/vsc" },
         },
@@ -257,6 +269,7 @@ test("derives the non-optional runtime closure and requires every package main a
     const options = {
         hasFile: (file) => files.has(file),
         readPackageManifest: (packagePath) => manifests[packagePath],
+        rootManifest: { dependencies: { vsc: "1.0.0" } },
     };
 
     assert.deepEqual(productionDependencyClosure(lockfile), ["node_modules/underscore", "node_modules/vsc"]);
@@ -266,13 +279,19 @@ test("derives the non-optional runtime closure and requires every package main a
         () => validateProductionDependencies(lockfile, options),
         /required production package main is missing for underscore/,
     );
+    files.add("extension/node_modules/underscore/underscore.js");
+    manifests["node_modules/vsc"].dependencies.rogue = "1.0.0";
+    assert.throws(
+        () => validateProductionDependencies(lockfile, options),
+        /declares unlocked production dependency rogue|does not resolve rogue/,
+    );
 });
 
 test("requires repository, packaged manifest, VSIX identity, and filename agreement", async () => {
     const { validateManifestAgreement } = await import(verifierUrl);
     const repositoryManifest = { name: "vscode-leetnotion", publisher: "Leetnotion", version: "1.5.4" };
     const packagedManifest = { ...repositoryManifest };
-    const vsixManifestText = '<PackageManifest><Identity Id="vscode-leetnotion" Publisher="Leetnotion" Version="1.5.4" /></PackageManifest>';
+    const vsixManifestText = '<PackageManifest><Metadata><Identity Id="vscode-leetnotion" Publisher="Leetnotion" Version="1.5.4" /></Metadata></PackageManifest>';
     const valid = {
         artifactFileName: "vscode-leetnotion-1.5.4.vsix",
         packagedManifest,
@@ -292,6 +311,58 @@ test("requires repository, packaged manifest, VSIX identity, and filename agreem
         () => validateManifestAgreement({ ...valid, artifactFileName: "wrong.vsix" }),
         /VSIX filename/,
     );
+    assert.throws(
+        () => validateManifestAgreement({
+            ...valid,
+            vsixManifestText: `<PackageManifest><![CDATA[${vsixManifestText}]]></PackageManifest>`,
+        }),
+        /exactly one Identity element; found 0/,
+    );
+});
+
+test("checks the VSIX size before reading and verifies stored-entry CRC-32", async () => {
+    const { calculateCrc32, readBoundedVsix, readZipEntry } = await import(verifierUrl);
+    let readCalled = false;
+    await assert.rejects(
+        readBoundedVsix("oversized.vsix", {
+            statFile: async () => ({ size: 15 * 1024 * 1024 + 1 }),
+            readFileBytes: async () => {
+                readCalled = true;
+                return Buffer.alloc(0);
+            },
+        }),
+        /VSIX size/,
+    );
+    assert.equal(readCalled, false);
+
+    const content = Buffer.from("123456789");
+    const name = "extension/file.txt";
+    const nameBytes = Buffer.from(name);
+    const crc32 = calculateCrc32(content);
+    assert.equal(crc32, 0xcbf43926);
+    const archive = Buffer.alloc(30 + nameBytes.length + content.length);
+    archive.writeUInt32LE(0x04034b50, 0);
+    archive.writeUInt16LE(0, 6);
+    archive.writeUInt16LE(0, 8);
+    archive.writeUInt32LE(crc32, 14);
+    archive.writeUInt32LE(content.length, 18);
+    archive.writeUInt32LE(content.length, 22);
+    archive.writeUInt16LE(nameBytes.length, 26);
+    nameBytes.copy(archive, 30);
+    content.copy(archive, 30 + nameBytes.length);
+    const entry = {
+        name,
+        flags: 0,
+        compressionMethod: 0,
+        compressedSize: content.length,
+        uncompressedSize: content.length,
+        localHeaderOffset: 0,
+        crc32,
+    };
+    assert.deepEqual(readZipEntry(archive, entry), content);
+    const corrupted = Buffer.from(archive);
+    corrupted[corrupted.length - 1] ^= 1;
+    assert.throws(() => readZipEntry(corrupted, entry), /CRC-32 mismatch/);
 });
 
 test("requires the packaged NeetCode index bytes and content set to match exactly", async () => {

@@ -12,6 +12,13 @@ const FILE_COUNT_LIMIT = 2_500;
 const UNPACKED_SIZE_LIMIT = 50 * 1024 * 1024;
 const VSIX_SIZE_LIMIT = 15 * 1024 * 1024;
 const MAX_JSON_SIZE = 2 * 1024 * 1024;
+const CRC32_TABLE = Uint32Array.from({ length: 256 }, (_, index) => {
+    let value = index;
+    for (let bit = 0; bit < 8; bit += 1) {
+        value = (value & 1) !== 0 ? 0xedb88320 ^ (value >>> 1) : value >>> 1;
+    }
+    return value >>> 0;
+});
 
 const REQUIRED_RUNTIME_PATHS = Object.freeze([
     "[Content_Types].xml",
@@ -138,6 +145,7 @@ export function parseZipEntries(buffer) {
             name,
             flags: buffer.readUInt16LE(offset + 8),
             compressionMethod: buffer.readUInt16LE(offset + 10),
+            crc32: buffer.readUInt32LE(offset + 16),
             compressedSize,
             uncompressedSize,
             localHeaderOffset,
@@ -179,7 +187,7 @@ function archivePathRecord(entry) {
             throw new Error(`archive path contains a Windows-invalid or ADS character: ${name}`);
         }
         const deviceStem = segment.split(".", 1)[0].toUpperCase();
-        if (/^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])$/.test(deviceStem)) {
+        if (/^(CON|PRN|AUX|NUL|CONIN\$|CONOUT\$|COM(?:[1-9]|[¹²³])|LPT(?:[1-9]|[¹²³]))$/.test(deviceStem)) {
             throw new Error(`archive path contains a reserved Windows device name: ${name}`);
         }
     }
@@ -187,7 +195,7 @@ function archivePathRecord(entry) {
         throw new Error(`symbolic links are forbidden in the VSIX: ${name}`);
     }
     return {
-        canonical: segments.map((segment) => segment.toLowerCase()).join("/"),
+        canonical: segments.map((segment) => segment.toUpperCase()).join("/"),
         isDirectory,
         name,
     };
@@ -261,6 +269,11 @@ export function validateVsixEntries(entries, { requiredPaths, vsixSize }) {
             errors.push(`forbidden packaged path: ${entry.name}`);
         }
     }
+    for (const entry of entries.filter((candidate) => candidate.name.endsWith("/"))) {
+        if ((entry.compressedSize ?? 0) !== 0 || (entry.uncompressedSize ?? 0) !== 0 || (entry.crc32 ?? 0) !== 0) {
+            errors.push(`directory ZIP entry must be empty: ${entry.name}`);
+        }
+    }
 
     for (const requiredPath of requiredPaths) {
         if (!names.has(requiredPath)) {
@@ -282,6 +295,26 @@ export function validateVsixEntries(entries, { requiredPaths, vsixSize }) {
     return { fileCount: files.length, unpackedSize, vsixSize };
 }
 
+export function calculateCrc32(buffer) {
+    let crc = 0xffffffff;
+    for (const byte of buffer) {
+        crc = CRC32_TABLE[(crc ^ byte) & 0xff] ^ (crc >>> 8);
+    }
+    return (crc ^ 0xffffffff) >>> 0;
+}
+
+export async function readBoundedVsix(artifactPath, { statFile = stat, readFileBytes = readFile } = {}) {
+    const artifactStats = await statFile(artifactPath);
+    if (!Number.isSafeInteger(artifactStats.size) || artifactStats.size < 0 || artifactStats.size > VSIX_SIZE_LIMIT) {
+        throw new Error(`VSIX size ${artifactStats.size} exceeds ${VSIX_SIZE_LIMIT} bytes or is invalid.`);
+    }
+    const archive = await readFileBytes(artifactPath);
+    if (archive.length !== artifactStats.size) {
+        throw new Error(`VSIX changed size while being read: expected ${artifactStats.size}, read ${archive.length}.`);
+    }
+    return { archive, artifactStats };
+}
+
 export function readZipEntry(archive, entry) {
     if (!entry || entry.name.endsWith("/")) {
         throw new Error("Cannot read a missing or directory ZIP entry.");
@@ -297,6 +330,16 @@ export function readZipEntry(archive, entry) {
     }
     if (flags !== entry.flags || compressionMethod !== entry.compressionMethod) {
         throw new Error(`Central and local ZIP headers disagree for ${entry.name}.`);
+    }
+    if ((flags & 8) === 0) {
+        const localCrc32 = archive.readUInt32LE(offset + 14);
+        const localCompressedSize = archive.readUInt32LE(offset + 18);
+        const localUncompressedSize = archive.readUInt32LE(offset + 22);
+        if (localCrc32 !== entry.crc32
+            || localCompressedSize !== entry.compressedSize
+            || localUncompressedSize !== entry.uncompressedSize) {
+            throw new Error(`Central and local ZIP integrity fields disagree for ${entry.name}.`);
+        }
     }
     const fileNameLength = archive.readUInt16LE(offset + 26);
     const extraLength = archive.readUInt16LE(offset + 28);
@@ -320,6 +363,9 @@ export function readZipEntry(archive, entry) {
     }
     if (content.length !== entry.uncompressedSize) {
         throw new Error(`Uncompressed size mismatch for ${entry.name}.`);
+    }
+    if (calculateCrc32(content) !== entry.crc32) {
+        throw new Error(`CRC-32 mismatch for ${entry.name}.`);
     }
     return content;
 }
@@ -405,10 +451,39 @@ function resolvePackagedMain(packageBase, declaredMain, hasFile) {
     return candidates.find(hasFile);
 }
 
-export function validateProductionDependencies(lockfile, { hasFile, readPackageManifest }) {
+function manifestDependencyMap(value, label, errors) {
+    if (value === undefined) {
+        return {};
+    }
+    if (!value || typeof value !== "object" || Array.isArray(value)) {
+        errors.push(`${label} dependencies must be an object`);
+        return {};
+    }
+    return value;
+}
+
+function reconcileDependencyMaps(declared, locked, label, errors) {
+    const declaredNames = Object.keys(declared);
+    const lockedNames = Object.keys(locked || {});
+    for (const dependencyName of new Set([...declaredNames, ...lockedNames])) {
+        if (!Object.prototype.hasOwnProperty.call(declared, dependencyName)) {
+            errors.push(`${label} omits locked production dependency ${dependencyName}`);
+        } else if (!Object.prototype.hasOwnProperty.call(locked || {}, dependencyName)) {
+            errors.push(`${label} declares unlocked production dependency ${dependencyName}`);
+        } else if (declared[dependencyName] !== locked[dependencyName]) {
+            errors.push(`${label} dependency ${dependencyName} uses ${declared[dependencyName]}, lockfile uses ${locked[dependencyName]}`);
+        }
+    }
+}
+
+export function validateProductionDependencies(lockfile, { hasFile, readPackageManifest, rootManifest }) {
     const errors = [];
     let entrypointCount = 0;
     const closure = productionDependencyClosure(lockfile);
+    const lockClosure = new Set(closure);
+    const manifestsByPath = new Map();
+    const rootDependencies = manifestDependencyMap(rootManifest?.dependencies, "packaged root package.json", errors);
+    reconcileDependencyMaps(rootDependencies, lockfile.packages[""].dependencies, "packaged root package.json", errors);
     for (const packagePath of closure) {
         const packageBase = `extension/${packagePath}`;
         const manifestPath = `${packageBase}/package.json`;
@@ -423,6 +498,7 @@ export function validateProductionDependencies(lockfile, { hasFile, readPackageM
             errors.push(`cannot parse ${manifestPath}: ${error instanceof Error ? error.message : String(error)}`);
             continue;
         }
+        manifestsByPath.set(packagePath, manifest);
         const lockedPackage = lockfile.packages[packagePath];
         const packageName = expectedPackageName(packagePath);
         if (manifest.name !== packageName) {
@@ -431,6 +507,8 @@ export function validateProductionDependencies(lockfile, { hasFile, readPackageM
         if (manifest.version !== lockedPackage.version) {
             errors.push(`${manifestPath} version ${manifest.version} does not match lockfile ${lockedPackage.version}`);
         }
+        const manifestDependencies = manifestDependencyMap(manifest.dependencies, manifestPath, errors);
+        reconcileDependencyMaps(manifestDependencies, lockedPackage.dependencies || {}, manifestPath, errors);
         if (manifest.main !== undefined) {
             try {
                 const resolvedMain = resolvePackagedMain(packageBase, manifest.main, hasFile);
@@ -464,26 +542,232 @@ export function validateProductionDependencies(lockfile, { hasFile, readPackageM
             }
         }
     }
+    const manifestQueue = [];
+    for (const dependencyName of Object.keys(rootDependencies)) {
+        try {
+            manifestQueue.push(resolveLockedDependency(lockfile.packages, "", dependencyName));
+        } catch (error) {
+            errors.push(error instanceof Error ? error.message : String(error));
+        }
+    }
+    const manifestClosure = new Set();
+    while (manifestQueue.length > 0) {
+        const packagePath = manifestQueue.shift();
+        if (manifestClosure.has(packagePath)) {
+            continue;
+        }
+        manifestClosure.add(packagePath);
+        const manifest = manifestsByPath.get(packagePath);
+        if (!manifest) {
+            continue;
+        }
+        for (const dependencyName of Object.keys(manifest.dependencies || {})) {
+            try {
+                manifestQueue.push(resolveLockedDependency(lockfile.packages, packagePath, dependencyName));
+            } catch (error) {
+                errors.push(error instanceof Error ? error.message : String(error));
+            }
+        }
+    }
+    for (const packagePath of lockClosure) {
+        if (!manifestClosure.has(packagePath)) {
+            errors.push(`packaged manifest dependency graph does not reach locked production package ${packagePath}`);
+        }
+    }
+    for (const packagePath of manifestClosure) {
+        if (!lockClosure.has(packagePath)) {
+            errors.push(`packaged manifest dependency graph reaches unlocked production package ${packagePath}`);
+        }
+    }
     if (errors.length > 0) {
         throw new Error(`Production dependency contract failed:\n- ${errors.join("\n- ")}`);
     }
     return { packageCount: closure.length, entrypointCount };
 }
 
-function parseIdentityAttributes(vsixManifestText) {
-    const matches = [...vsixManifestText.matchAll(/<Identity\b([^>]*)\/?\s*>/gi)];
-    if (matches.length !== 1) {
-        throw new Error(`extension.vsixmanifest must contain exactly one Identity element; found ${matches.length}.`);
-    }
-    const attributes = {};
-    const attributePattern = /([A-Za-z_:][A-Za-z0-9_.:-]*)\s*=\s*(?:"([^"]*)"|'([^']*)')/g;
-    for (const match of matches[0][1].matchAll(attributePattern)) {
-        if (Object.prototype.hasOwnProperty.call(attributes, match[1])) {
-            throw new Error(`extension.vsixmanifest Identity repeats attribute ${match[1]}.`);
+function decodeXmlAttribute(value) {
+    const entityPattern = /&(?:amp|lt|gt|quot|apos|#\d+|#x[0-9a-f]+);/gi;
+    let result = "";
+    let cursor = 0;
+    for (const match of value.matchAll(entityPattern)) {
+        if (value.slice(cursor, match.index).includes("&")) {
+            throw new Error("extension.vsixmanifest contains an unknown XML entity.");
         }
-        attributes[match[1]] = match[2] ?? match[3];
+        result += value.slice(cursor, match.index);
+        const entity = match[0];
+        const named = { "&amp;": "&", "&lt;": "<", "&gt;": ">", "&quot;": '"', "&apos;": "'" }[entity.toLowerCase()];
+        if (named !== undefined) {
+            result += named;
+        } else {
+            const codePoint = entity[2].toLowerCase() === "x"
+                ? Number.parseInt(entity.slice(3, -1), 16)
+                : Number.parseInt(entity.slice(2, -1), 10);
+            if (!Number.isInteger(codePoint) || codePoint <= 0 || codePoint > 0x10ffff || (codePoint >= 0xd800 && codePoint <= 0xdfff)) {
+                throw new Error("extension.vsixmanifest contains an invalid numeric XML entity.");
+            }
+            result += String.fromCodePoint(codePoint);
+        }
+        cursor = match.index + entity.length;
     }
-    return attributes;
+    if (value.slice(cursor).includes("&")) {
+        throw new Error("extension.vsixmanifest contains an unknown XML entity.");
+    }
+    return result + value.slice(cursor);
+}
+
+function findXmlTagEnd(xml, start) {
+    let quote = "";
+    for (let index = start; index < xml.length; index += 1) {
+        const character = xml[index];
+        if (quote) {
+            if (character === quote) {
+                quote = "";
+            }
+        } else if (character === '"' || character === "'") {
+            quote = character;
+        } else if (character === ">") {
+            return index;
+        } else if (character === "<") {
+            throw new Error("extension.vsixmanifest contains a nested '<' inside a tag.");
+        }
+    }
+    throw new Error("extension.vsixmanifest contains an unterminated tag.");
+}
+
+function parseXmlStartTag(rawTag) {
+    let source = rawTag.trim();
+    const selfClosing = source.endsWith("/");
+    if (selfClosing) {
+        source = source.slice(0, -1).trimEnd();
+    }
+    const nameMatch = /^[A-Za-z_][A-Za-z0-9_.:-]*/.exec(source);
+    if (!nameMatch) {
+        throw new Error("extension.vsixmanifest contains an invalid element name.");
+    }
+    const name = nameMatch[0];
+    const attributes = {};
+    let cursor = name.length;
+    while (cursor < source.length) {
+        const whitespace = /^\s+/.exec(source.slice(cursor));
+        if (!whitespace) {
+            throw new Error(`extension.vsixmanifest has malformed attributes on ${name}.`);
+        }
+        cursor += whitespace[0].length;
+        if (cursor === source.length) {
+            break;
+        }
+        const attributeMatch = /^[A-Za-z_:][A-Za-z0-9_.:-]*/.exec(source.slice(cursor));
+        if (!attributeMatch) {
+            throw new Error(`extension.vsixmanifest has an invalid attribute on ${name}.`);
+        }
+        const attributeName = attributeMatch[0];
+        cursor += attributeName.length;
+        cursor += /^\s*/.exec(source.slice(cursor))[0].length;
+        if (source[cursor] !== "=") {
+            throw new Error(`extension.vsixmanifest attribute ${attributeName} is missing '='.`);
+        }
+        cursor += 1;
+        cursor += /^\s*/.exec(source.slice(cursor))[0].length;
+        const quote = source[cursor];
+        if (quote !== '"' && quote !== "'") {
+            throw new Error(`extension.vsixmanifest attribute ${attributeName} is not quoted.`);
+        }
+        const valueEnd = source.indexOf(quote, cursor + 1);
+        if (valueEnd < 0) {
+            throw new Error(`extension.vsixmanifest attribute ${attributeName} is unterminated.`);
+        }
+        if (Object.prototype.hasOwnProperty.call(attributes, attributeName)) {
+            throw new Error(`extension.vsixmanifest repeats attribute ${attributeName}.`);
+        }
+        attributes[attributeName] = decodeXmlAttribute(source.slice(cursor + 1, valueEnd));
+        cursor = valueEnd + 1;
+    }
+    return { attributes, name, selfClosing };
+}
+
+function parseIdentityAttributes(vsixManifestText) {
+    const stack = [];
+    const identities = [];
+    let rootName = "";
+    let cursor = 0;
+    while (cursor < vsixManifestText.length) {
+        const tagStart = vsixManifestText.indexOf("<", cursor);
+        if (tagStart < 0) {
+            break;
+        }
+        if (stack.length === 0 && vsixManifestText.slice(cursor, tagStart).trim()) {
+            throw new Error("extension.vsixmanifest contains text outside its root element.");
+        }
+        if (vsixManifestText.startsWith("<!--", tagStart)) {
+            const commentEnd = vsixManifestText.indexOf("-->", tagStart + 4);
+            if (commentEnd < 0) {
+                throw new Error("extension.vsixmanifest contains an unterminated comment.");
+            }
+            cursor = commentEnd + 3;
+            continue;
+        }
+        if (vsixManifestText.startsWith("<![CDATA[", tagStart)) {
+            if (stack.length === 0) {
+                throw new Error("extension.vsixmanifest contains CDATA outside its root element.");
+            }
+            const cdataEnd = vsixManifestText.indexOf("]]>", tagStart + 9);
+            if (cdataEnd < 0) {
+                throw new Error("extension.vsixmanifest contains unterminated CDATA.");
+            }
+            cursor = cdataEnd + 3;
+            continue;
+        }
+        if (vsixManifestText.startsWith("<?", tagStart)) {
+            const instructionEnd = vsixManifestText.indexOf("?>", tagStart + 2);
+            if (instructionEnd < 0) {
+                throw new Error("extension.vsixmanifest contains an unterminated processing instruction.");
+            }
+            cursor = instructionEnd + 2;
+            continue;
+        }
+        if (vsixManifestText.startsWith("<!", tagStart)) {
+            throw new Error("extension.vsixmanifest declarations such as DOCTYPE are forbidden.");
+        }
+        const tagEnd = findXmlTagEnd(vsixManifestText, tagStart + 1);
+        const rawTag = vsixManifestText.slice(tagStart + 1, tagEnd);
+        if (rawTag.startsWith("/")) {
+            const closingName = rawTag.slice(1).trim();
+            if (!/^[A-Za-z_][A-Za-z0-9_.:-]*$/.test(closingName) || stack.pop() !== closingName) {
+                throw new Error(`extension.vsixmanifest has a mismatched closing tag ${closingName}.`);
+            }
+        } else {
+            const tag = parseXmlStartTag(rawTag);
+            if (stack.length === 0) {
+                if (rootName) {
+                    throw new Error("extension.vsixmanifest contains multiple root elements.");
+                }
+                rootName = tag.name;
+            }
+            if (tag.name.split(":").pop() === "Identity") {
+                if (stack.at(-1)?.split(":").pop() !== "Metadata") {
+                    throw new Error("extension.vsixmanifest Identity must be a direct child of Metadata.");
+                }
+                identities.push(tag.attributes);
+            }
+            if (!tag.selfClosing) {
+                stack.push(tag.name);
+            }
+        }
+        cursor = tagEnd + 1;
+    }
+    if (stack.length === 0 && vsixManifestText.slice(cursor).trim()) {
+        throw new Error("extension.vsixmanifest contains text outside its root element.");
+    }
+    if (stack.length > 0) {
+        throw new Error(`extension.vsixmanifest has an unclosed element ${stack.at(-1)}.`);
+    }
+    if (rootName.split(":").pop() !== "PackageManifest") {
+        throw new Error("extension.vsixmanifest root element must be PackageManifest.");
+    }
+    if (identities.length !== 1) {
+        throw new Error(`extension.vsixmanifest must contain exactly one Identity element; found ${identities.length}.`);
+    }
+    return identities[0];
 }
 
 export function validateManifestAgreement({ artifactFileName, packagedManifest, repositoryManifest, vsixManifestText }) {
@@ -605,7 +889,7 @@ async function main() {
     const lockfile = JSON.parse(lockfileBytes.toString("utf8"));
     const repositoryIndex = JSON.parse(repositoryIndexBytes.toString("utf8"));
     const artifactPath = resolve(process.argv[2] || join(repositoryRoot, `${repositoryManifest.name}-${repositoryManifest.version}.vsix`));
-    const [archive, artifactStats] = await Promise.all([readFile(artifactPath), stat(artifactPath)]);
+    const { archive, artifactStats } = await readBoundedVsix(artifactPath);
     const entries = parseZipEntries(archive);
     const result = validateVsixEntries(entries, {
         requiredPaths: requiredVsixPaths(repositoryIndex),
@@ -625,6 +909,7 @@ async function main() {
     const dependencyResult = validateProductionDependencies(lockfile, {
         hasFile: (name) => entryByName.has(name) && !name.endsWith("/"),
         readPackageManifest: (packagePath) => parseJsonEntry(archive, entryByName, `extension/${packagePath}/package.json`),
+        rootManifest: packagedManifest,
     });
     await smokePackagedRuntime(archive, entries);
     process.stdout.write(`VSIX verified: ${artifactPath}\n`);
