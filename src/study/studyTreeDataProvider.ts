@@ -3,7 +3,7 @@ import { StudyNode } from "./studyNode";
 import { StudyBacklogItem, StudySection, StudySectionId, StudyTodayItem } from "./types";
 import { studyService } from "./studyService";
 
-export class StudyTreeDataProvider implements vscode.TreeDataProvider<StudyNode> {
+export class StudyTreeDataProvider implements vscode.TreeDataProvider<StudyNode>, vscode.Disposable {
     private sections: StudySection[] = [];
     private errorMessage?: string;
     private hasLoaded = false;
@@ -24,6 +24,10 @@ export class StudyTreeDataProvider implements vscode.TreeDataProvider<StudyNode>
         }
 
         this.onDidChangeTreeDataEvent.fire(null);
+    }
+
+    public dispose(): void {
+        this.onDidChangeTreeDataEvent.dispose();
     }
 
     public getTreeItem(element: StudyNode): vscode.TreeItem {
@@ -113,21 +117,21 @@ export class StudyTreeDataProvider implements vscode.TreeDataProvider<StudyNode>
             return [];
         }
 
-        const section = this.sections.find((item) => item.id === element.sectionId);
-        if (!section || section.items.length === 0) {
+        const selectedSection = this.sections.find((item) => item.id === element.sectionId);
+        if (!selectedSection || selectedSection.items.length === 0) {
             return [
                 new StudyNode(
                     `${element.id}-empty`,
-                    section?.emptyLabel ?? "No study items",
+                    selectedSection?.emptyLabel ?? "No study items",
                     "message",
                     vscode.TreeItemCollapsibleState.None,
                 ),
             ];
         }
 
-        switch (section.id) {
+        switch (selectedSection.id) {
             case StudySectionId.Today:
-                return (section.items as StudyTodayItem[]).map((item) => item.kind === "review"
+                return (selectedSection.items as StudyTodayItem[]).map((item) => item.kind === "review"
                     ? new StudyNode(
                         item.id,
                         `[${item.review.questionNumber}] ${item.review.name}`,
@@ -135,7 +139,7 @@ export class StudyTreeDataProvider implements vscode.TreeDataProvider<StudyNode>
                         vscode.TreeItemCollapsibleState.None,
                         this.getTodayReviewDescription(item.review),
                         this.getTodayReviewTooltip(item.review),
-                        section.id,
+                        selectedSection.id,
                         item.review,
                         undefined,
                         {
@@ -151,7 +155,7 @@ export class StudyTreeDataProvider implements vscode.TreeDataProvider<StudyNode>
                         vscode.TreeItemCollapsibleState.None,
                         this.getBacklogDescription(item),
                         this.getBacklogTooltip(item, true),
-                        section.id,
+                        selectedSection.id,
                         undefined,
                         item,
                         {
@@ -161,14 +165,14 @@ export class StudyTreeDataProvider implements vscode.TreeDataProvider<StudyNode>
                         },
                     ));
             case StudySectionId.Backlog:
-                return (section.items as StudyBacklogItem[]).map((item) => new StudyNode(
+                return (selectedSection.items as StudyBacklogItem[]).map((item) => new StudyNode(
                     item.id,
                     `[${item.questionNumber}] ${item.name}`,
                     "new-problem",
                     vscode.TreeItemCollapsibleState.None,
                     this.getBacklogDescription(item),
                     this.getBacklogTooltip(item),
-                    section.id,
+                    selectedSection.id,
                     undefined,
                     item,
                     {
@@ -178,7 +182,7 @@ export class StudyTreeDataProvider implements vscode.TreeDataProvider<StudyNode>
                     },
                 ));
             case StudySectionId.Filters:
-                return (section.items as string[]).map((message, index) => new StudyNode(
+                return (selectedSection.items as string[]).map((message, index) => new StudyNode(
                     `${element.id}-${index}`,
                     message,
                     "message",

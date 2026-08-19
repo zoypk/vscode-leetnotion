@@ -27,7 +27,7 @@ interface IReportData {
     target?: string;
 }
 
-interface ITrackData {
+interface ITrackData extends vscode.Disposable {
     reportCache: IReportData[];
     isSubmit: boolean;
     report: (reportItems: IReportData | IReportData[]) => void;
@@ -119,6 +119,14 @@ class TrackData implements ITrackData {
             this.isSubmit = false;
         }
     };
+
+    public dispose(): void {
+        if (this.sendTimer) {
+            clearTimeout(this.sendTimer);
+            this.sendTimer = undefined;
+        }
+        this.reportCache = [];
+    }
 }
 
 export default new TrackData();

@@ -6,7 +6,7 @@ import { explorerNodeManager } from "../explorer/explorerNodeManager";
 import { LeetCodeNode } from "../explorer/LeetCodeNode";
 import { getEditorShortcuts } from "../utils/settingUtils";
 
-export class CustomCodeLensProvider implements vscode.CodeLensProvider {
+export class CustomCodeLensProvider implements vscode.CodeLensProvider, vscode.Disposable {
 
     private onDidChangeCodeLensesEmitter: vscode.EventEmitter<void> = new vscode.EventEmitter<void>();
 
@@ -16,6 +16,10 @@ export class CustomCodeLensProvider implements vscode.CodeLensProvider {
 
     public refresh(): void {
         this.onDidChangeCodeLensesEmitter.fire();
+    }
+
+    public dispose(): void {
+        this.onDidChangeCodeLensesEmitter.dispose();
     }
 
     public provideCodeLenses(document: vscode.TextDocument): vscode.ProviderResult<vscode.CodeLens[]> {

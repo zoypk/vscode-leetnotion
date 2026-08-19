@@ -26,6 +26,7 @@ class CodeLensController implements Disposable {
             this.registeredProvider.dispose();
         }
         this.configurationChangeListener.dispose();
+        this.internalProvider.dispose();
     }
 }
 

@@ -2,6 +2,7 @@
 // Licensed under the MIT license.
 
 import * as vscode from "vscode";
+import { ActivationResources, registerActivationResources, registerNodeEvent } from "./activation";
 import { codeLensController } from "./codelens/CodeLensController";
 import * as cache from "./commands/cache";
 import { switchDefaultLanguage } from "./commands/language";
@@ -33,6 +34,7 @@ import { leetCodeSolutionProvider } from "./webview/leetCodeSolutionProvider";
 import { leetCodeSubmissionDetailProvider } from "./webview/leetCodeSubmissionDetailProvider";
 import { leetCodeSubmissionProvider } from "./webview/leetCodeSubmissionProvider";
 import { markdownEngine } from "./webview/markdownEngine";
+import { leetnotionEngine } from "./webview/leetnotionEngine";
 import TrackData from "./utils/trackingUtils";
 import { globalState } from "./globalState";
 import { leetcodeClient } from "./leetCodeClient";
@@ -48,14 +50,37 @@ let intervals: NodeJS.Timeout[] = [];
 export let leetcodeTreeView: vscode.TreeView<LeetCodeNode> | undefined;
 let reviewTreeView: vscode.TreeView<ReviewNode> | undefined;
 let studyTreeView: vscode.TreeView<StudyNode> | undefined;
+let activeResources: ActivationResources | undefined;
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
+    activeResources?.dispose();
+    activeResources = new ActivationResources();
+    context.subscriptions.push(activeResources);
+    activeResources.add(
+        leetCodeStatusBarController,
+        leetCodeChannel,
+        leetCodePreviewProvider,
+        leetCodePastSubmissionsProvider,
+        leetCodeSubmissionProvider,
+        leetCodeSubmissionDetailProvider,
+        leetCodeSolutionProvider,
+        leetCodeExecutor,
+        markdownEngine,
+        leetnotionEngine,
+        codeLensController,
+        TrackData,
+        profileDashboardProvider,
+        leetCodeTreeDataProvider,
+        reviewTreeDataProvider,
+        studyTreeDataProvider,
+        explorerNodeManager,
+    );
     try {
         if (!(await leetCodeExecutor.meetRequirements(context))) {
             throw new Error("The environment doesn't meet requirements.");
         }
 
-        leetCodeManager.on("statusChanged", () => {
+        activeResources.add(registerNodeEvent(leetCodeManager, "statusChanged", () => {
             leetCodeStatusBarController.updateStatusBar(leetCodeManager.getStatus(), leetCodeManager.getUser());
             leetCodeTreeDataProvider.refresh();
             leetcodeClient.initialize();
@@ -67,7 +92,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
             } else if (nextStatus === UserStatus.SignedOut) {
                 intervals = clearIntervals(intervals);
             }
-        });
+        }));
 
         leetCodeTreeDataProvider.initialize(context);
         await globalState.initialize(context);
@@ -92,19 +117,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         reviewTreeView = vscode.window.createTreeView("leetnotionReviews", { treeDataProvider: reviewTreeDataProvider, showCollapseAll: true });
         studyTreeView = vscode.window.createTreeView("leetnotionStudy", { treeDataProvider: studyTreeDataProvider, showCollapseAll: true });
 
-        context.subscriptions.push(
-            leetCodeStatusBarController,
-            leetCodeChannel,
-            leetCodePreviewProvider,
-            leetCodePastSubmissionsProvider,
-            leetCodeSubmissionProvider,
-            leetCodeSubmissionDetailProvider,
-            leetCodeSolutionProvider,
-            leetCodeExecutor,
-            markdownEngine,
-            codeLensController,
-            profileDashboardProvider,
-            explorerNodeManager,
+        activeResources.add(registerActivationResources(() => [
             vscode.window.registerFileDecorationProvider(leetCodeTreeItemDecorationProvider),
             vscode.window.registerWebviewViewProvider("leetnotionHome", profileDashboardProvider, { webviewOptions: { retainContextWhenHidden: true } }),
             leetcodeTreeView,
@@ -202,19 +215,23 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
                     intervals = clearIntervals(intervals)
                 }
             }
-        );
+        ]));
 
         await leetCodeExecutor.switchEndpoint(plugin.getLeetCodeEndpoint());
         await leetCodeManager.getLoginStatus();
-        vscode.window.registerUriHandler({ handleUri: leetCodeManager.handleUriSignIn });
+        activeResources.add(vscode.window.registerUriHandler({ handleUri: leetCodeManager.handleUriSignIn }));
     } catch (error) {
         await sessionState.dispose();
         leetCodeChannel.appendLine(error.toString());
         promptForOpenOutputChannel("Extension initialization failed. Please open output channel for details.", DialogType.error);
+        activeResources?.dispose();
+        activeResources = undefined;
     }
 }
 
 export async function deactivate(): Promise<void> {
+    activeResources?.dispose();
+    activeResources = undefined;
     intervals = clearIntervals(intervals);
     await sessionState.dispose();
 }

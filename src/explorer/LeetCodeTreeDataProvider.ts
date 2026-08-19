@@ -11,8 +11,9 @@ import { LeetCodeNode } from "./LeetCodeNode";
 import { globalState } from "../globalState";
 import { extractArrayElements } from "../utils/dataUtils";
 
-export class LeetCodeTreeDataProvider implements vscode.TreeDataProvider<LeetCodeNode> {
+export class LeetCodeTreeDataProvider implements vscode.TreeDataProvider<LeetCodeNode>, vscode.Disposable {
     private context: vscode.ExtensionContext;
+    private refreshListener?: vscode.Disposable;
 
     private onDidChangeTreeDataEvent: vscode.EventEmitter<LeetCodeNode | undefined | null> = new vscode.EventEmitter<
         LeetCodeNode | undefined | null
@@ -22,9 +23,16 @@ export class LeetCodeTreeDataProvider implements vscode.TreeDataProvider<LeetCod
 
     public initialize(context: vscode.ExtensionContext): void {
         this.context = context;
-        context.subscriptions.push(explorerNodeManager.onDidRefresh(() => {
+        this.refreshListener?.dispose();
+        this.refreshListener = explorerNodeManager.onDidRefresh(() => {
             this.onDidChangeTreeDataEvent.fire(null);
-        }));
+        });
+    }
+
+    public dispose(): void {
+        this.refreshListener?.dispose();
+        this.refreshListener = undefined;
+        this.onDidChangeTreeDataEvent.dispose();
     }
 
     public async refresh(): Promise<void> {

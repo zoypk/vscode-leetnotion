@@ -3,7 +3,7 @@ import { ReviewNode } from "./reviewNode";
 import { ReviewSection, ReviewSectionId } from "./types";
 import { reviewService } from "./reviewService";
 
-export class ReviewTreeDataProvider implements vscode.TreeDataProvider<ReviewNode> {
+export class ReviewTreeDataProvider implements vscode.TreeDataProvider<ReviewNode>, vscode.Disposable {
     private sections: ReviewSection[] = [];
     private errorMessage?: string;
     private hasLoaded = false;
@@ -24,6 +24,10 @@ export class ReviewTreeDataProvider implements vscode.TreeDataProvider<ReviewNod
         }
 
         this.onDidChangeTreeDataEvent.fire(null);
+    }
+
+    public dispose(): void {
+        this.onDidChangeTreeDataEvent.dispose();
     }
 
     public getTreeItem(element: ReviewNode): vscode.TreeItem {

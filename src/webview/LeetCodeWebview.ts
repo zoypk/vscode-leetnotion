@@ -16,6 +16,10 @@ export abstract class LeetCodeWebview implements Disposable {
         if (this.panel) {
             this.panel.dispose();
         }
+        for (const listener of this.listeners.splice(0)) {
+            listener.dispose();
+        }
+        this.panel = undefined;
     }
 
     public getPanel() {
