@@ -10,7 +10,7 @@ export async function createSubmissionSourceSnapshot(
 ): Promise<SubmissionSourceSnapshot> {
     const source = extractSubmissionSource(originalFilePath, fileContent);
     const temporaryDirectory = await fs.mkdtemp(path.join(os.tmpdir(), "leetnotion-submit-"));
-    const snapshotFilePath = path.join(temporaryDirectory, `solution${path.extname(originalFilePath)}`);
+    const snapshotFilePath = path.join(temporaryDirectory, path.basename(originalFilePath));
 
     try {
         await fs.writeFile(snapshotFilePath, fileContent, {

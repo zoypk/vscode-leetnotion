@@ -24,6 +24,12 @@ export function extractSubmissionSource(filePath: string, fileContent: string): 
 
     const codeStart = fileContent.indexOf("@lc code=start");
     const codeEnd = fileContent.indexOf("@lc code=end", codeStart + 1);
+    if (codeStart < 0 && codeEnd < 0) {
+        return {
+            questionNumber,
+            code: normalizeSubmissionCode(fileContent),
+        };
+    }
     if (codeStart < 0 || codeEnd < 0 || codeEnd <= codeStart) {
         throw new Error(`submission-source-code-markers-not-found:${filePath}`);
     }
