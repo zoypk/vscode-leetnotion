@@ -58,6 +58,19 @@ test("uses dedicated clean, pinned package, and VSIX verification commands", () 
     assert.equal(fs.existsSync(path.join(repositoryRoot, "esbuild.js")), false);
 });
 
+test("verify:vsix accepts positional and documented --file artifact paths", async () => {
+    const { resolveArtifactPath } = await import(verifierUrl);
+    const defaultPath = path.join(repositoryRoot, "default.vsix");
+    const artifactPath = path.join(repositoryRoot, "artifact.vsix");
+
+    assert.equal(resolveArtifactPath([], defaultPath), path.resolve(defaultPath));
+    assert.equal(resolveArtifactPath([artifactPath], defaultPath), path.resolve(artifactPath));
+    assert.equal(resolveArtifactPath(["--file", artifactPath], defaultPath), path.resolve(artifactPath));
+    assert.equal(resolveArtifactPath([`--file=${artifactPath}`], defaultPath), path.resolve(artifactPath));
+    assert.throws(() => resolveArtifactPath(["--file"], defaultPath), /exactly one path/);
+    assert.throws(() => resolveArtifactPath(["--unknown"], defaultPath), /Unsupported/);
+});
+
 test("clean removes only the ignored generated target allowlist", async () => {
     const { GENERATED_TARGETS, cleanGeneratedTargets } = await import(cleanUrl);
     const ignoredTargets = childProcess.execFileSync(

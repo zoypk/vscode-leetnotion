@@ -923,7 +923,10 @@ async function main() {
     const repositoryManifest = JSON.parse(repositoryManifestBytes.toString("utf8"));
     const lockfile = JSON.parse(lockfileBytes.toString("utf8"));
     const repositoryIndex = JSON.parse(repositoryIndexBytes.toString("utf8"));
-    const artifactPath = resolve(process.argv[2] || join(repositoryRoot, `${repositoryManifest.name}-${repositoryManifest.version}.vsix`));
+    const artifactPath = resolveArtifactPath(
+        process.argv.slice(2),
+        join(repositoryRoot, `${repositoryManifest.name}-${repositoryManifest.version}.vsix`),
+    );
     const { archive, artifactStats } = await readBoundedVsix(artifactPath);
     const entries = parseZipEntries(archive);
     const result = validateVsixEntries(entries, {
@@ -950,6 +953,30 @@ async function main() {
     process.stdout.write(`VSIX verified: ${artifactPath}\n`);
     process.stdout.write(`Files: ${result.fileCount}; unpacked: ${result.unpackedSize} bytes; VSIX: ${result.vsixSize} bytes\n`);
     process.stdout.write(`Runtime closure: ${dependencyResult.packageCount} packages, ${dependencyResult.entrypointCount} declared entrypoints; extracted runtime smoke passed.\n`);
+}
+
+export function resolveArtifactPath(argumentsToParse, defaultPath) {
+    let artifactPath;
+    for (let index = 0; index < argumentsToParse.length; index += 1) {
+        const argument = argumentsToParse[index];
+        if (argument === "--file") {
+            if (artifactPath || index + 1 >= argumentsToParse.length) {
+                throw new Error("verify:vsix requires exactly one path after --file");
+            }
+            artifactPath = argumentsToParse[index + 1];
+            index += 1;
+        } else if (argument.startsWith("--file=")) {
+            if (artifactPath || argument.length === "--file=".length) {
+                throw new Error("verify:vsix requires exactly one non-empty --file path");
+            }
+            artifactPath = argument.slice("--file=".length);
+        } else if (!argument.startsWith("-") && !artifactPath) {
+            artifactPath = argument;
+        } else {
+            throw new Error(`Unsupported verify:vsix argument: ${argument}`);
+        }
+    }
+    return resolve(artifactPath || defaultPath);
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
