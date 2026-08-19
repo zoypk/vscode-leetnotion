@@ -29,6 +29,7 @@ let reviewEdit = { kind: "unchanged" };
 let selectedReviewRating;
 let hasLeetCodeProperties = Boolean(initialConfig.hasLeetCodeProperties);
 let hasNotionProperties = Boolean(initialConfig.hasNotionProperties);
+let notionPending = Boolean(initialConfig.notionPending);
 let tagOptions = normalizeTags(initialConfig.tagOptions);
 let tagsInitialized = false;
 let saving = false;
@@ -71,6 +72,9 @@ function updateVisibility() {
     if (elements.section) elements.section.style.display = hasLeetCodeProperties || hasNotionProperties ? "block" : "none";
     if (elements.leetcode) elements.leetcode.style.display = hasLeetCodeProperties ? "flex" : "none";
     if (elements.notion) elements.notion.style.display = hasNotionProperties ? "flex" : "none";
+    elements.reviewDate && (elements.reviewDate.disabled = notionPending);
+    elements.reviewClear && (elements.reviewClear.disabled = notionPending);
+    elements.reviewButtons.forEach((button) => { button.disabled = notionPending; });
 }
 
 function setReviewEdit(edit) {
@@ -196,12 +200,14 @@ window.addEventListener("message", (event) => {
     if (!message || typeof message.command !== "string") return;
     if (message.command === "submission-form-state") {
         hasNotionProperties = Boolean(message.hasNotionProperties);
+        notionPending = Boolean(message.notionPending);
         tagOptions = normalizeTags(message.tagOptions);
         updateVisibility();
         installSavedState(message.state);
         setSaving(false);
     } else if (message.command === "submission-properties-saved") {
         hasNotionProperties = Boolean(message.hasNotionProperties);
+        notionPending = Boolean(message.notionPending);
         tagOptions = normalizeTags(message.tagOptions);
         updateVisibility();
         installSavedState(message.state);

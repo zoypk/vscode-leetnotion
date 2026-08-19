@@ -5,6 +5,7 @@ const {
     applyReviewEdit,
     buildLeetCodeSubmissionUpdate,
     buildNotionPropertyUpdates,
+    resolveReviewEditOnce,
 } = require("../../out-test/notion/submissionProperties.js");
 
 const saved = {
@@ -16,14 +17,21 @@ const saved = {
 };
 
 test("complete Notion updates support tags A to B to A and Optimal true to false", () => {
-    const first = buildNotionPropertyUpdates({ ...saved, isOptimal: false, tags: ["B"], reviewDate: "2026-08-21" });
+    const first = buildNotionPropertyUpdates({ ...saved, isOptimal: false, tags: ["B"], reviewDate: "2026-08-21" }, { kind: "date", value: "2026-08-21" });
     assert.deepEqual(first.question.Tags.multi_select, [{ name: "B" }]);
     assert.deepEqual(first.submission.Tags.multi_select, []);
 
-    const second = buildNotionPropertyUpdates({ ...saved, tags: ["A"], reviewDate: null });
+    const second = buildNotionPropertyUpdates({ ...saved, tags: ["A"], reviewDate: null }, { kind: "clear" });
     assert.deepEqual(second.question.Tags.multi_select, [{ name: "A" }]);
     assert.deepEqual(second.question["Review Date"], { date: null });
     assert.deepEqual(second.question.Reviewed, { checkbox: false });
+});
+
+test("unchanged review writes tags without resetting Reviewed or Review Date", () => {
+    const updates = buildNotionPropertyUpdates(saved, { kind: "unchanged" });
+    assert.deepEqual(updates.question.Tags.multi_select, [{ name: "A" }, { name: "B" }]);
+    assert.equal(Object.hasOwn(updates.question, "Review Date"), false);
+    assert.equal(Object.hasOwn(updates.question, "Reviewed"), false);
 });
 
 test("LeetCode updates preserve explicit note and flag clearing", () => {
@@ -86,5 +94,25 @@ test("a notes-only save after rating does not rate a second time", async () => {
     };
     const due = await applyReviewEdit("42", { kind: "rating", value: "good" }, port);
     assert.equal(await applyReviewEdit("42", { kind: "unchanged" }, port, due), due);
+    assert.equal(ratings, 1);
+});
+
+test("a retry after downstream Notion failure reuses the committed rating due date", async () => {
+    let ratings = 0;
+    let committed;
+    const port = {
+        clear: async () => undefined,
+        schedule: async () => undefined,
+        rate: async () => { ratings += 1; return "2026-09-09"; },
+        refresh: async () => undefined,
+    };
+    const edit = { kind: "rating", value: "good" };
+    const first = await resolveReviewEditOnce("42", edit, port, null, "rating:good", undefined,
+        (key, reviewDate) => { committed = { key, reviewDate }; });
+    // Simulate the Notion write failing after the local FSRS transaction committed.
+    const retry = await resolveReviewEditOnce("42", edit, port, null, "rating:good", committed,
+        () => assert.fail("a reused commit must not be committed twice"));
+    assert.equal(first, "2026-09-09");
+    assert.equal(retry, "2026-09-09");
     assert.equal(ratings, 1);
 });

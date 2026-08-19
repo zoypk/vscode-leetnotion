@@ -16,12 +16,14 @@ import { reviewTreeDataProvider } from "./reviews/reviewTreeDataProvider";
 import { selectWorkspaceFolder } from "./utils/workspaceUtils";
 import type { SubmissionPropertiesMessage } from "./webview/submissionMessages";
 import {
-    applyReviewEdit,
     AuthoritativeSubmissionState,
     buildNotionPropertyUpdates,
     ReviewSchedulePort,
+    resolveReviewEditOnce,
 } from "./notion/submissionProperties";
 import { BulkImportCounts, runBulkImport } from "./submissions/bulkImport";
+import { reviewEditKey } from "./webview/submissionSaveCoordinator";
+import { completeSubmissionSync } from "./notion/submissionSyncWorkflow";
 
 const QuestionsDatabaseKey = "Questions Database";
 const SubmissionsDatabaseKey = "Submissions Database";
@@ -104,16 +106,23 @@ class LeetnotionClient {
             const { questionNumber, submission } = validatedSubmission;
             const updateResponse = await this.updateStatusOfQuestion(questionNumber);
             const submissionPageId = await this.createSubmissionPage(questionNumber, submission);
-            this.updatePanel(
-                validatedSubmission.submission.id,
-                questionNumber,
-                updateResponse.id,
-                submissionPageId,
-                this.getSelectTags(updateResponse.properties.Tags.multi_select.map(tag => tag.name)),
-                updateResponse.properties["Review Date"]?.date?.start ?? null,
-            );
-            await this.addCodeToPage(submissionPageId, submission.lang, submission.code);
+            await completeSubmissionSync({
+                attachPanel: () => this.updatePanel(
+                    validatedSubmission.submission.id,
+                    questionNumber,
+                    updateResponse.id,
+                    submissionPageId,
+                    this.getSelectTags(updateResponse.properties.Tags.multi_select.map(tag => tag.name)),
+                    updateResponse.properties["Review Date"]?.date?.start ?? null,
+                ),
+                addCode: () => this.addCodeToPage(submissionPageId, submission.lang, submission.code),
+                reportPanelError: (panelError) => leetCodeChannel.appendLine(`Submission panel was not updated: ${panelError}`),
+            });
         } catch (error) {
+            leetCodeSubmissionProvider.markNotionContextUnavailable(
+                validatedSubmission.submission.id,
+                validatedSubmission.questionNumber,
+            );
             promptForOpenOutputChannel(`Failed to update notion for your submission`, DialogType.error);
             leetCodeChannel.appendLine(`Failed to update notion for your submission: ${error}`);
         }
@@ -126,19 +135,15 @@ class LeetnotionClient {
         submissionPageId: string,
         tags: SelectTags,
         reviewDate: string | null,
-    ) {
-        try {
-            leetCodeSubmissionProvider.installNotionContext({
-                submissionId,
-                questionNumber,
-                questionPageId,
-                submissionPageId,
-                tags,
-                reviewDate,
-            });
-        } catch (error) {
-            throw new Error(`Failed to update submission panel: ${error}`);
-        }
+    ): boolean {
+        return leetCodeSubmissionProvider.installNotionContext({
+            submissionId,
+            questionNumber,
+            questionPageId,
+            submissionPageId,
+            tags,
+            reviewDate,
+        });
     }
 
     public async updateStatusOfQuestion(questionNumber: string, check: boolean = true): Promise<PageObjectResponse<QueryProblemPageProperties>> {
@@ -224,10 +229,19 @@ class LeetnotionClient {
             submissionPageId?: string;
         },
         currentState: AuthoritativeSubmissionState,
+        options: {
+            committedReview?: { key: string; reviewDate: string | null };
+            onReviewCommitted?: (key: string, reviewDate: string | null) => void;
+        } = {},
     ): Promise<AuthoritativeSubmissionState> {
-        const reviewDate = message.review.kind === "unchanged"
-            ? currentState.reviewDate
-            : await this.syncReviewSchedule(target.questionNumber, message.review, currentState.reviewDate);
+        const editKey = reviewEditKey(message.review);
+        const reviewDate = await this.resolveReviewScheduleOnce(
+            target.questionNumber,
+            message.review,
+            currentState.reviewDate,
+            editKey,
+            options,
+        );
         const savedState: AuthoritativeSubmissionState = {
             notes: message.notes,
             flagType: message.flagType,
@@ -241,7 +255,7 @@ class LeetnotionClient {
             if (!hasNotionIntegrationEnabled() || !this.isSignedIn || !this.notion) {
                 throw new Error("notion-integration-not-enabled");
             }
-            const updates = buildNotionPropertyUpdates(savedState);
+            const updates = buildNotionPropertyUpdates(savedState, message.review);
             await this.notion.pages.update({
                 page_id: target.questionPageId!,
                 properties: updates.question,
@@ -257,13 +271,31 @@ class LeetnotionClient {
         return savedState;
     }
 
-    private async syncReviewSchedule(
+    private async resolveReviewScheduleOnce(
         questionNumber: string,
-        edit: Exclude<SubmissionPropertiesMessage["review"], { kind: "unchanged" }>,
+        edit: SubmissionPropertiesMessage["review"],
         currentReviewDate: string | null,
+        editKey: string,
+        options: {
+            committedReview?: { key: string; reviewDate: string | null };
+            onReviewCommitted?: (key: string, reviewDate: string | null) => void;
+        },
     ): Promise<string | null> {
-        await this.ensureReviewWorkspaceConfigured();
-        return applyReviewEdit(questionNumber, edit, this.getReviewSchedulePort(), currentReviewDate);
+        if (edit.kind === "unchanged") {
+            return currentReviewDate;
+        }
+        if (!options.committedReview || options.committedReview.key !== editKey) {
+            await this.ensureReviewWorkspaceConfigured();
+        }
+        return resolveReviewEditOnce(
+            questionNumber,
+            edit,
+            this.getReviewSchedulePort(),
+            currentReviewDate,
+            editKey,
+            options.committedReview,
+            (key, reviewDate) => options.onReviewCommitted?.(key, reviewDate),
+        );
     }
 
     private getReviewSchedulePort(): ReviewSchedulePort {

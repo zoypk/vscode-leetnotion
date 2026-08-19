@@ -7,8 +7,9 @@ import { ViewColumn } from "vscode";
 import { leetcodeClient } from "../leetCodeClient";
 import { leetCodeChannel } from "../leetCodeChannel";
 import { globalState } from "../globalState";
-import { SelectTags, SubmissionDetailView, SubmissionResultContext } from "../types";
+import { SubmissionDetailView, SubmissionResultContext } from "../types";
 import { DialogType, openKeybindingsEditor, promptForOpenOutputChannel, promptHintMessage } from "../utils/uiUtils";
+import { hasNotionIntegrationEnabled } from "../utils/settingUtils";
 import { ILeetCodeWebviewOption, LeetCodeWebview } from "./LeetCodeWebview";
 import { markdownEngine } from "./markdownEngine";
 import { leetnotionEngine } from "./leetnotionEngine";
@@ -17,7 +18,11 @@ import type { ValidatedSubmission } from "../submissions/types";
 import { AuthoritativeSubmissionState, buildLeetCodeSubmissionUpdate } from "../notion/submissionProperties";
 import { parseSubmissionPropertiesMessage, SubmissionPropertiesMessage } from "./submissionMessages";
 import { createNonce, createWebviewCsp, escapeAttribute, serializeJsonForHtml } from "./webviewSecurity";
-import { matchesSubmissionContext } from "./submissionFormState";
+import {
+    reviewEditKey,
+    SubmissionNotionContext,
+    SubmissionSaveCoordinator,
+} from "./submissionSaveCoordinator";
 
 type SubmissionFlagOption = {
     value: string;
@@ -37,23 +42,16 @@ const SUBMISSION_FLAG_OPTIONS: SubmissionFlagOption[] = [
     { value: "PURPLE", label: "Purple", accent: "#a855f7", background: "rgba(168, 85, 247, 0.16)" },
 ];
 
-interface NotionSubmissionContext {
-    submissionId: number;
-    questionNumber: string;
-    questionPageId: string;
-    submissionPageId: string;
-    tags: SelectTags;
-    reviewDate: string | null;
-}
-
 class LeetCodeSubmissionProvider extends LeetCodeWebview {
 
     protected readonly viewType: string = "leetnotion.submission";
     private result: IResult;
     private submissionContext?: SubmissionResultContext;
     private submissionDetail?: SubmissionDetailView;
-    private notionContext?: NotionSubmissionContext;
+    private notionContext?: SubmissionNotionContext;
     private savedState?: AuthoritativeSubmissionState;
+    private readonly saveCoordinator = new SubmissionSaveCoordinator();
+    private saveQueue: Promise<void> = Promise.resolve();
 
     public show(resultString: string, validatedSubmission?: ValidatedSubmission): void {
         this.result = this.parseResult(resultString);
@@ -72,7 +70,18 @@ class LeetCodeSubmissionProvider extends LeetCodeWebview {
             isOptimal: false,
             tags: [],
             reviewDate: null,
-        } : undefined;
+        } : {
+            notes: "",
+            flagType: "WHITE",
+            isOptimal: false,
+            tags: [],
+            reviewDate: null,
+        };
+        this.saveCoordinator.begin(
+            this.submissionContext,
+            this.savedState,
+            this.shouldWaitForNotionContext(validatedSubmission),
+        );
         this.showWebviewInternal();
         this.showKeybindingsHint();
     }
@@ -117,46 +126,65 @@ class LeetCodeSubmissionProvider extends LeetCodeWebview {
     }
 
     protected async onDidReceiveMessage(value: unknown): Promise<void> {
-        try {
-            await this.saveProperties(parseSubmissionPropertiesMessage(value));
-        } catch (error) {
-            leetCodeChannel.appendLine(`Rejected submission properties message: ${error}`);
-            this.getPanel()?.webview.postMessage({
-                command: "submission-properties-save-failed",
-                error: "The submitted properties were invalid.",
-            });
-        }
+        const run = async () => {
+            try {
+                await this.saveProperties(parseSubmissionPropertiesMessage(value));
+            } catch (error) {
+                leetCodeChannel.appendLine(`Rejected submission properties message: ${error}`);
+                this.getPanel()?.webview.postMessage({
+                    command: "submission-properties-save-failed",
+                    error: "The submitted properties were invalid.",
+                });
+            }
+        };
+        const queued = this.saveQueue.then(run, run);
+        this.saveQueue = queued.catch(() => undefined);
+        await queued;
     }
 
-    public installNotionContext(context: NotionSubmissionContext): void {
-        if (!matchesSubmissionContext(this.submissionContext, context)) {
-            throw new Error("stale-submission-panel-context");
+    public installNotionContext(context: SubmissionNotionContext): boolean {
+        const currentState = this.saveCoordinator.currentState;
+        const nextState = {
+            ...currentState,
+            tags: context.tags.filter(({ selected }) => selected).map(({ text }) => text),
+            reviewDate: context.reviewDate,
+        };
+        if (!this.saveCoordinator.installNotionContext(context, nextState)) {
+            leetCodeChannel.appendLine(`Ignored stale Notion panel context for submission ${context.submissionId}.`);
+            return false;
         }
         this.notionContext = {
             ...context,
             tags: context.tags.map((tag) => ({ ...tag })),
         };
-        this.savedState = {
-            ...(this.savedState ?? {
-                notes: this.submissionContext.notes,
-                flagType: this.submissionContext.flagType,
-                isOptimal: false,
-                tags: [],
-                reviewDate: null,
-            }),
-            tags: context.tags.filter(({ selected }) => selected).map(({ text }) => text),
-            reviewDate: context.reviewDate,
-        };
+        this.savedState = nextState;
         const panel = this.getPanel();
         if (!panel) {
-            throw new Error("panel-not-available");
+            return false;
         }
         panel.webview.postMessage({
             command: "submission-form-state",
             state: this.savedState,
             hasNotionProperties: true,
+            notionPending: false,
             tagOptions: context.tags.map(({ text }) => text),
         });
+        return true;
+    }
+
+    public markNotionContextUnavailable(submissionId: number, questionNumber: string): boolean {
+        if (!this.saveCoordinator.markNotionUnavailable({ submissionId, questionNumber })) {
+            return false;
+        }
+        const panel = this.getPanel();
+        panel?.webview.postMessage({
+            command: "submission-form-state",
+            state: this.saveCoordinator.currentState,
+            hasNotionProperties: false,
+            notionPending: false,
+            tagOptions: [],
+        });
+        return Boolean(panel);
     }
 
     private async showKeybindingsHint(): Promise<void> {
@@ -309,56 +337,77 @@ class LeetCodeSubmissionProvider extends LeetCodeWebview {
     }
 
     private async saveProperties(message: SubmissionPropertiesMessage): Promise<void> {
+        const generation = this.saveCoordinator.currentGeneration;
         try {
-            const hasSubmissionContext = Boolean(this.submissionContext);
-            const hasNotionProperties = Boolean(this.notionContext);
+            const snapshot = this.saveCoordinator.snapshotForSave(message.review);
+            const hasSubmissionContext = Boolean(snapshot.submissionContext);
+            const hasNotionProperties = Boolean(snapshot.notionContext);
 
-            if (!this.savedState || (!this.submissionContext && !this.notionContext)) {
+            if (!snapshot.submissionContext && !snapshot.notionContext) {
                 throw new Error("submission-properties-context-unavailable");
             }
 
-            if (this.submissionContext) {
+            if (snapshot.submissionContext) {
                 const leetCodeUpdate = buildLeetCodeSubmissionUpdate({
-                    ...this.savedState,
+                    ...snapshot.savedState,
                     notes: message.notes,
                     flagType: message.flagType,
                 });
                 await leetcodeClient.updateSubmissionNote(
-                    this.submissionContext.submissionId,
+                    snapshot.submissionContext.submissionId,
                     leetCodeUpdate.notes,
                     leetCodeUpdate.flagType,
                 );
             }
 
-            const questionNumber = this.submissionContext?.questionNumber ?? this.notionContext!.questionNumber;
-            this.savedState = await leetnotionClient.setProperties(message, {
+            const questionNumber = snapshot.submissionContext?.questionNumber ?? snapshot.notionContext!.questionNumber;
+            const key = reviewEditKey(message.review);
+            const hasCommittedReview = this.saveCoordinator.hasCommittedReview(snapshot.generation, key);
+            const committedReviewDate = this.saveCoordinator.getCommittedReview(snapshot.generation, key);
+            const savedState = await leetnotionClient.setProperties(message, {
                 questionNumber,
-                questionPageId: this.notionContext?.questionPageId,
-                submissionPageId: this.notionContext?.submissionPageId,
-            }, this.savedState);
+                questionPageId: snapshot.notionContext?.questionPageId,
+                submissionPageId: snapshot.notionContext?.submissionPageId,
+            }, snapshot.savedState, {
+                committedReview: hasCommittedReview ? { key, reviewDate: committedReviewDate! } : undefined,
+                onReviewCommitted: (committedKey, reviewDate) => {
+                    this.saveCoordinator.recordCommittedReview(snapshot.generation, committedKey, reviewDate);
+                },
+            });
 
-            if (this.submissionContext) {
+            if (!this.saveCoordinator.installSaved(snapshot.generation, savedState)) {
+                leetCodeChannel.appendLine(`Suppressed stale save completion for submission generation ${snapshot.generation}.`);
+                return;
+            }
+            this.savedState = savedState;
+
+            if (snapshot.submissionContext) {
                 this.submissionContext = {
-                    ...this.submissionContext,
-                    notes: this.savedState.notes,
-                    flagType: this.savedState.flagType,
+                    ...snapshot.submissionContext,
+                    notes: savedState.notes,
+                    flagType: savedState.flagType,
                 };
             }
 
             this.getPanel()?.webview.postMessage({
                 command: "submission-properties-saved",
                 message: this.getSuccessMessage(hasSubmissionContext, hasNotionProperties),
-                state: this.savedState,
+                state: savedState,
                 hasNotionProperties,
+                notionPending: this.saveCoordinator.notionPending,
                 tagOptions: this.getTagOptions(),
             });
         } catch (error) {
             leetCodeChannel.appendLine(`Failed to save submission properties: ${error}`);
-            this.getPanel()?.webview.postMessage({
-                command: "submission-properties-save-failed",
-                error: error instanceof Error ? error.message : String(error),
-            });
-            await promptForOpenOutputChannel("Failed to save submission properties. Please open the output channel for details.", DialogType.error);
+            if (this.saveCoordinator.isCurrent(generation)) {
+                this.getPanel()?.webview.postMessage({
+                    command: "submission-properties-save-failed",
+                    error: error instanceof Error && error.message === "notion-context-pending"
+                        ? "Wait for the matching Notion submission before scheduling a review."
+                        : error instanceof Error ? error.message : String(error),
+                });
+                await promptForOpenOutputChannel("Failed to save submission properties. Please open the output channel for details.", DialogType.error);
+            }
         }
     }
 
@@ -401,12 +450,22 @@ class LeetCodeSubmissionProvider extends LeetCodeWebview {
             },
             hasLeetCodeProperties: Boolean(this.submissionContext),
             hasNotionProperties: Boolean(this.notionContext),
+            notionPending: this.saveCoordinator.notionPending,
             tagOptions: this.getTagOptions(),
         };
     }
 
     private getTagOptions(): string[] {
         return this.notionContext?.tags.map(({ text }) => text) ?? [];
+    }
+
+    private shouldWaitForNotionContext(validatedSubmission?: ValidatedSubmission): boolean {
+        if (!validatedSubmission || !hasNotionIntegrationEnabled()) {
+            return false;
+        }
+        const status = validatedSubmission.detail.details.status_msg
+            ?? validatedSubmission.detail.details.compare_result;
+        return typeof status === "string" && status.trim().toLocaleLowerCase("en-US") === "accepted";
     }
 
     private getScripts(nonce: string) {

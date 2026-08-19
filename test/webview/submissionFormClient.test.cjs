@@ -47,7 +47,7 @@ class FakeElement {
     }
 }
 
-function createHarness() {
+function createHarness(configOverrides = {}) {
     const ids = [
         "setPropertiesSection", "setPropertiesButton", "leetcode-properties-section", "notion-properties-section",
         "review-date-input", "review-clear-button", "notes-input", "submission-flag-select",
@@ -63,6 +63,7 @@ function createHarness() {
         hasLeetCodeProperties: true,
         hasNotionProperties: true,
         tagOptions: ["A", "B"],
+        ...configOverrides,
     });
     elements[config.id] = config;
 
@@ -113,6 +114,32 @@ function createHarness() {
         receive: (message) => windowListeners.get("message")({ data: message }),
     };
 }
+
+test("pending exact Notion context disables review controls until resolved", () => {
+    const harness = createHarness({ notionPending: true, hasNotionProperties: false });
+    assert.equal(harness.elements["review-date-input"].disabled, true);
+    assert.equal(harness.elements["review-clear-button"].disabled, true);
+    assert.equal(harness.ratings.every(({ disabled }) => disabled), true);
+
+    harness.receive({
+        command: "submission-properties-saved",
+        notionPending: true,
+        hasNotionProperties: false,
+        tagOptions: [],
+        state: { notes: "quick note", flagType: "WHITE", isOptimal: false, tags: [], reviewDate: null },
+    });
+    assert.equal(harness.elements["review-date-input"].disabled, true);
+
+    harness.receive({
+        command: "submission-form-state",
+        notionPending: false,
+        hasNotionProperties: true,
+        tagOptions: ["A"],
+        state: { notes: "old", flagType: "WHITE", isOptimal: false, tags: ["A"], reviewDate: null },
+    });
+    assert.equal(harness.elements["review-date-input"].disabled, false);
+    assert.equal(harness.ratings.every(({ disabled }) => disabled), false);
+});
 
 test("production handlers enforce symmetric review controls and aria-pressed", () => {
     const harness = createHarness();
