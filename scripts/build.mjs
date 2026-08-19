@@ -2,6 +2,7 @@ import { spawn } from "child_process";
 import { mkdir } from "fs/promises";
 import { dirname, join, resolve } from "path";
 import { fileURLToPath } from "url";
+import { cleanGeneratedTargets } from "./clean.mjs";
 
 const rootDir = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const nodeExecutable = process.execPath;
@@ -88,6 +89,8 @@ const buildTargets = [
 ];
 
 async function main() {
+    await cleanGeneratedTargets(rootDir);
+
     await Promise.all(buildTargets.map(async (target) => {
         await mkdir(dirname(resolve(rootDir, target.outputFile)), { recursive: true });
     }));
