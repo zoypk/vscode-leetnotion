@@ -9,6 +9,7 @@ import * as vscode from "vscode";
 import { leetCodeChannel } from "../leetCodeChannel";
 import { isWindows } from "../utils/osUtils";
 import { globalState } from "@/globalState";
+import { allowWebviewUrl, escapeAttribute, sanitizeHtml } from "./webviewSecurity";
 
 class MarkdownEngine implements vscode.Disposable {
 
@@ -39,13 +40,13 @@ class MarkdownEngine implements vscode.Disposable {
     }
 
     public render(md: string, env?: any): string {
-        return this.engine.render(md, env);
+        return sanitizeHtml(this.engine.render(md, env));
     }
 
-    public getStyles(webview: vscode.Webview): string {
+    public getStyles(webview: vscode.Webview, nonce?: string): string {
         return [
             this.getBuiltinStyles(webview),
-            this.getSettingsStyles(),
+            this.getSettingsStyles(nonce),
         ].join(os.EOL);
     }
 
@@ -71,14 +72,14 @@ class MarkdownEngine implements vscode.Disposable {
         return styles
             .map(
                 (style: vscode.Uri) =>
-                    `<link rel="stylesheet" type="text/css" href="${style.toString()}">`,
+                    `<link rel="stylesheet" type="text/css" href="${escapeAttribute(style.toString())}">`,
             )
             .join(os.EOL);
     }
 
-    private getSettingsStyles(): string {
+    private getSettingsStyles(nonce?: string): string {
         return [
-            `<style>`,
+            `<style${nonce ? ` nonce="${escapeAttribute(nonce)}"` : ""}>`,
             `body {`,
             `    ${this.config.fontFamily ? `font-family: ${this.config.fontFamily};` : ``}`,
             `    ${isNaN(this.config.fontSize) ? `` : `font-size: ${this.config.fontSize}px;`}`,
@@ -147,10 +148,8 @@ class MarkdownEngine implements vscode.Disposable {
     }
 
     private addLinkValidator(md: MarkdownIt): void {
-        const validateLink: (link: string) => boolean = md.validateLink;
         md.validateLink = (link: string): boolean => {
-            // support file:// protocal link
-            return validateLink(link) || link.startsWith("file:");
+            return allowWebviewUrl(link) !== undefined;
         };
     }
 }

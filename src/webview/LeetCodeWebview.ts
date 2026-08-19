@@ -28,7 +28,7 @@ export abstract class LeetCodeWebview implements Disposable {
 
             this.panel = window.createWebviewPanel(this.viewType, title, { viewColumn, preserveFocus }, {
                 enableScripts: true,
-                enableCommandUris: true,
+                enableCommandUris: false,
                 enableFindWidget: true,
                 retainContextWhenHidden: true,
                 localResourceRoots: [...markdownEngine.localResourceRoots, ...leetnotionEngine.localResourceRoots],
