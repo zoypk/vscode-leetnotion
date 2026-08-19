@@ -117,19 +117,19 @@ export function renderProfileDashboardPage(
 function renderBody(state: ProfileDashboardState, actions: string): string {
     switch (state.status) {
         case "loading":
-            return `<section class="empty-state"><h2>Loading profile</h2><p>Fetching public profile and contest data for <strong>${escapeHtml(state.username ?? "")}</strong>.</p></section>`;
+            return `<section class="empty-state"><h1 class="title">Loading profile</h1><p>Fetching public profile and contest data for <strong>${escapeHtml(state.username ?? "")}</strong>.</p></section>`;
         case "error":
-            return `<section class="empty-state"><h2>Profile unavailable</h2><p>${escapeHtml(state.message ?? "Something went wrong while loading this profile.")}</p><div class="actions">${actions}</div></section>`;
+            return `<section class="empty-state"><h1 class="title">Profile unavailable</h1><p>${escapeHtml(state.message ?? "Something went wrong while loading this profile.")}</p><div class="actions">${actions}</div></section>`;
         case "ready":
             return state.model ? renderDashboard(state.model, actions, state.signedInUsername) : renderMissingModel(actions);
         case "empty":
         default:
-            return `<section class="empty-state"><h2>Home dashboard</h2><p>${escapeHtml(state.message ?? "Look up a public LeetCode profile to get started.")}</p><div class="actions">${actions}</div></section>`;
+            return `<section class="empty-state"><h1 class="title">Home dashboard</h1><p>${escapeHtml(state.message ?? "Look up a public LeetCode profile to get started.")}</p><div class="actions">${actions}</div></section>`;
     }
 }
 
 function renderMissingModel(actions: string): string {
-    return `<section class="empty-state"><h2>Profile unavailable</h2><p>The profile data could not be displayed.</p><div class="actions">${actions}</div></section>`;
+    return `<section class="empty-state"><h1 class="title">Profile unavailable</h1><p>The profile data could not be displayed.</p><div class="actions">${actions}</div></section>`;
 }
 
 function renderDashboard(model: DashboardViewModel, actions: string, signedInUsername?: string): string {
@@ -156,7 +156,7 @@ function renderActivityGraph(graph: ActivityGraph): string {
     return `<div class="heatmap">
         <div class="heatmap-grid" aria-hidden="true">${visualWeeks}</div>
         <div class="heatmap-legend"><span>${escapeHtml(graph.rangeLabel)}</span><div class="heatmap-scale" aria-hidden="true"><span>Less</span><span class="heatmap-swatch"></span><span class="heatmap-swatch heatmap-cell level-1"></span><span class="heatmap-swatch heatmap-cell level-2"></span><span class="heatmap-swatch heatmap-cell level-3"></span><span class="heatmap-swatch heatmap-cell level-4"></span><span>More</span></div></div>
-        <details data-state-id="activity-table"><summary>Activity data by date</summary><div class="activity-table-wrap"><table><thead><tr><th scope="col">Date</th><th scope="col">Accepted submissions</th></tr></thead><tbody>${rows}</tbody></table></div></details>
+        <details data-state-id="activity-table"><summary>Activity data by date</summary><div class="activity-table-wrap"><table><thead><tr><th scope="col">Date</th><th scope="col">Submissions</th></tr></thead><tbody>${rows}</tbody></table></div></details>
     </div>`;
 }
 

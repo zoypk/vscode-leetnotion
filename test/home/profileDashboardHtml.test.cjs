@@ -50,6 +50,8 @@ test("renders a decorative graph with an exact date and count table alternative"
     assert.match(html, /<th scope="col">Date<\/th>/);
     assert.match(html, /<td>Aug 16, 2026<\/td>\s*<td>0<\/td>/);
     assert.match(html, /<td>Aug 17, 2026<\/td>\s*<td>2<\/td>/);
+    assert.match(html, /<th scope="col">Submissions<\/th>/);
+    assert.doesNotMatch(html, /Accepted submissions/);
     assert.match(html, /<summary>Activity data by date<\/summary>/);
 });
 
@@ -97,4 +99,25 @@ test("accepts only exact, known dashboard actions", () => {
     assert.equal(parseProfileDashboardAction({ action: "deleteEverything" }), undefined);
     assert.equal(parseProfileDashboardAction({ action: "refresh", username: "forged" }), undefined);
     assert.equal(parseProfileDashboardAction("refresh"), undefined);
+});
+
+test("starts every dashboard state with one top-level heading", () => {
+    const states = [
+        { status: "loading", username: "user" },
+        { status: "empty", message: "Choose a profile." },
+        { status: "error", message: "Unavailable." },
+        { status: "ready" },
+        readyState(),
+    ];
+
+    for (const state of states) {
+        const html = renderProfileDashboardPage(state, {
+            nonce: "abc123",
+            cspSource: "vscode-webview://test",
+            scriptUri: "vscode-webview://test/profile-dashboard.js",
+        });
+        const headings = Array.from(html.matchAll(/<h([1-6])(?:\s|>)/g), (match) => Number(match[1]));
+        assert.equal(headings[0], 1, `expected first heading to be h1 for ${state.status}`);
+        assert.equal(headings.filter((level) => level === 1).length, 1, `expected one h1 for ${state.status}`);
+    }
 });
