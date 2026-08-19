@@ -4,9 +4,9 @@
 import * as vscode from "vscode";
 import {
     ActivationResources,
+    createOwnedResources,
     ExtensionCommandHandlers,
     initializeDurableMapping,
-    ownTreeViews,
     registerCoreActivationResources,
     registerExtensionResources,
     registerNodeEvent,
@@ -126,10 +126,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
             });
         }
 
-        leetcodeTreeView = vscode.window.createTreeView("leetnotionExplorer", { treeDataProvider: leetCodeTreeDataProvider, showCollapseAll: true });
-        reviewTreeView = vscode.window.createTreeView("leetnotionReviews", { treeDataProvider: reviewTreeDataProvider, showCollapseAll: true });
-        studyTreeView = vscode.window.createTreeView("leetnotionStudy", { treeDataProvider: studyTreeDataProvider, showCollapseAll: true });
-        ownTreeViews(activeResources!, [leetcodeTreeView, reviewTreeView, studyTreeView]);
+        [leetcodeTreeView, reviewTreeView, studyTreeView] = createOwnedResources(activeResources!, [
+            () => vscode.window.createTreeView("leetnotionExplorer", { treeDataProvider: leetCodeTreeDataProvider, showCollapseAll: true }),
+            () => vscode.window.createTreeView("leetnotionReviews", { treeDataProvider: reviewTreeDataProvider, showCollapseAll: true }),
+            () => vscode.window.createTreeView("leetnotionStudy", { treeDataProvider: studyTreeDataProvider, showCollapseAll: true }),
+        ] as const);
 
         const commandHandlers: ExtensionCommandHandlers = {
             "leetnotion.deleteCache": () => cache.deleteCache(),

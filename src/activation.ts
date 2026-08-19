@@ -167,6 +167,19 @@ export function ownTreeViews(
     owner.add(...treeViews);
 }
 
+export function createOwnedResources<T extends readonly DisposableLike[]>(
+    owner: ActivationResources,
+    factories: { readonly [K in keyof T]: () => T[K] },
+): T {
+    const created: DisposableLike[] = [];
+    for (const factory of factories as readonly (() => DisposableLike)[]) {
+        const resource = factory();
+        owner.add(resource);
+        created.push(resource);
+    }
+    return created as unknown as T;
+}
+
 export function registerExtensionResources(dependencies: ExtensionRegistrationDependencies): ActivationResources {
     const resources = new ActivationResources();
     try {

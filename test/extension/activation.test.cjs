@@ -5,6 +5,7 @@ const test = require("node:test");
 const {
     ActivationResources,
     ActivationDisposalError,
+    createOwnedResources,
     CORE_RESOURCE_KEYS,
     EXTENSION_COMMAND_IDS,
     INTERNAL_COMMAND_IDS,
@@ -220,3 +221,32 @@ test("throwing disposers do not prevent remaining resources from being cleaned e
 
     assert.deepEqual(calls, ["third", "second", "first"]);
 });
+
+for (const failingFactory of [1, 2]) {
+    test(`tree view factory ${failingFactory + 1} failure disposes every earlier view`, async () => {
+        const events = [];
+        const owner = new ActivationResources();
+        const succeeded = await runActivationGuard(owner, async () => {
+            createOwnedResources(owner, [0, 1, 2].map((index) => () => {
+                events.push(`create:${index}`);
+                if (index === failingFactory) {
+                    throw new Error(`factory ${index} failed`);
+                }
+                return { dispose() { events.push(`dispose:${index}`); } };
+            }));
+        }, (error) => {
+            events.push(`handled:${error.message}`);
+        });
+
+        assert.equal(succeeded, false);
+        const createdBeforeFailure = Array.from({ length: failingFactory }, (_item, index) => `create:${index}`);
+        const disposedBeforeFailure = Array.from({ length: failingFactory }, (_item, index) => `dispose:${failingFactory - index - 1}`);
+        assert.deepEqual(events, [
+            ...createdBeforeFailure,
+            `create:${failingFactory}`,
+            `handled:factory ${failingFactory} failed`,
+            ...disposedBeforeFailure,
+        ]);
+        assert.equal(events.includes(`create:${failingFactory + 1}`), false);
+    });
+}
