@@ -22,12 +22,56 @@ function validateResourceLinks(titleSlug, markdown) {
     }
 }
 
+function parseCueLadder(rawCueLadder) {
+    const cueLadder = normalizeMarkdown(rawCueLadder);
+    const revisedCueMatch = cueLadder.match(
+        /^\*\*Before attempting:\*\*\s*([\s\S]*?)\n{2,}\*\*Reveal after an honest attempt:\*\*\s*([\s\S]+)$/
+    );
+
+    if (!revisedCueMatch) {
+        return undefined;
+    }
+
+    return {
+        beforeAttemptingMarkdown: revisedCueMatch[1].trim(),
+        revealAfterAttemptMarkdown: revisedCueMatch[2].trim(),
+    };
+}
+
 function parseProblemRow(line, currentSection) {
     const artifactRowMatch = line.match(
         /^\|\s*(\d+)\s*\|\s*\[([^\]]+)\]\(https:\/\/leetcode\.com\/problems\/([^/]+)\/\)(?:.*?)\|\s*(Easy|Medium|Hard)\s*\|\s*(.*?)\s*\|\s*(.*?)\s*\|\s*(.*?)\s*\|\s*$/
     );
     if (artifactRowMatch) {
         const [, sourceIndex, title, titleSlug, difficulty, recognitionCue, artifacts, returnCheckpoint] = artifactRowMatch;
+        const cueLadder = parseCueLadder(recognitionCue);
+        const artifactPathMarkdown = normalizeMarkdown(artifacts);
+        const returnWhenMarkdown = normalizeMarkdown(returnCheckpoint);
+
+        if (cueLadder) {
+            const { beforeAttemptingMarkdown, revealAfterAttemptMarkdown } = cueLadder;
+            return {
+                sourceIndex: Number(sourceIndex),
+                title,
+                titleSlug,
+                section: currentSection,
+                difficulty,
+                beforeAttemptingMarkdown,
+                revealAfterAttemptMarkdown,
+                artifactPathMarkdown,
+                returnWhenMarkdown,
+                markdown: normalizeMarkdown([
+                    `**Before attempting:** ${beforeAttemptingMarkdown}`,
+                    "",
+                    `**Reveal after an honest attempt:** ${revealAfterAttemptMarkdown}`,
+                    "",
+                    artifactPathMarkdown,
+                    "",
+                    `**Return when:** ${returnWhenMarkdown}`,
+                ].join("\n")),
+            };
+        }
+
         return {
             sourceIndex: Number(sourceIndex),
             title,
@@ -37,9 +81,9 @@ function parseProblemRow(line, currentSection) {
             markdown: normalizeMarkdown([
                 `**Cue:** ${recognitionCue}`,
                 "",
-                artifacts,
+                artifactPathMarkdown,
                 "",
-                `**Return:** ${returnCheckpoint}`,
+                `**Return:** ${returnWhenMarkdown}`,
             ].join("\n")),
         };
     }

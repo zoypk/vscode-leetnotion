@@ -12,6 +12,7 @@ export interface NeetCodeProblemMetadata {
     articleMarkdown?: string;
     hintMarkdown?: string;
     learningMarkdown?: string;
+    learningResource?: JitLearningProblemMetadata;
     neetcode150?: boolean;
     blind75?: boolean;
 }
@@ -28,6 +29,10 @@ export interface JitLearningProblemMetadata {
     titleSlug: string;
     section: string;
     difficulty: string;
+    beforeAttemptingMarkdown?: string;
+    revealAfterAttemptMarkdown?: string;
+    artifactPathMarkdown?: string;
+    returnWhenMarkdown?: string;
     markdown: string;
 }
 

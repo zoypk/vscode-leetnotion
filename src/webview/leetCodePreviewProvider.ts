@@ -187,6 +187,19 @@ class LeetCodePreviewProvider extends LeetCodeWebview {
                     #neetcode-section details.hint-accordion + details {
                         margin-top: 0;
                     }
+                    details.learning-resources > summary,
+                    details.learning-reveal > summary {
+                        cursor: pointer;
+                    }
+                    .learning-resource-block {
+                        margin-top: 1rem;
+                    }
+                    details.learning-reveal {
+                        margin: 1rem 0;
+                        padding: 0.5rem 0.75rem;
+                        border-left: 3px solid var(--vscode-textLink-foreground);
+                        background: var(--vscode-textBlockQuote-background, rgba(128, 128, 128, 0.08));
+                    }
                 </style>
             </head>
             <body>
@@ -363,16 +376,41 @@ class LeetCodePreviewProvider extends LeetCodeWebview {
     }
 
     private getLearningResourcesSection(): string {
-        const learningMarkdown = neetCodeService.getProblemMetadata(this.node)?.learningMarkdown;
+        const problem = neetCodeService.getProblemMetadata(this.node);
+        const learningMarkdown = problem?.learningMarkdown;
         if (!learningMarkdown) {
             return "";
         }
+
+        const resource = problem?.learningResource;
+        const hasStructuredResource = Boolean(
+            resource?.beforeAttemptingMarkdown
+            && resource.revealAfterAttemptMarkdown
+            && resource.artifactPathMarkdown
+            && resource.returnWhenMarkdown
+        );
+        const resourceHtml = hasStructuredResource && resource
+            ? [
+                `<div class="learning-resource-block">`,
+                `<h3>Before attempting</h3>`,
+                markdownEngine.render(resource.beforeAttemptingMarkdown!),
+                `<details class="learning-reveal">`,
+                `<summary><strong>Reveal after an honest attempt</strong></summary>`,
+                markdownEngine.render(resource.revealAfterAttemptMarkdown!),
+                `</details>`,
+                `<h3>JIT artifact path</h3>`,
+                markdownEngine.render(resource.artifactPathMarkdown!),
+                `<h3>Return when</h3>`,
+                markdownEngine.render(resource.returnWhenMarkdown!),
+                `</div>`,
+            ].join("\n")
+            : markdownEngine.render(learningMarkdown);
 
         return [
             `<hr />`,
             `<details class="learning-resources" open>`,
             `<summary><strong>Learning resources</strong></summary>`,
-            markdownEngine.render(learningMarkdown),
+            resourceHtml,
             `</details>`,
         ].join("\n");
     }

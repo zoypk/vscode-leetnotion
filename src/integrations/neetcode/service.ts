@@ -91,9 +91,11 @@ class NeetCodeService {
 
     private withDerivedMetadata(problem: NeetCodeProblemMetadata): NeetCodeProblemMetadata {
         const metadata = this.withDerivedSolutionUrl(problem);
-        const learningMarkdown = this.getLearningDataset().problems[problem.titleSlug]?.markdown;
+        const learningResource = this.getLearningDataset().problems[problem.titleSlug];
 
-        return learningMarkdown ? { ...metadata, learningMarkdown } : metadata;
+        return learningResource
+            ? { ...metadata, learningMarkdown: learningResource.markdown, learningResource }
+            : metadata;
     }
 }
 
