@@ -9,7 +9,7 @@ const REVIEW_STATE_FILE = "reviews.json";
 export interface ReviewStateStorage {
     isConfigured(): boolean;
     read(): Promise<ReviewStateFile>;
-    transaction<R>(mutator: (state: ReviewStateFile) => R | Promise<R>): Promise<R>;
+    transaction<R>(mutator: (state: ReviewStateFile) => R extends PromiseLike<unknown> ? never : R): Promise<R>;
 }
 
 export class ReviewStorage implements ReviewStateStorage {
@@ -31,7 +31,7 @@ export class ReviewStorage implements ReviewStateStorage {
         return this.store.read();
     }
 
-    public transaction<R>(mutator: (state: ReviewStateFile) => R | Promise<R>): Promise<R> {
+    public transaction<R>(mutator: (state: ReviewStateFile) => R extends PromiseLike<unknown> ? never : R): Promise<R> {
         return this.store.transaction(mutator);
     }
 

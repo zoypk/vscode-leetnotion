@@ -21,11 +21,13 @@ class MemoryStorage {
         this.state = { version: 1, backlog: {}, dailyPlans: {} };
         this.queue = Promise.resolve();
         this.writes = 0;
+        this.blocker = undefined;
     }
     isConfigured() { return true; }
     async read() { return structuredClone(this.state); }
     transaction(mutator) {
         const operation = this.queue.then(async () => {
+            if (this.blocker) { await this.blocker; }
             const next = structuredClone(this.state);
             const before = JSON.stringify(next);
             const result = await mutator(next);
@@ -37,6 +39,14 @@ class MemoryStorage {
         });
         this.queue = operation.then(() => undefined, () => undefined);
         return operation;
+    }
+    pauseTransactions() {
+        let release;
+        this.blocker = new Promise((resolve) => { release = resolve; });
+        return () => {
+            this.blocker = undefined;
+            release();
+        };
     }
 }
 
@@ -97,6 +107,20 @@ test("parallel backlog additions retain every record", async () => {
     const fixture = createFixture();
     await Promise.all(Array.from({ length: 8 }, (_, index) => fixture.service.addProblem(String(index + 1))));
     assert.equal(Object.keys(fixture.storage.state.backlog).length, 8);
+});
+
+test("overlapping backlog addition and deferral retain both updates", async () => {
+    const fixture = createFixture();
+    await fixture.service.addProblem("1");
+    const release = fixture.storage.pauseTransactions();
+    const deferral = fixture.service.deferProblemUntilTomorrow("1");
+    const addition = fixture.service.addProblem("2");
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(fixture.storage.state.backlog["2"], undefined);
+    release();
+    await Promise.all([deferral, addition]);
+    assert.equal(fixture.storage.state.backlog["1"].deferredUntil, "2026-08-20");
+    assert.equal(fixture.storage.state.backlog["2"].questionNumber, "2");
 });
 
 for (const [input, expected] of [[-1, 0], [0, 0], [2.7, 2], [Number.NaN, 0]]) {

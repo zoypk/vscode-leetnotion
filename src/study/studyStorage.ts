@@ -9,7 +9,7 @@ const STUDY_STATE_FILE = "study.json";
 export interface StudyStateStorage {
     isConfigured(): boolean;
     read(): Promise<StudyStateFile>;
-    transaction<R>(mutator: (state: StudyStateFile) => R | Promise<R>): Promise<R>;
+    transaction<R>(mutator: (state: StudyStateFile) => R extends PromiseLike<unknown> ? never : R): Promise<R>;
 }
 
 export class StudyStorage implements StudyStateStorage {
@@ -31,7 +31,7 @@ export class StudyStorage implements StudyStateStorage {
         return this.store.read();
     }
 
-    public transaction<R>(mutator: (state: StudyStateFile) => R | Promise<R>): Promise<R> {
+    public transaction<R>(mutator: (state: StudyStateFile) => R extends PromiseLike<unknown> ? never : R): Promise<R> {
         return this.store.transaction(mutator);
     }
 

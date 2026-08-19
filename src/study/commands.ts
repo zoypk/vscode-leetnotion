@@ -128,6 +128,9 @@ export async function markStudyProblemDone(item: StudyBacklogItem | StudyNode): 
             case "add-to-reviews":
                 const initialRating = await pickInitialReviewRating(backlogItem);
                 if (!initialRating) {
+                    if (sessionToken?.kind === "study") {
+                        await sessionState.cancel(sessionToken);
+                    }
                     return;
                 }
                 await transferBacklogToReview(backlogItem, initialRating, {
@@ -153,7 +156,7 @@ export async function markStudyProblemDone(item: StudyBacklogItem | StudyNode): 
 
         await studyTreeDataProvider.refresh();
         if (sessionToken?.kind === "study") {
-            await continueStudySession(sessionToken);
+            await continueStudySession(sessionToken, backlogItem.questionNumber);
         }
     } catch (error) {
         if (sessionToken?.kind === "study") {

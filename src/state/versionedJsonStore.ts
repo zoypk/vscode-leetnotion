@@ -1,5 +1,6 @@
 import { promises as fs } from "fs";
 import * as path from "path";
+import { randomBytes } from "crypto";
 
 export interface VersionedJsonStoreOptions<T> {
     filePath: string | (() => string);
@@ -10,6 +11,7 @@ export interface VersionedJsonStoreOptions<T> {
     staleLockMs?: number;
     now?: () => number;
     onTempFile?: (tempPath: string) => void;
+    onLockOpened?: (lockPath: string, ownerToken: string) => void;
 }
 
 const processQueues = new Map<string, Promise<void>>();
@@ -32,24 +34,30 @@ export class VersionedJsonStore<T> {
         return this.readFromDisk(filePath);
     }
 
-    public async transaction<R>(mutator: (state: T) => R | Promise<R>): Promise<R> {
+    public async transaction<R>(mutator: (state: T) => R extends PromiseLike<unknown> ? never : R): Promise<R> {
         const filePath = this.getFilePath();
         return this.enqueue(filePath, async () => {
             await fs.mkdir(path.dirname(filePath), { recursive: true });
             const lockPath = `${filePath}.lock`;
-            await this.acquireLock(lockPath);
+            const ownerToken = await this.acquireLock(lockPath);
             let tempPath: string | undefined;
 
             try {
                 const state = await this.readFromDisk(filePath);
-                const result = await mutator(state);
+                const result = mutator(state);
+                if (this.isPromiseLike(result)) {
+                    void Promise.resolve(result).catch(() => undefined);
+                    throw new Error("VersionedJsonStore transaction mutator must be synchronous.");
+                }
                 const validatedState = this.options.parse(state, filePath);
                 const serialized = `${JSON.stringify(validatedState, undefined, 2)}\n`;
                 const current = await this.readExistingText(filePath);
                 if (current !== serialized) {
+                    await this.assertLockOwned(lockPath, ownerToken);
                     tempPath = this.createTempPath(filePath);
                     this.options.onTempFile?.(tempPath);
                     await fs.writeFile(tempPath, serialized, { encoding: "utf8", flag: "wx" });
+                    await this.assertLockOwned(lockPath, ownerToken);
                     await fs.rename(tempPath, filePath);
                     tempPath = undefined;
                 }
@@ -58,7 +66,7 @@ export class VersionedJsonStore<T> {
                 if (tempPath) {
                     await fs.unlink(tempPath).catch(() => undefined);
                 }
-                await fs.unlink(lockPath).catch(() => undefined);
+                await this.releaseLockIfOwned(lockPath, ownerToken);
             }
         });
     }
@@ -88,14 +96,38 @@ export class VersionedJsonStore<T> {
         return this.options.parse(value, filePath);
     }
 
-    private async acquireLock(lockPath: string): Promise<void> {
+    private async acquireLock(lockPath: string): Promise<string> {
         const deadline = this.now() + this.lockTimeoutMs;
         while (true) {
             try {
                 const handle = await fs.open(lockPath, "wx");
-                await handle.writeFile(JSON.stringify({ pid: process.pid, createdAt: new Date(this.now()).toISOString() }));
-                await handle.close();
-                return;
+                const ownerToken = randomBytes(24).toString("hex");
+                let openedStats: import("fs").Stats | undefined;
+                let tokenWritten = false;
+                let setupError: unknown;
+                try {
+                    openedStats = await handle.stat();
+                    await handle.writeFile(JSON.stringify({
+                        ownerToken,
+                        pid: process.pid,
+                        createdAt: new Date(this.now()).toISOString(),
+                    }));
+                    tokenWritten = true;
+                    this.options.onLockOpened?.(lockPath, ownerToken);
+                } catch (error) {
+                    setupError = error;
+                } finally {
+                    await handle.close().catch(() => undefined);
+                }
+                if (setupError) {
+                    if (tokenWritten) {
+                        await this.releaseLockIfOwned(lockPath, ownerToken);
+                    } else if (openedStats) {
+                        await this.releaseCreatedLockIfSameFile(lockPath, openedStats);
+                    }
+                    throw setupError;
+                }
+                return ownerToken;
             } catch (error) {
                 if (!this.isNodeError(error, "EEXIST")) {
                     throw new Error(`Failed to acquire state lock ${lockPath}: ${this.errorMessage(error)}`);
@@ -112,6 +144,53 @@ export class VersionedJsonStore<T> {
                     throw new Error(`Timed out waiting for state lock ${lockPath}. Another extension process may still be writing.`);
                 }
                 await new Promise((resolve) => setTimeout(resolve, this.lockRetryMs));
+            }
+        }
+    }
+
+    private async assertLockOwned(lockPath: string, ownerToken: string): Promise<void> {
+        const currentOwner = await this.readLockOwner(lockPath);
+        if (currentOwner !== ownerToken) {
+            throw new Error(`Lost ownership of state lock ${lockPath}; refusing to write state.`);
+        }
+    }
+
+    private async releaseLockIfOwned(lockPath: string, ownerToken: string): Promise<void> {
+        if (await this.readLockOwner(lockPath) !== ownerToken) {
+            return;
+        }
+        await fs.unlink(lockPath).catch((error) => {
+            if (!this.isNodeError(error, "ENOENT")) {
+                throw error;
+            }
+        });
+    }
+
+    private async readLockOwner(lockPath: string): Promise<string | undefined> {
+        try {
+            const raw = await fs.readFile(lockPath, "utf8");
+            const parsed = JSON.parse(raw) as { ownerToken?: unknown };
+            return typeof parsed.ownerToken === "string" ? parsed.ownerToken : undefined;
+        } catch (error) {
+            if (this.isNodeError(error, "ENOENT") || error instanceof SyntaxError) {
+                return undefined;
+            }
+            throw error;
+        }
+    }
+
+    private async releaseCreatedLockIfSameFile(lockPath: string, openedStats: import("fs").Stats): Promise<void> {
+        try {
+            const currentStats = await fs.stat(lockPath);
+            const sameFile = currentStats.dev === openedStats.dev
+                && currentStats.ino === openedStats.ino
+                && currentStats.birthtimeMs === openedStats.birthtimeMs;
+            if (sameFile) {
+                await fs.unlink(lockPath);
+            }
+        } catch (error) {
+            if (!this.isNodeError(error, "ENOENT")) {
+                throw error;
             }
         }
     }
@@ -163,6 +242,11 @@ export class VersionedJsonStore<T> {
 
     private isNodeError(error: unknown, code: string): error is NodeJS.ErrnoException {
         return error instanceof Error && (error as NodeJS.ErrnoException).code === code;
+    }
+
+    private isPromiseLike(value: unknown): value is PromiseLike<unknown> {
+        return Boolean(value && (typeof value === "object" || typeof value === "function")
+            && typeof (value as PromiseLike<unknown>).then === "function");
     }
 
     private errorMessage(error: unknown): string {

@@ -1,5 +1,6 @@
 const assert = require("node:assert/strict");
-const { mkdtemp, readFile, readdir, stat, utimes, writeFile } = require("node:fs/promises");
+const { writeFileSync } = require("node:fs");
+const { mkdtemp, readFile, readdir, stat, unlink, utimes, writeFile } = require("node:fs/promises");
 const os = require("node:os");
 const path = require("node:path");
 const test = require("node:test");
@@ -33,17 +34,21 @@ async function createStore(options = {}) {
 
 test("serializes concurrent mutations without losing updates and uses unique temp files", async () => {
     const tempNames = [];
-    const fixture = await createStore({ onTempFile: (tempPath) => tempNames.push(path.basename(tempPath)) });
+    const ownerTokens = [];
+    const fixture = await createStore({
+        onTempFile: (tempPath) => tempNames.push(path.basename(tempPath)),
+        onLockOpened: (_lockPath, ownerToken) => ownerTokens.push(ownerToken),
+    });
 
-    await Promise.all(Array.from({ length: 12 }, () => fixture.store.transaction(async (state) => {
-        const before = state.count;
-        await new Promise((resolve) => setTimeout(resolve, 2));
-        state.count = before + 1;
+    await Promise.all(Array.from({ length: 12 }, () => fixture.store.transaction((state) => {
+        state.count += 1;
     })));
 
     assert.equal((await fixture.store.read()).count, 12);
     assert.equal(tempNames.length, 12);
     assert.equal(new Set(tempNames).size, tempNames.length);
+    assert.equal(ownerTokens.length, 12);
+    assert.equal(new Set(ownerTokens).size, ownerTokens.length);
     assert.deepEqual((await readdir(fixture.directory)).sort(), ["state.json"]);
 });
 
@@ -97,19 +102,54 @@ test("rereads state after acquiring the lock", async () => {
     const firstEntered = new Promise((resolve) => {
         releaseFirst = resolve;
     });
-    let allowFirstToFinish;
-    const gate = new Promise((resolve) => {
-        allowFirstToFinish = resolve;
-    });
-
-    const first = fixture.store.transaction(async (state) => {
+    const first = fixture.store.transaction((state) => {
         state.count = 4;
         releaseFirst();
-        await gate;
     });
     await firstEntered;
     const second = fixture.store.transaction((state) => { state.count += 3; });
-    allowFirstToFinish();
     await Promise.all([first, second]);
     assert.equal((await fixture.store.read()).count, 7);
+});
+
+test("rejects asynchronous mutators at runtime without writing", async () => {
+    const fixture = await createStore();
+    await assert.rejects(() => fixture.store.transaction(async (state) => {
+        state.count = 9;
+    }), /mutator must be synchronous/);
+    assert.deepEqual(await fixture.store.read(), { version: 1, count: 0 });
+    assert.deepEqual(await readdir(fixture.directory), []);
+});
+
+test("a long transaction aborts if stale recovery replaces its owner token", async () => {
+    const fixture = await createStore({ staleLockMs: 1 });
+    const lockPath = `${fixture.filePath}.lock`;
+    await assert.rejects(() => fixture.store.transaction((state) => {
+        state.count = 7;
+        const deadline = Date.now() + 5;
+        while (Date.now() < deadline) {
+            // Deliberately make the lease old enough for another process to recover it.
+        }
+        writeFileSync(lockPath, JSON.stringify({ ownerToken: "replacement-owner" }));
+    }), /Lost ownership of state lock/);
+
+    assert.deepEqual(await fixture.store.read(), { version: 1, count: 0 });
+    assert.match(await readFile(lockPath, "utf8"), /replacement-owner/);
+    await unlink(lockPath);
+});
+
+test("cleans the file handle and owned lock when setup fails after exclusive open", async () => {
+    let opened = 0;
+    const fixture = await createStore({
+        onLockOpened: () => {
+            opened += 1;
+            throw new Error("post-open setup failed");
+        },
+    });
+
+    await assert.rejects(() => fixture.store.transaction((state) => {
+        state.count = 1;
+    }), /post-open setup failed/);
+    assert.equal(opened, 1);
+    assert.deepEqual(await readdir(fixture.directory), []);
 });

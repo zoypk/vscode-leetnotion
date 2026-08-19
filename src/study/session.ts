@@ -6,6 +6,8 @@ import { ReviewItem } from "../reviews/types";
 import { SessionToken, sessionState } from "../sessions/sessionState";
 import { StudyBacklogItem } from "./types";
 import { studyService } from "./studyService";
+import { selectNextStudySessionItem } from "./sessionSelection";
+import { selectNextStudySessionItem } from "./sessionSelection";
 
 export async function startStudySession(sessionToken: SessionToken): Promise<void> {
     if (!sessionState.owns(sessionToken) || sessionToken.kind !== "study") {
@@ -32,12 +34,18 @@ export async function startStudySession(sessionToken: SessionToken): Promise<voi
     }
 }
 
-export async function continueStudySession(sessionToken: SessionToken): Promise<void> {
+export async function continueStudySession(
+    sessionToken: SessionToken,
+    excludedQuestionNumber?: string,
+): Promise<void> {
     if (!sessionState.owns(sessionToken) || sessionToken.kind !== "study") {
         return;
     }
 
-    const nextItem = await studyService.getNextTodayItem();
+    const nextItem = selectNextStudySessionItem(
+        await studyService.getTodayItems(),
+        excludedQuestionNumber,
+    );
     if (!sessionState.owns(sessionToken)) {
         return;
     }

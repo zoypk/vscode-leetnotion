@@ -20,11 +20,13 @@ class MemoryStorage {
     constructor() {
         this.state = { version: 1, reviews: {} };
         this.queue = Promise.resolve();
+        this.blocker = undefined;
     }
     isConfigured() { return true; }
     async read() { return structuredClone(this.state); }
     transaction(mutator) {
         const operation = this.queue.then(async () => {
+            if (this.blocker) { await this.blocker; }
             const next = structuredClone(this.state);
             const result = await mutator(next);
             this.state = next;
@@ -32,6 +34,14 @@ class MemoryStorage {
         });
         this.queue = operation.then(() => undefined, () => undefined);
         return operation;
+    }
+    pauseTransactions() {
+        let release;
+        this.blocker = new Promise((resolve) => { release = resolve; });
+        return () => {
+            this.blocker = undefined;
+            release();
+        };
     }
 }
 
@@ -94,4 +104,19 @@ test("parallel schedule and removal operations are serialized", async () => {
     assert.equal(fixture.storage.state.reviews["4"].fsrsCard.due, "2026-09-01T00:00:00.000Z");
     await fixture.service.removeProblem("4");
     assert.equal(fixture.storage.state.reviews["4"], undefined);
+});
+
+test("overlapping snapshot and rating operations retain both updates", async () => {
+    const fixture = createFixture();
+    await fixture.service.ensureInitiallyScheduled("5", { name: "Before" });
+    const release = fixture.storage.pauseTransactions();
+    const rating = fixture.service.applyRating("5", "hard");
+    const snapshot = fixture.service.addProblem("5", { name: "After", difficulty: "Hard" });
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(fixture.storage.state.reviews["5"].problem.name, "Before");
+    release();
+    await Promise.all([rating, snapshot]);
+    assert.equal(fixture.storage.state.reviews["5"].problem.name, "After");
+    assert.equal(fixture.storage.state.reviews["5"].lastRating, "hard");
+    assert.equal(fixture.storage.state.reviews["5"].fsrsCard.reps, 1);
 });
