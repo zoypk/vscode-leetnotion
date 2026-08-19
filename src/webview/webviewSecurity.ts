@@ -596,8 +596,42 @@ function isNameCharacter(character: string | undefined): boolean {
 
 function normalizeCspSource(source: string): string | undefined {
     const trimmed = source.trim();
-    if (!trimmed || /[;\s\"']/.test(trimmed)) {
+    if (!trimmed || /[;\r\n\u0000-\u001f\u007f]/.test(trimmed)) {
         return undefined;
     }
-    return trimmed;
+    const tokens = trimmed.split(/ +/);
+    if (tokens.length > 8 || tokens.some((token) => !isTrustedCspSourceToken(token))) {
+        return undefined;
+    }
+    return tokens.join(" ");
+}
+
+function isTrustedCspSourceToken(token: string): boolean {
+    if (token === "'self'") {
+        return true;
+    }
+    if (["webview-resource:", "vscode-resource:", "vscode-webview-resource:"].includes(token)) {
+        return true;
+    }
+    if (token.includes("\"") || token.includes("'")) {
+        return false;
+    }
+    try {
+        const sourceUrl = new URL(token);
+        if (sourceUrl.protocol !== "https:"
+            || sourceUrl.username
+            || sourceUrl.password
+            || sourceUrl.search
+            || sourceUrl.hash) {
+            return false;
+        }
+        const hostname = sourceUrl.hostname.startsWith("*.")
+            ? sourceUrl.hostname.slice(2)
+            : sourceUrl.hostname;
+        return hostname.length > 0
+            && !hostname.includes("*")
+            && hostname.split(".").every((label) => /^[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?$/.test(label));
+    } catch {
+        return false;
+    }
 }

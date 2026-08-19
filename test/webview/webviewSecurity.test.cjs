@@ -98,6 +98,39 @@ test("strict CSP uses a nonce without unsafe directives", () => {
     assert.doesNotMatch(csp, /unsafe-inline|unsafe-eval|command:|file:/);
 });
 
+test("strict CSP accepts the source list returned by current VS Code", () => {
+    const vscodeSource = "'self' https://*.vscode-cdn.net";
+    const csp = security.createWebviewCsp(vscodeSource, "abcDEF123+/=");
+
+    assert.match(csp, /script-src 'self' https:\/\/\*\.vscode-cdn\.net 'nonce-abcDEF123\+\/=+'/);
+    assert.match(csp, /style-src 'self' https:\/\/\*\.vscode-cdn\.net 'nonce-abcDEF123\+\/=+'/);
+    assert.doesNotMatch(csp, /unsafe-inline|unsafe-eval|command:|file:/);
+
+    const remoteSource = "https://extensions.example.test/leetnotion/ 'self' https://*.vscode-cdn.net";
+    const remoteCsp = security.createWebviewCsp(remoteSource, "abcDEF123+/=");
+    assert.match(
+        remoteCsp,
+        /script-src https:\/\/extensions\.example\.test\/leetnotion\/ 'self' https:\/\/\*\.vscode-cdn\.net 'nonce-abcDEF123\+\/=+'/,
+    );
+});
+
+test("strict CSP rejects injected or unsupported source-list tokens", () => {
+    const rejected = [
+        "'self' https://*.vscode-cdn.net; script-src *",
+        "'self' 'unsafe-inline'",
+        "'self'\nhttps://*.vscode-cdn.net",
+        "data:",
+    ];
+
+    for (const source of rejected) {
+        assert.throws(
+            () => security.createWebviewCsp(source, "abcDEF123+/="),
+            /valid webview source and nonce/,
+            source,
+        );
+    }
+});
+
 test("enforces input and output limits while preserving balanced safe HTML", () => {
     const inputLimited = security.sanitizeHtmlWithDiagnostics(
         `<div><strong>${"word ".repeat(100)}</strong></div>`,
