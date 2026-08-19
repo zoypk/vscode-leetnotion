@@ -41,24 +41,71 @@ function isJsonValue(value: unknown): boolean {
     }
 }
 
-function isArray(value: unknown): boolean {
-    return Array.isArray(value);
+function isString(value: unknown): value is string {
+    return typeof value === "string";
 }
 
 function isRecord(value: unknown): boolean {
     return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
-const CACHE_VALIDATORS: Readonly<Record<string, (value: unknown) => boolean>> = {
-    "leetcode-topic-tags": isRecord,
-    "leetnotion-question-number-page-id-mapping": isRecord,
-    "leetnotion-title-slug-question-number-mapping": isRecord,
-    "notion-user-question-tags": isArray,
-    "leetcode-lists": isArray,
-    "leetcode-questions-of-list": isRecord,
-    "leetcode-problem-rating-map": isRecord,
-    "leetcodeContests": isRecord,
+function isStringArray(value: unknown): boolean {
+    return Array.isArray(value) && value.every(isString);
+}
+
+function isStringArrayMap(value: unknown): boolean {
+    return isRecord(value) && Object.values(value).every(isStringArray);
+}
+
+function isStringMap(value: unknown): boolean {
+    return isRecord(value) && Object.values(value).every(isString);
+}
+
+function isListCollection(value: unknown): boolean {
+    return Array.isArray(value) && value.every((item) => isRecord(item)
+        && isString(item.name) && isString(item.slug));
+}
+
+function isQuestionCollection(value: unknown): boolean {
+    return isRecord(value) && Object.values(value).every((questions) => Array.isArray(questions)
+        && questions.every((question) => isRecord(question)
+            && typeof question.id === "number" && Number.isFinite(question.id)
+            && isString(question.questionFrontendId)
+            && isString(question.title)
+            && isString(question.titleSlug)));
+}
+
+function isRatingMap(value: unknown): boolean {
+    return isRecord(value) && Object.values(value).every((rating) => isRecord(rating)
+        && typeof rating.ID === "number" && Number.isFinite(rating.ID)
+        && typeof rating.Rating === "number" && Number.isFinite(rating.Rating)
+        && isString(rating.ContestID_en)
+        && isString(rating.ProblemIndex));
+}
+
+export const CACHE_VALIDATORS: Readonly<Record<string, (value: unknown) => boolean>> = {
+    "leetcode-topic-tags": isStringArrayMap,
+    "leetnotion-question-number-page-id-mapping": isStringMap,
+    "leetnotion-title-slug-question-number-mapping": isStringMap,
+    "notion-user-question-tags": isStringArray,
+    "leetcode-lists": isListCollection,
+    "leetcode-questions-of-list": isQuestionCollection,
+    "leetcode-problem-rating-map": isRatingMap,
+    "leetcodeContests": isStringArrayMap,
 };
+
+function encodedSize(value: unknown): number {
+    try {
+        const encoded = JSON.stringify(value);
+        return encoded === undefined ? Number.POSITIVE_INFINITY : Buffer.byteLength(encoded, "utf8");
+    } catch (_error) {
+        return Number.POSITIVE_INFINITY;
+    }
+}
+
+function isValidSecret(value: unknown): value is string {
+    return typeof value === "string" && value.trim().length > 0;
+}
 
 export class ExtensionStorage {
     private context: StorageContext;
@@ -86,8 +133,9 @@ export class ExtensionStorage {
                 continue;
             }
             const value = context.globalState.get(key);
-            const encodedSize = value === undefined ? 0 : Buffer.byteLength(JSON.stringify(value), "utf8");
-            if (!this.smallValueKeys.has(key) || encodedSize > MAX_MEMENTO_VALUE_BYTES) {
+            const valueSize = value === undefined ? 0 : encodedSize(value);
+            if ((!this.smallValueKeys.has(key) || valueSize > MAX_MEMENTO_VALUE_BYTES)
+                && !this.cacheStore.has(key)) {
                 this.cacheStore.register(key, isJsonValue);
             }
         }
@@ -113,12 +161,12 @@ export class ExtensionStorage {
 
     public async update(key: string, value: unknown): Promise<void> {
         if (key === COOKIE_SECRET_KEY || key === NOTION_TOKEN_SECRET_KEY) {
-            if (typeof value === "string") {
+            if (isValidSecret(value)) {
                 await this.setSecret(key, value);
             } else if (value === undefined) {
                 await this.deleteSecret(key);
             } else {
-                throw new Error(`Secret ${key} must be a string.`);
+                throw new Error(`Secret ${key} must be a non-empty string.`);
             }
             return;
         }
@@ -159,33 +207,51 @@ export class ExtensionStorage {
         if (this.cacheStore.has(key) || !this.smallValueKeys.has(key)) {
             return true;
         }
-        return value !== undefined && Buffer.byteLength(JSON.stringify(value), "utf8") > MAX_MEMENTO_VALUE_BYTES;
+        return value !== undefined && encodedSize(value) > MAX_MEMENTO_VALUE_BYTES;
     }
 
     private async migrateSecret(key: string): Promise<void> {
-        const storedSecret = await this.context.secrets.get(key);
-        if (storedSecret !== undefined) {
-            this.secretSnapshot.set(key, storedSecret);
-            if (this.context.globalState.get(key) !== undefined) {
+        const legacyValue = this.context.globalState.get<unknown>(key);
+        const validLegacyValue = isValidSecret(legacyValue) ? legacyValue : undefined;
+        let storedSecret: string | undefined;
+        try {
+            storedSecret = await this.context.secrets.get(key);
+        } catch (_error) {
+            if (validLegacyValue) {
+                this.secretSnapshot.set(key, validLegacyValue);
+            } else if (legacyValue !== undefined) {
                 await this.context.globalState.update(key, undefined);
             }
             return;
         }
 
-        const legacyValue = this.context.globalState.get<unknown>(key);
-        if (typeof legacyValue !== "string" || legacyValue.length === 0) {
+        if (isValidSecret(storedSecret)) {
+            this.secretSnapshot.set(key, storedSecret);
+            if (legacyValue !== undefined) {
+                await this.context.globalState.update(key, undefined);
+            }
+            return;
+        }
+
+        if (storedSecret !== undefined) {
+            await this.context.secrets.delete(key);
+        }
+        if (!validLegacyValue) {
+            if (legacyValue !== undefined) {
+                await this.context.globalState.update(key, undefined);
+            }
             return;
         }
         try {
-            await this.context.secrets.store(key, legacyValue);
+            await this.context.secrets.store(key, validLegacyValue);
             const verified = await this.context.secrets.get(key);
-            if (verified !== legacyValue) {
+            if (verified !== validLegacyValue) {
                 throw new Error(`SecretStorage did not verify ${key}.`);
             }
-            this.secretSnapshot.set(key, legacyValue);
+            this.secretSnapshot.set(key, validLegacyValue);
             await this.context.globalState.update(key, undefined);
         } catch (_error) {
-            this.secretSnapshot.set(key, legacyValue);
+            this.secretSnapshot.set(key, validLegacyValue);
         }
     }
 

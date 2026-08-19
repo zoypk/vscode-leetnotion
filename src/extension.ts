@@ -2,7 +2,13 @@
 // Licensed under the MIT license.
 
 import * as vscode from "vscode";
-import { ActivationResources, registerActivationResources, registerNodeEvent } from "./activation";
+import {
+    ActivationResources,
+    ExtensionCommandHandlers,
+    registerCoreActivationResources,
+    registerExtensionResources,
+    registerNodeEvent,
+} from "./activation";
 import { codeLensController } from "./codelens/CodeLensController";
 import * as cache from "./commands/cache";
 import { switchDefaultLanguage } from "./commands/language";
@@ -56,31 +62,31 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     activeResources?.dispose();
     activeResources = new ActivationResources();
     context.subscriptions.push(activeResources);
-    activeResources.add(
-        leetCodeStatusBarController,
-        leetCodeChannel,
-        leetCodePreviewProvider,
-        leetCodePastSubmissionsProvider,
-        leetCodeSubmissionProvider,
-        leetCodeSubmissionDetailProvider,
-        leetCodeSolutionProvider,
-        leetCodeExecutor,
+    activeResources.add(registerCoreActivationResources({
+        statusBar: leetCodeStatusBarController,
+        channel: leetCodeChannel,
+        previewProvider: leetCodePreviewProvider,
+        pastSubmissionsProvider: leetCodePastSubmissionsProvider,
+        submissionProvider: leetCodeSubmissionProvider,
+        submissionDetailProvider: leetCodeSubmissionDetailProvider,
+        solutionProvider: leetCodeSolutionProvider,
+        executor: leetCodeExecutor,
         markdownEngine,
         leetnotionEngine,
         codeLensController,
-        TrackData,
+        tracking: TrackData,
         profileDashboardProvider,
-        leetCodeTreeDataProvider,
-        reviewTreeDataProvider,
-        studyTreeDataProvider,
+        leetcodeTreeProvider: leetCodeTreeDataProvider,
+        reviewTreeProvider: reviewTreeDataProvider,
+        studyTreeProvider: studyTreeDataProvider,
         explorerNodeManager,
-    );
+    }));
     try {
         if (!(await leetCodeExecutor.meetRequirements(context))) {
             throw new Error("The environment doesn't meet requirements.");
         }
 
-        activeResources.add(registerNodeEvent(leetCodeManager, "statusChanged", () => {
+        const handleStatusChanged = () => {
             leetCodeStatusBarController.updateStatusBar(leetCodeManager.getStatus(), leetCodeManager.getUser());
             leetCodeTreeDataProvider.refresh();
             leetcodeClient.initialize();
@@ -92,7 +98,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
             } else if (nextStatus === UserStatus.SignedOut) {
                 intervals = clearIntervals(intervals);
             }
-        }));
+        };
 
         leetCodeTreeDataProvider.initialize(context);
         await globalState.initialize(context);
@@ -117,57 +123,45 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         reviewTreeView = vscode.window.createTreeView("leetnotionReviews", { treeDataProvider: reviewTreeDataProvider, showCollapseAll: true });
         studyTreeView = vscode.window.createTreeView("leetnotionStudy", { treeDataProvider: studyTreeDataProvider, showCollapseAll: true });
 
-        activeResources.add(registerActivationResources(() => [
-            vscode.window.registerFileDecorationProvider(leetCodeTreeItemDecorationProvider),
-            vscode.window.registerWebviewViewProvider("leetnotionHome", profileDashboardProvider, { webviewOptions: { retainContextWhenHidden: true } }),
-            leetcodeTreeView,
-            reviewTreeView,
-            studyTreeView,
-            vscode.commands.registerCommand("leetnotion.deleteCache", () => cache.deleteCache()),
-            vscode.commands.registerCommand("leetnotion.toggleLeetCodeCn", () => plugin.switchEndpoint()),
-            vscode.commands.registerCommand("leetnotion.signin", () => leetCodeManager.signIn()),
-            vscode.commands.registerCommand("leetnotion.signout", () => leetCodeManager.signOut()),
-            vscode.commands.registerCommand("leetnotion.refreshHome", () => profileDashboardProvider.refresh()),
-            vscode.commands.registerCommand("leetnotion.lookupProfile", () => profileDashboardProvider.promptForUsername()),
-            vscode.commands.registerCommand("leetnotion.previewProblem", (node: vscode.Uri) => show.previewProblem(node)),
-            vscode.commands.registerCommand("leetnotion.previewReviewProblem", (review) => reviewCommands.previewReviewProblem(review)),
-            vscode.commands.registerCommand("leetnotion.openReviewProblem", (review) => reviewCommands.openReviewProblem(review)),
-            vscode.commands.registerCommand("leetnotion.addToReview", (input?: LeetCodeNode | vscode.Uri) => reviewCommands.addProblemToReview(input)),
-            vscode.commands.registerCommand("leetnotion.addToBacklog", (input?: LeetCodeNode | vscode.Uri) => studyCommands.addProblemToBacklog(input)),
-            vscode.commands.registerCommand("leetnotion.startReviewSession", () => reviewCommands.startReviewSession()),
-            vscode.commands.registerCommand("leetnotion.startStudySession", () => studyCommands.startStudySession()),
-            registerStopSessionCommand(
-                (command, handler) => vscode.commands.registerCommand(command, handler),
-                sessionState,
-                () => {
-                    void vscode.window.showInformationMessage("Leetnotion session stopped.");
-                },
-            ),
-            vscode.commands.registerCommand("leetnotion.setReviewFilters", () => reviewCommands.setReviewFilters()),
-            vscode.commands.registerCommand("leetnotion.setStudyFilters", () => studyCommands.setStudyFilters()),
-            vscode.commands.registerCommand("leetnotion.setDailyNewProblemLimit", () => studyCommands.setDailyNewProblemLimit()),
-            vscode.commands.registerCommand("leetnotion.markReviewReviewed", (review) => reviewCommands.markReviewReviewed(review)),
-            vscode.commands.registerCommand("leetnotion.snoozeReview", (review) => reviewCommands.snoozeReview(review)),
-            vscode.commands.registerCommand("leetnotion.refreshStudy", () => studyTreeDataProvider.refresh()),
-            vscode.commands.registerCommand("leetnotion.previewStudyProblem", (target) => studyCommands.previewStudyProblem(target)),
-            vscode.commands.registerCommand("leetnotion.openStudyProblem", (target) => studyCommands.openStudyProblem(target)),
-            vscode.commands.registerCommand("leetnotion.markStudyProblemDone", (target) => studyCommands.markStudyProblemDone(target)),
-            vscode.commands.registerCommand("leetnotion.removeFromBacklog", (target) => studyCommands.removeProblemFromBacklog(target)),
-            vscode.commands.registerCommand("leetnotion.showProblem", (node: LeetCodeNode) => show.showProblem(node)),
-            vscode.commands.registerCommand("leetnotion.pickOne", () => show.pickOne()),
-            vscode.commands.registerCommand("leetnotion.searchProblem", () => show.searchProblem()),
-            vscode.commands.registerCommand("leetnotion.searchCompany", () => show.searchCompany()),
-            vscode.commands.registerCommand("leetnotion.searchTag", () => show.searchTag()),
-            vscode.commands.registerCommand("leetnotion.searchSheets", () => show.searchSheets()),
-            vscode.commands.registerCommand("leetnotion.searchContests", () => show.searchContests()),
-            vscode.commands.registerCommand("leetnotion.searchList", () => show.searchLists()),
-            vscode.commands.registerCommand("leetnotion.showSolution", (input: LeetCodeNode | vscode.Uri) => show.showSolution(input)),
-            vscode.commands.registerCommand("leetnotion.showPastSubmissions", (input?: LeetCodeNode | vscode.Uri) => show.showPastSubmissions(input)),
-            vscode.commands.registerCommand("leetnotion.showPastSubmissionsByQuestionNumber", (questionNumber: string, title?: string) => show.showPastSubmissionsByQuestionNumber(questionNumber, title)),
-            vscode.commands.registerCommand("leetnotion.showSubmissionDetail", (submissionId: number) => show.showSubmissionDetail(submissionId)),
-            vscode.commands.registerCommand("leetnotion.refreshExplorer", () => leetCodeTreeDataProvider.refresh()),
-            vscode.commands.registerCommand("leetnotion.refreshReviews", () => reviewTreeDataProvider.refresh()),
-            vscode.commands.registerCommand("leetnotion.testSolution", (uri?: vscode.Uri) => {
+        const commandHandlers: ExtensionCommandHandlers = {
+            "leetnotion.deleteCache": () => cache.deleteCache(),
+            "leetnotion.toggleLeetCodeCn": () => plugin.switchEndpoint(),
+            "leetnotion.signin": () => leetCodeManager.signIn(),
+            "leetnotion.signout": () => leetCodeManager.signOut(),
+            "leetnotion.refreshHome": () => profileDashboardProvider.refresh(),
+            "leetnotion.lookupProfile": () => profileDashboardProvider.promptForUsername(),
+            "leetnotion.previewProblem": (node: vscode.Uri) => show.previewProblem(node),
+            "leetnotion.previewReviewProblem": (review) => reviewCommands.previewReviewProblem(review),
+            "leetnotion.openReviewProblem": (review) => reviewCommands.openReviewProblem(review),
+            "leetnotion.addToReview": (input?: LeetCodeNode | vscode.Uri) => reviewCommands.addProblemToReview(input),
+            "leetnotion.addToBacklog": (input?: LeetCodeNode | vscode.Uri) => studyCommands.addProblemToBacklog(input),
+            "leetnotion.startReviewSession": () => reviewCommands.startReviewSession(),
+            "leetnotion.startStudySession": () => studyCommands.startStudySession(),
+            "leetnotion.setReviewFilters": () => reviewCommands.setReviewFilters(),
+            "leetnotion.setStudyFilters": () => studyCommands.setStudyFilters(),
+            "leetnotion.setDailyNewProblemLimit": () => studyCommands.setDailyNewProblemLimit(),
+            "leetnotion.markReviewReviewed": (review) => reviewCommands.markReviewReviewed(review),
+            "leetnotion.snoozeReview": (review) => reviewCommands.snoozeReview(review),
+            "leetnotion.refreshStudy": () => studyTreeDataProvider.refresh(),
+            "leetnotion.previewStudyProblem": (target) => studyCommands.previewStudyProblem(target),
+            "leetnotion.openStudyProblem": (target) => studyCommands.openStudyProblem(target),
+            "leetnotion.markStudyProblemDone": (target) => studyCommands.markStudyProblemDone(target),
+            "leetnotion.removeFromBacklog": (target) => studyCommands.removeProblemFromBacklog(target),
+            "leetnotion.showProblem": (node: LeetCodeNode) => show.showProblem(node),
+            "leetnotion.pickOne": () => show.pickOne(),
+            "leetnotion.searchProblem": () => show.searchProblem(),
+            "leetnotion.searchCompany": () => show.searchCompany(),
+            "leetnotion.searchTag": () => show.searchTag(),
+            "leetnotion.searchSheets": () => show.searchSheets(),
+            "leetnotion.searchContests": () => show.searchContests(),
+            "leetnotion.searchList": () => show.searchLists(),
+            "leetnotion.showSolution": (input: LeetCodeNode | vscode.Uri) => show.showSolution(input),
+            "leetnotion.showPastSubmissions": (input?: LeetCodeNode | vscode.Uri) => show.showPastSubmissions(input),
+            "leetnotion.showPastSubmissionsByQuestionNumber": (questionNumber: string, title?: string) => show.showPastSubmissionsByQuestionNumber(questionNumber, title),
+            "leetnotion.showSubmissionDetail": (submissionId: number) => show.showSubmissionDetail(submissionId),
+            "leetnotion.refreshExplorer": () => leetCodeTreeDataProvider.refresh(),
+            "leetnotion.refreshReviews": () => reviewTreeDataProvider.refresh(),
+            "leetnotion.testSolution": (uri?: vscode.Uri) => {
                 TrackData.report({
                     event_key: `vscode_runCode`,
                     type: "click",
@@ -176,8 +170,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
                     }),
                 });
                 return test.testSolution(uri);
-            }),
-            vscode.commands.registerCommand("leetnotion.submitSolution", (uri?: vscode.Uri) => {
+            },
+            "leetnotion.submitSolution": (uri?: vscode.Uri) => {
                 TrackData.report({
                     event_key: `vscode_submit`,
                     type: "click",
@@ -186,40 +180,55 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
                     }),
                 });
                 return submit.submitSolution(uri);
-            }),
-            vscode.commands.registerCommand("leetnotion.switchDefaultLanguage", () => switchDefaultLanguage()),
-            vscode.commands.registerCommand("leetnotion.addFavorite", (node: LeetCodeNode) => star.addFavorite(node)),
-            vscode.commands.registerCommand("leetnotion.removeFavorite", (node: LeetCodeNode) => star.removeFavorite(node)),
-            vscode.commands.registerCommand("leetnotion.pinSheet", (node: LeetCodeNode) => sheet.pinSheet(node)),
-            vscode.commands.registerCommand("leetnotion.unpinSheet", (node: LeetCodeNode) => sheet.unpinSheet(node)),
-            vscode.commands.registerCommand("leetnotion.problems.sort", () => plugin.switchSortingStrategy()),
-            vscode.commands.registerCommand("leetnotion.clearAllData", async () => {
+            },
+            "leetnotion.switchDefaultLanguage": () => switchDefaultLanguage(),
+            "leetnotion.addFavorite": (node: LeetCodeNode) => star.addFavorite(node),
+            "leetnotion.removeFavorite": (node: LeetCodeNode) => star.removeFavorite(node),
+            "leetnotion.pinSheet": (node: LeetCodeNode) => sheet.pinSheet(node),
+            "leetnotion.unpinSheet": (node: LeetCodeNode) => sheet.unpinSheet(node),
+            "leetnotion.problems.sort": () => plugin.switchSortingStrategy(),
+            "leetnotion.clearAllData": async () => {
                 await leetnotionManager.clearAllData();
                 await reviewTreeDataProvider.refresh();
                 await studyTreeDataProvider.refresh();
-            }),
-            vscode.commands.registerCommand("leetnotion.updateTemplateInfo", async () => {
+            },
+            "leetnotion.updateTemplateInfo": async () => {
                 await leetnotionManager.updateNotionInfo();
                 await reviewTreeDataProvider.refresh();
                 await studyTreeDataProvider.refresh();
-            }),
-            vscode.commands.registerCommand("leetnotion.integrateNotion", async () => {
+            },
+            "leetnotion.integrateNotion": async () => {
                 await leetnotionManager.enableNotionIntegration();
                 await reviewTreeDataProvider.refresh();
                 await studyTreeDataProvider.refresh();
-            }),
-            vscode.commands.registerCommand("leetnotion.updateTemplate", () => templateUpdater.updateTemplate()),
-            vscode.commands.registerCommand("leetnotion.addSubmissions", () => leetnotionManager.uploadSubmissions()),
-            {
-                dispose: () => {
-                    intervals = clearIntervals(intervals)
-                }
-            }
-        ]));
+            },
+            "leetnotion.updateTemplate": () => templateUpdater.updateTemplate(),
+            "leetnotion.addSubmissions": () => leetnotionManager.uploadSubmissions(),
+        };
+        activeResources.add(registerExtensionResources({
+            commandHandlers,
+            registerCommand: (command, handler) => vscode.commands.registerCommand(command, handler),
+            registerStopSession: () => registerStopSessionCommand(
+                (command, handler) => vscode.commands.registerCommand(command, handler),
+                sessionState,
+                () => { void vscode.window.showInformationMessage("Leetnotion session stopped."); },
+            ),
+            registerFileDecorationProvider: () => vscode.window.registerFileDecorationProvider(leetCodeTreeItemDecorationProvider),
+            registerWebviewViewProvider: () => vscode.window.registerWebviewViewProvider(
+                "leetnotionHome",
+                profileDashboardProvider,
+                { webviewOptions: { retainContextWhenHidden: true } },
+            ),
+            treeViews: [leetcodeTreeView, reviewTreeView, studyTreeView],
+            registerStatusListener: () => registerNodeEvent(leetCodeManager, "statusChanged", handleStatusChanged),
+            registerUriHandler: () => vscode.window.registerUriHandler({ handleUri: leetCodeManager.handleUriSignIn }),
+            recurringWork: {
+                dispose: () => { intervals = clearIntervals(intervals); },
+            },
+        }));
 
         await leetCodeExecutor.switchEndpoint(plugin.getLeetCodeEndpoint());
         await leetCodeManager.getLoginStatus();
-        activeResources.add(vscode.window.registerUriHandler({ handleUri: leetCodeManager.handleUriSignIn }));
     } catch (error) {
         await sessionState.dispose();
         leetCodeChannel.appendLine(error.toString());

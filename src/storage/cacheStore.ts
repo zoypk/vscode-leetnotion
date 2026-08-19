@@ -10,6 +10,22 @@ export interface CacheMemento {
     update(key: string, value: unknown): Thenable<void>;
 }
 
+export interface CacheFileSystem {
+    mkdir(directory: string, options: { recursive: true }): Promise<unknown>;
+    readFile(filePath: string, encoding: "utf8"): Promise<string>;
+    writeFile(filePath: string, data: string, options: { encoding: "utf8"; flag: "wx" }): Promise<unknown>;
+    rename(source: string, destination: string): Promise<void>;
+    unlink(filePath: string): Promise<void>;
+}
+
+const nodeFileSystem: CacheFileSystem = {
+    mkdir: (directory, options) => fs.mkdir(directory, options),
+    readFile: (filePath, encoding) => fs.readFile(filePath, encoding),
+    writeFile: (filePath, data, options) => fs.writeFile(filePath, data, options),
+    rename: (source, destination) => fs.rename(source, destination),
+    unlink: (filePath) => fs.unlink(filePath),
+};
+
 type CacheEnvelope = {
     version: number;
     key: string;
@@ -36,6 +52,7 @@ export class CacheStore {
     public constructor(
         private readonly cacheDirectory: string,
         validators: Readonly<Record<string, CacheValidator>>,
+        private readonly fileSystem: CacheFileSystem = nodeFileSystem,
     ) {
         this.validators = new Map(Object.entries(validators));
     }
@@ -49,7 +66,7 @@ export class CacheStore {
     }
 
     public async initialize(memento?: CacheMemento): Promise<void> {
-        await fs.mkdir(this.cacheDirectory, { recursive: true });
+        await this.fileSystem.mkdir(this.cacheDirectory, { recursive: true });
         for (const key of this.validators.keys()) {
             const fileValue = await this.readFile(key);
             if (fileValue !== undefined) {
@@ -61,7 +78,11 @@ export class CacheStore {
             }
 
             const legacyValue = memento?.get(key);
-            if (legacyValue === undefined || !this.isValid(key, legacyValue)) {
+            if (legacyValue === undefined) {
+                continue;
+            }
+            if (!this.isValid(key, legacyValue)) {
+                await memento!.update(key, undefined);
                 continue;
             }
             await this.set(key, legacyValue);
@@ -85,7 +106,7 @@ export class CacheStore {
 
     public async delete(key: string): Promise<void> {
         await this.enqueue(key, async () => {
-            await fs.unlink(this.getFilePath(key)).catch((error: NodeJS.ErrnoException) => {
+            await this.fileSystem.unlink(this.getFilePath(key)).catch((error: NodeJS.ErrnoException) => {
                 if (error.code !== "ENOENT") {
                     throw error;
                 }
@@ -109,7 +130,7 @@ export class CacheStore {
 
     private async readFile(key: string): Promise<unknown | undefined> {
         try {
-            const parsed = JSON.parse(await fs.readFile(this.getFilePath(key), "utf8")) as unknown;
+            const parsed = JSON.parse(await this.fileSystem.readFile(this.getFilePath(key), "utf8")) as unknown;
             if (!isEnvelope(parsed, key) || !this.isValid(key, parsed.value)) {
                 return undefined;
             }
@@ -130,10 +151,10 @@ export class CacheStore {
         );
         const envelope: CacheEnvelope = { version: CACHE_SCHEMA_VERSION, key, value };
         try {
-            await fs.writeFile(temporary, JSON.stringify(envelope), { encoding: "utf8", flag: "wx" });
-            await fs.rename(temporary, destination);
+            await this.fileSystem.writeFile(temporary, JSON.stringify(envelope), { encoding: "utf8", flag: "wx" });
+            await this.fileSystem.rename(temporary, destination);
         } catch (error) {
-            await fs.unlink(temporary).catch(() => undefined);
+            await this.fileSystem.unlink(temporary).catch(() => undefined);
             throw error;
         }
     }

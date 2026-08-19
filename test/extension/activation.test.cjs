@@ -1,12 +1,15 @@
 const assert = require("node:assert/strict");
 const { EventEmitter } = require("node:events");
-const { readFileSync } = require("node:fs");
-const path = require("node:path");
 const test = require("node:test");
 
 const {
     ActivationResources,
+    CORE_RESOURCE_KEYS,
+    EXTENSION_COMMAND_IDS,
+    INTERNAL_COMMAND_IDS,
+    registerCoreActivationResources,
     registerActivationResources,
+    registerExtensionResources,
     registerNodeEvent,
 } = require("../../out-test/activation");
 
@@ -49,12 +52,82 @@ test("Node event registration removes the exact listener once", () => {
     assert.equal(emitter.listenerCount("statusChanged"), 0);
 });
 
-test("activation routes registrations, the URI handler, and recurring cleanup through the resource owner", () => {
-    const source = readFileSync(path.resolve(__dirname, "../../src/extension.ts"), "utf8");
+test("the real activation inventory disposes every command, provider, handler, emitter, view, and timer once", () => {
+    const disposalCounts = new Map();
+    const registrations = [];
+    const disposable = (label) => {
+        registrations.push(label);
+        return {
+            dispose() { disposalCounts.set(label, (disposalCounts.get(label) || 0) + 1); },
+        };
+    };
+    const core = Object.fromEntries(CORE_RESOURCE_KEYS.map((key) => [key, disposable(`core:${key}`)]));
+    const coreResources = registerCoreActivationResources(core);
+    const handlers = Object.fromEntries(EXTENSION_COMMAND_IDS.map((command) => [command, () => command]));
+    const registeredHandlers = new Map();
+    const extensionResources = registerExtensionResources({
+        commandHandlers: handlers,
+        registerCommand(command, handler) {
+            registeredHandlers.set(command, handler);
+            return disposable(`command:${command}`);
+        },
+        registerStopSession: () => disposable("handler:stop-session"),
+        registerFileDecorationProvider: () => disposable("provider:file-decoration"),
+        registerWebviewViewProvider: () => disposable("provider:home-webview"),
+        treeViews: [disposable("view:explorer"), disposable("view:reviews"), disposable("view:study")],
+        registerStatusListener: () => disposable("handler:status-listener"),
+        registerUriHandler: () => disposable("handler:uri"),
+        recurringWork: disposable("timer:recurring-work"),
+    });
 
-    assert.match(source, /registerActivationResources\(\(\) => \[/);
-    assert.match(source, /activeResources\.add\(registerNodeEvent\(leetCodeManager/);
-    assert.match(source, /activeResources\.add\(vscode\.window\.registerUriHandler/);
-    assert.match(source, /dispose: \(\) => \{\s*intervals = clearIntervals\(intervals\)/);
-    assert.match(source, /activeResources\?\.dispose\(\)/);
+    coreResources.dispose();
+    extensionResources.dispose();
+    coreResources.dispose();
+    extensionResources.dispose();
+
+    assert.deepEqual([...registeredHandlers.keys()], [...EXTENSION_COMMAND_IDS]);
+    for (const command of EXTENSION_COMMAND_IDS) {
+        assert.equal(registeredHandlers.get(command), handlers[command]);
+    }
+    assert.equal(registrations.length, CORE_RESOURCE_KEYS.length + EXTENSION_COMMAND_IDS.length + 9);
+    for (const label of registrations) {
+        assert.equal(disposalCounts.get(label), 1, `${label} was not disposed exactly once`);
+    }
+});
+
+test("the executable command inventory matches every contributed command", () => {
+    const packageJson = require("../../package.json");
+    const contributed = packageJson.contributes.commands.map(({ command }) => command).sort();
+    const registered = [
+        ...EXTENSION_COMMAND_IDS.filter((command) => !INTERNAL_COMMAND_IDS.includes(command)),
+        "leetnotion.stopSession",
+    ].sort();
+
+    assert.deepEqual(registered, contributed);
+});
+
+test("a failed real registration disposes everything registered before the failure", () => {
+    const disposed = [];
+    const handlers = Object.fromEntries(EXTENSION_COMMAND_IDS.map((command) => [command, () => undefined]));
+    const disposable = (label) => ({ dispose() { disposed.push(label); } });
+
+    assert.throws(() => registerExtensionResources({
+        commandHandlers: handlers,
+        registerCommand(command) {
+            if (command === EXTENSION_COMMAND_IDS[2]) throw new Error("injected registration failure");
+            return disposable(command);
+        },
+        registerStopSession: () => disposable("stop"),
+        registerFileDecorationProvider: () => disposable("decoration"),
+        registerWebviewViewProvider: () => disposable("webview"),
+        treeViews: [disposable("explorer"), disposable("reviews"), disposable("study")],
+        registerStatusListener: () => disposable("status"),
+        registerUriHandler: () => disposable("uri"),
+        recurringWork: disposable("timer"),
+    }), /injected registration failure/);
+
+    assert.deepEqual(disposed, [
+        EXTENSION_COMMAND_IDS[1], EXTENSION_COMMAND_IDS[0], "uri", "status",
+        "study", "reviews", "explorer", "webview", "decoration",
+    ]);
 });

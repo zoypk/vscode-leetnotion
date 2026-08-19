@@ -1,10 +1,22 @@
 const assert = require("node:assert/strict");
-const { mkdtemp, readFile, readdir, rm, writeFile } = require("node:fs/promises");
+const fileSystem = require("node:fs/promises");
+const { mkdtemp, readFile, readdir, rm, writeFile } = fileSystem;
 const os = require("node:os");
 const path = require("node:path");
 const test = require("node:test");
 
 const { CacheStore, CACHE_SCHEMA_VERSION } = require("../../out-test/storage/cacheStore");
+
+function injectedFileSystem(overrides = {}) {
+    return {
+        mkdir: (...args) => fileSystem.mkdir(...args),
+        readFile: (...args) => fileSystem.readFile(...args),
+        writeFile: (...args) => fileSystem.writeFile(...args),
+        rename: (...args) => fileSystem.rename(...args),
+        unlink: (...args) => fileSystem.unlink(...args),
+        ...overrides,
+    };
+}
 
 async function temporaryDirectory() {
     return mkdtemp(path.join(os.tmpdir(), "leetnotion-cache-"));
@@ -106,4 +118,61 @@ test("clear removes both file and synchronous snapshot", async (t) => {
 
     assert.equal(store.get("lists"), undefined);
     await assert.rejects(readFile(store.getFilePath("lists")), /ENOENT/);
+});
+
+test("invalid registered and dynamically registered Memento values are removed", async (t) => {
+    const root = await temporaryDirectory();
+    t.after(() => rm(root, { recursive: true, force: true }));
+    const legacy = memento({ ratings: { invalid: true }, dynamic: () => undefined });
+    const store = new CacheStore(root, { ratings: Array.isArray });
+    store.register("dynamic", (value) => typeof value === "string");
+
+    await store.initialize(legacy);
+
+    assert.equal(legacy.get("ratings"), undefined);
+    assert.equal(legacy.get("dynamic"), undefined);
+    assert.equal(store.get("ratings"), undefined);
+    assert.equal(store.get("dynamic"), undefined);
+});
+
+for (const failure of ["writeFile", "rename", "unlink"]) {
+    test(`${failure} failure retains the last-good cache in memory and on disk`, async (t) => {
+        const root = await temporaryDirectory();
+        t.after(() => rm(root, { recursive: true, force: true }));
+        let fail = false;
+        const operations = injectedFileSystem({
+            [failure]: async (...args) => {
+                if (fail) throw new Error(`injected ${failure} failure`);
+                return fileSystem[failure](...args);
+            },
+        });
+        const store = new CacheStore(root, { lists: Array.isArray }, operations);
+        await store.initialize();
+        await store.set("lists", ["last-good"]);
+        fail = true;
+
+        if (failure === "unlink") {
+            await assert.rejects(store.delete("lists"), /injected unlink failure/);
+        } else {
+            await assert.rejects(store.set("lists", ["replacement"]), new RegExp(`injected ${failure} failure`));
+        }
+
+        assert.deepEqual(store.get("lists"), ["last-good"]);
+        assert.deepEqual(JSON.parse(await readFile(store.getFilePath("lists"), "utf8")).value, ["last-good"]);
+    });
+}
+
+test("migration publish failure retains the valid Memento source", async (t) => {
+    const root = await temporaryDirectory();
+    t.after(() => rm(root, { recursive: true, force: true }));
+    const legacy = memento({ lists: ["legacy"] });
+    const operations = injectedFileSystem({
+        rename: async () => { throw new Error("injected migration rename failure"); },
+    });
+    const store = new CacheStore(root, { lists: Array.isArray }, operations);
+
+    await assert.rejects(store.initialize(legacy), /injected migration rename failure/);
+
+    assert.deepEqual(legacy.get("lists"), ["legacy"]);
+    assert.equal(store.get("lists"), undefined);
 });
