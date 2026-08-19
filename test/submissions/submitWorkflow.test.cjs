@@ -93,6 +93,14 @@ test("derives acceptance from validated detail rather than CLI output", async ()
     assert.equal(scenario.calls.some(([name]) => name === "refresh"), true);
 });
 
+test("does not accept list metadata when validated detail has no status", () => {
+    const submission = validatedSubmission();
+    submission.submission.status_display = "Accepted";
+    submission.detail.details = {};
+
+    assert.equal(isAcceptedSubmission(submission), false);
+});
+
 test("an uncorrelated result is shown without context and never uploaded", async () => {
     const failure = new Error("submission-correlation-timeout:answer");
     const scenario = dependencies({ correlate: async () => { throw failure; } });
@@ -115,4 +123,59 @@ test("refreshes even when source capture or Notion sync fails", async () => {
         await assert.rejects(runSubmitWorkflow("answer.ts", scenario.dependencies));
         assert.equal(scenario.calls.at(-1)[0], "refresh");
     }
+});
+
+test("serializes concurrent identical-code submissions and uploads unique IDs", async () => {
+    const visibleSubmissionIds = [];
+    const baselineSnapshots = [];
+    const uploadedSubmissionIds = [];
+    let nextSubmissionId = 100;
+    let activeSubmits = 0;
+    let maximumActiveSubmits = 0;
+
+    const sharedDependencies = {
+        readSource: async () => ({ questionNumber: "42", code: "return 42;" }),
+        captureBaseline: async (questionNumber) => {
+            baselineSnapshots.push([...visibleSubmissionIds]);
+            return {
+                questionNumber,
+                expectedSlug: "answer",
+                submissionIds: [...visibleSubmissionIds],
+            };
+        },
+        submit: async () => {
+            activeSubmits += 1;
+            maximumActiveSubmits = Math.max(maximumActiveSubmits, activeSubmits);
+            await new Promise((resolve) => setImmediate(resolve));
+            const submissionId = ++nextSubmissionId;
+            visibleSubmissionIds.push(submissionId);
+            activeSubmits -= 1;
+            return `submitted:${submissionId}`;
+        },
+        correlate: async (request) => {
+            const baselineIds = new Set(request.submissionIds);
+            const submissionId = visibleSubmissionIds.find((id) => !baselineIds.has(id));
+            assert.notEqual(submissionId, undefined);
+            const submission = validatedSubmission();
+            submission.submission.id = submissionId;
+            return submission;
+        },
+        showResult: () => undefined,
+        shouldSyncToNotion: () => true,
+        syncToNotion: async (submission) => {
+            uploadedSubmissionIds.push(submission.submission.id);
+        },
+        refreshExplorer: () => undefined,
+        reportCorrelationFailure: (error) => assert.fail(String(error)),
+    };
+
+    await Promise.all([
+        runSubmitWorkflow("first.ts", sharedDependencies),
+        runSubmitWorkflow("second.ts", sharedDependencies),
+    ]);
+
+    assert.equal(maximumActiveSubmits, 1);
+    assert.deepEqual(baselineSnapshots, [[], [101]]);
+    assert.deepEqual(uploadedSubmissionIds, [101, 102]);
+    assert.equal(new Set(uploadedSubmissionIds).size, 2);
 });

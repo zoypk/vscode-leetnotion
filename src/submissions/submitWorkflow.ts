@@ -13,37 +13,59 @@ export interface SubmitWorkflowDependencies {
     now?: () => number;
 }
 
+const pendingQuestionWorkflows = new Map<string, Promise<void>>();
+
+async function serializeQuestionWorkflow<T>(questionNumber: string, workflow: () => Promise<T>): Promise<T> {
+    const previousWorkflow = pendingQuestionWorkflows.get(questionNumber) ?? Promise.resolve();
+    let releaseCurrentWorkflow: () => void = () => undefined;
+    const currentWorkflow = new Promise<void>((resolve) => {
+        releaseCurrentWorkflow = resolve;
+    });
+    pendingQuestionWorkflows.set(questionNumber, currentWorkflow);
+
+    await previousWorkflow.catch(() => undefined);
+    try {
+        return await workflow();
+    } finally {
+        releaseCurrentWorkflow();
+        if (pendingQuestionWorkflows.get(questionNumber) === currentWorkflow) {
+            pendingQuestionWorkflows.delete(questionNumber);
+        }
+    }
+}
+
 export function isAcceptedSubmission(submission: ValidatedSubmission): boolean {
     const status = submission.detail.details.status_msg
-        ?? submission.detail.details.compare_result
-        ?? submission.submission.status_display;
-    return status.trim().toLowerCase() === "accepted";
+        ?? submission.detail.details.compare_result;
+    return typeof status === "string" && status.trim().toLowerCase() === "accepted";
 }
 
 export async function runSubmitWorkflow(filePath: string, dependencies: SubmitWorkflowDependencies): Promise<void> {
     try {
         const source = await dependencies.readSource(filePath);
-        const baseline = await dependencies.captureBaseline(source.questionNumber);
-        const startedAtMs = (dependencies.now ?? Date.now)();
-        const result = await dependencies.submit(filePath);
+        await serializeQuestionWorkflow(source.questionNumber, async () => {
+            const baseline = await dependencies.captureBaseline(source.questionNumber);
+            const startedAtMs = (dependencies.now ?? Date.now)();
+            const result = await dependencies.submit(filePath);
 
-        let validatedSubmission: ValidatedSubmission;
-        try {
-            validatedSubmission = await dependencies.correlate({
-                ...baseline,
-                submittedCode: source.code,
-                startedAtMs,
-            });
-        } catch (error) {
-            dependencies.reportCorrelationFailure(error);
-            dependencies.showResult(result);
-            return;
-        }
+            let validatedSubmission: ValidatedSubmission;
+            try {
+                validatedSubmission = await dependencies.correlate({
+                    ...baseline,
+                    submittedCode: source.code,
+                    startedAtMs,
+                });
+            } catch (error) {
+                dependencies.reportCorrelationFailure(error);
+                dependencies.showResult(result);
+                return;
+            }
 
-        dependencies.showResult(result, validatedSubmission);
-        if (dependencies.shouldSyncToNotion() && isAcceptedSubmission(validatedSubmission)) {
-            await dependencies.syncToNotion(validatedSubmission);
-        }
+            dependencies.showResult(result, validatedSubmission);
+            if (dependencies.shouldSyncToNotion() && isAcceptedSubmission(validatedSubmission)) {
+                await dependencies.syncToNotion(validatedSubmission);
+            }
+        });
     } finally {
         await dependencies.refreshExplorer();
     }

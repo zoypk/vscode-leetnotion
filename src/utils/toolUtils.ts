@@ -63,9 +63,10 @@ export function clearIntervals(intervals: NodeJS.Timeout[]) {
 }
 
 export function getQuestionNumber(filePath: string, fileContent?: string): string | null {
-    const markerMatch = fileContent?.match(/@lc\s+app=.*?\s+id=([^\s]+)\s+lang=/);
-    if (markerMatch?.[1]) {
-        return markerMatch[1];
+    const markerMatch = fileContent?.match(/@lc\s+app=.*?\s+id=([^\r\n]+?)(?=\s+lang=|\s*$)/m);
+    const markerId = markerMatch?.[1]?.trim();
+    if (markerId) {
+        return markerId;
     }
 
     const pathMatch = filePath.match(/[\\/](\d+)\./);
