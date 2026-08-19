@@ -19,6 +19,8 @@ import { LeetcodeProblem, LeetcodeSubmission, ProblemRatingMap, SubmissionDetail
 import { ProblemRating } from "./shared";
 import _ from "lodash";
 import { collectSubmissionHistory, resolveLeetCodeUrl } from "./submissions/submissionHistory";
+import { correlateSubmission } from "./submissions/submissionCorrelation";
+import type { SubmissionBaseline, SubmissionCorrelationRequest, ValidatedSubmission } from "./submissions/types";
 
 type ProblemSubmissionsApiResponse = {
     submissions_dump: Array<{
@@ -212,6 +214,35 @@ class LeetcodeClient {
             return page.map((submission) => this.normalizeProblemSubmission(submission, titleSlug));
         });
         return submissions.filter((submission) => Boolean(submission.url));
+    }
+
+    public async captureSubmissionBaseline(questionNumber: string): Promise<SubmissionBaseline> {
+        const expectedSlug = await this.getTitleSlugByQuestionNumber(questionNumber);
+        if (!expectedSlug) {
+            throw new Error(`submission-slug-not-found:${questionNumber}`);
+        }
+        if (!this.isSignedIn) {
+            throw new Error("not-signed-in-to-leetcode");
+        }
+
+        const submissions = await this.getProblemSubmissionsBySlug(expectedSlug);
+        return {
+            questionNumber,
+            expectedSlug,
+            submissionIds: submissions
+                .map((submission) => Number(submission.id ?? submission.url.split("/").filter(Boolean).pop()))
+                .filter((id) => Number.isFinite(id) && id > 0),
+        };
+    }
+
+    public async waitForValidatedSubmission(request: SubmissionCorrelationRequest): Promise<ValidatedSubmission> {
+        return correlateSubmission(request, {
+            listProblemSubmissions: async () => {
+                const submissions = await this.getProblemSubmissionsBySlug(request.expectedSlug);
+                return submissions.map((submission) => this.normalizeProblemSubmission(submission, request.expectedSlug));
+            },
+            getSubmissionDetail: (submissionId) => this.getSubmissionDetail(submissionId),
+        });
     }
 
     public async getSubmissionDetail(id: number): Promise<SubmissionDetailView> {

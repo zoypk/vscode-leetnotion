@@ -62,12 +62,14 @@ export function clearIntervals(intervals: NodeJS.Timeout[]) {
     return [];
 }
 
-export function getQuestionNumber(filePath: string): string | null {
-    const regexMatch = filePath.match(/[\\/](\d+)\./);
-    if (!regexMatch || !regexMatch[1]) {
-        return null;
+export function getQuestionNumber(filePath: string, fileContent?: string): string | null {
+    const markerMatch = fileContent?.match(/@lc\s+app=.*?\s+id=([^\s]+)\s+lang=/);
+    if (markerMatch?.[1]) {
+        return markerMatch[1];
     }
-    return regexMatch[1];
+
+    const pathMatch = filePath.match(/[\\/](\d+)\./);
+    return pathMatch?.[1] ?? null;
 }
 
 export function getISODate(epochTime: number) {
