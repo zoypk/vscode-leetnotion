@@ -1,6 +1,5 @@
 import * as childProcess from "child_process";
 import * as fs from "fs";
-import * as https from "https";
 import * as os from "os";
 import * as path from "path";
 
@@ -68,6 +67,7 @@ interface Dataset {
 const SOURCE_REPO = "https://github.com/neetcode-gh/leetcode";
 const SOURCE_GIT_URL = `${SOURCE_REPO}.git`;
 const LEETCODE_PROBLEMS_URL = "https://leetcode.com/api/problems/all/";
+const LEETCODE_PROBLEMS_MAX_BYTES = 25 * 1024 * 1024;
 const SOLUTION_DIRECTORIES = [
     "c",
     "cpp",
@@ -166,8 +166,22 @@ const outputPath = path.join(extensionRoot, "data", "neetcode-enrichment.json");
 void main();
 
 async function main(): Promise<void> {
-    const sourceArgument = process.argv[2];
-    const problemsFile = process.argv[3] ? path.resolve(extensionRoot, process.argv[3]) : undefined;
+    const { atomicWriteFiles, checkoutExactRevision, resolveRemoteHead, runGit } = await import("./lib/sync-utils.mjs");
+    const argumentsToParse = process.argv.slice(2);
+    const expectedRevisionIndex = argumentsToParse.indexOf("--expected-source-revision");
+    const expectedSourceRevision = expectedRevisionIndex >= 0 ? argumentsToParse[expectedRevisionIndex + 1] : undefined;
+    if (expectedRevisionIndex >= 0) {
+        if (!expectedSourceRevision) {
+            throw new Error("--expected-source-revision requires a value");
+        }
+        argumentsToParse.splice(expectedRevisionIndex, 2);
+    }
+    const sourceArgument = argumentsToParse[0];
+    const problemsFile = argumentsToParse[1] ? path.resolve(extensionRoot, argumentsToParse[1]) : undefined;
+    const liveSourceRevision = resolveRemoteHead(SOURCE_GIT_URL, "main");
+    if (expectedSourceRevision && expectedSourceRevision.toLowerCase() !== liveSourceRevision) {
+        throw new Error(`Requested NeetCode revision ${expectedSourceRevision} is stale; live main is ${liveSourceRevision}`);
+    }
     let temporaryDirectory: string | undefined;
     let sourceRoot: string;
 
@@ -177,7 +191,12 @@ async function main(): Promise<void> {
         } else {
             temporaryDirectory = fs.mkdtempSync(path.join(os.tmpdir(), "vscode-leetnotion-neetcode-"));
             sourceRoot = path.join(temporaryDirectory, "source");
-            childProcess.execFileSync("git", ["clone", "--depth", "1", SOURCE_GIT_URL, sourceRoot], { stdio: "inherit" });
+            checkoutExactRevision(SOURCE_GIT_URL, liveSourceRevision, sourceRoot);
+        }
+
+        const sourceRevision = runGit(["-C", sourceRoot, "rev-parse", "HEAD"]);
+        if (expectedSourceRevision && sourceRevision.toLowerCase() !== liveSourceRevision) {
+            throw new Error(`NeetCode source directory is at ${sourceRevision}, live main is ${liveSourceRevision}`);
         }
 
         const siteDataPath = path.join(sourceRoot, ".problemSiteData.json");
@@ -257,7 +276,14 @@ async function main(): Promise<void> {
             };
         }
 
-        fs.writeFileSync(outputPath, `${JSON.stringify(dataset, null, 2)}\n`, "utf8");
+        atomicWriteFiles([{ path: outputPath, content: `${JSON.stringify(dataset, null, 2)}\n` }], {
+            validate: (stagedPaths: Map<string, string>) => {
+                const staged = JSON.parse(fs.readFileSync(stagedPaths.get(outputPath) as string, "utf8")) as Dataset;
+                if (!staged.sourceRepo || !staged.problems || Object.keys(staged.problems).length === 0) {
+                    throw new Error("Generated NeetCode dataset failed staged validation");
+                }
+            },
+        });
         reportCoverage(dataset, siteProblemById, articleFiles, hintFiles, articleAssignments, hintAssignments);
     } finally {
         if (temporaryDirectory) {
@@ -292,9 +318,13 @@ async function loadLeetCodeIdentities(problemsFile?: string): Promise<{
     byId: Map<string, ProblemIdentity>;
     bySlug: Map<string, ProblemIdentity>;
 }> {
+    const { downloadText } = await import("./lib/sync-utils.mjs");
     const body = problemsFile
         ? fs.readFileSync(problemsFile, "utf8")
-        : await downloadText(LEETCODE_PROBLEMS_URL);
+        : await downloadText(LEETCODE_PROBLEMS_URL, {
+            headers: { "User-Agent": "vscode-leetnotion-neetcode-sync" },
+            maxBytes: LEETCODE_PROBLEMS_MAX_BYTES,
+        });
     const payload = JSON.parse(body) as LeetCodePayload;
     const byId = new Map<string, ProblemIdentity>();
     const bySlug = new Map<string, ProblemIdentity>();
@@ -320,36 +350,6 @@ async function loadLeetCodeIdentities(problemsFile?: string): Promise<{
         throw new Error("LeetCode problem data did not contain any usable problem identities");
     }
     return { byId, bySlug };
-}
-
-function downloadText(url: string, redirectsRemaining = 5): Promise<string> {
-    return new Promise((resolve, reject) => {
-        const request = https.get(url, {
-            headers: { "User-Agent": "vscode-leetnotion-neetcode-sync" },
-        }, (response) => {
-            const location = response.headers.location;
-            if (location && response.statusCode && response.statusCode >= 300 && response.statusCode < 400) {
-                response.resume();
-                if (redirectsRemaining === 0) {
-                    reject(new Error(`Too many redirects while downloading ${url}`));
-                    return;
-                }
-                resolve(downloadText(new URL(location, url).toString(), redirectsRemaining - 1));
-                return;
-            }
-            if (response.statusCode !== 200) {
-                response.resume();
-                reject(new Error(`Failed to download ${url}: HTTP ${response.statusCode}`));
-                return;
-            }
-
-            response.setEncoding("utf8");
-            let body = "";
-            response.on("data", (chunk) => { body += chunk; });
-            response.on("end", () => resolve(body));
-        });
-        request.on("error", reject);
-    });
 }
 
 function readSolutionSlugToId(sourceRoot: string): Map<string, string> {

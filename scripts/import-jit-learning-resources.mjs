@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { atomicWriteFiles } from "./lib/sync-utils.mjs";
 
 const scriptDirectory = path.dirname(fileURLToPath(import.meta.url));
 const extensionRoot = path.resolve(scriptDirectory, "..");
@@ -132,7 +133,14 @@ function importResourceDocument(sourcePath) {
         ...parsed,
     };
 
-    fs.writeFileSync(outputPath, `${JSON.stringify(output, null, 2)}\n`, "utf8");
+    atomicWriteFiles([{ path: outputPath, content: `${JSON.stringify(output, null, 2)}\n` }], {
+        validate: (stagedPaths) => {
+            const staged = JSON.parse(fs.readFileSync(stagedPaths.get(outputPath), "utf8"));
+            if (staged.problemCount !== parsed.problemCount || Object.keys(staged.problems).length !== parsed.problemCount) {
+                throw new Error("Generated JIT resource dataset failed staged validation");
+            }
+        },
+    });
     console.log(`Wrote ${parsed.problemCount} learning-resource entries to ${path.relative(extensionRoot, outputPath)}`);
 }
 
