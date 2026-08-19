@@ -1,82 +1,61 @@
-import * as fse from "fs-extra";
 import * as path from "path";
+import { VersionedJsonStore } from "../state/versionedJsonStore";
 import { getWorkspaceFolder } from "../utils/settingUtils";
-import { StudyStateFile } from "./types";
+import { parseStudyStateFile, StudyStateFile } from "./types";
 
-const STUDY_STATE_VERSION = 1;
 const STUDY_STATE_DIRECTORY = ".leetnotion";
 const STUDY_STATE_FILE = "study.json";
 
-function createEmptyState(): StudyStateFile {
-    return {
-        version: STUDY_STATE_VERSION,
-        backlog: {},
-        dailyPlans: {},
-    };
+export interface StudyStateStorage {
+    isConfigured(): boolean;
+    read(): Promise<StudyStateFile>;
+    transaction<R>(mutator: (state: StudyStateFile) => R | Promise<R>): Promise<R>;
+    load(): Promise<StudyStateFile>;
+    save(state: StudyStateFile): Promise<void>;
 }
 
-class StudyStorage {
+export class StudyStorage implements StudyStateStorage {
+    private readonly store: VersionedJsonStore<StudyStateFile>;
+
+    constructor(private readonly workspaceFolder: () => string = getWorkspaceFolder) {
+        this.store = new VersionedJsonStore({
+            filePath: () => this.getStudyFilePath(),
+            createEmpty: () => ({ version: 1, backlog: {}, dailyPlans: {} }),
+            parse: parseStudyStateFile,
+        });
+    }
+
     public isConfigured(): boolean {
-        return getWorkspaceFolder().trim() !== "";
+        return this.workspaceFolder().trim() !== "";
     }
 
-    public async load(): Promise<StudyStateFile> {
-        const filePath = this.getStudyFilePath();
-        if (!await fse.pathExists(filePath)) {
-            return createEmptyState();
-        }
-
-        try {
-            const raw = await fse.readJson(filePath) as Partial<StudyStateFile>;
-            if (raw.version !== STUDY_STATE_VERSION) {
-                throw new Error(`Unsupported study state version: ${raw.version ?? "unknown"}.`);
-            }
-
-            if (!raw.backlog || typeof raw.backlog !== "object" || Array.isArray(raw.backlog)) {
-                throw new Error("Study state must contain an object-shaped 'backlog' map.");
-            }
-
-            if (!raw.dailyPlans || typeof raw.dailyPlans !== "object" || Array.isArray(raw.dailyPlans)) {
-                throw new Error("Study state must contain an object-shaped 'dailyPlans' map.");
-            }
-
-            return {
-                version: STUDY_STATE_VERSION,
-                backlog: raw.backlog,
-                dailyPlans: raw.dailyPlans,
-            };
-        } catch (error) {
-            throw new Error(`Failed to load local study state from ${filePath}: ${error instanceof Error ? error.message : error}`);
-        }
+    public read(): Promise<StudyStateFile> {
+        return this.store.read();
     }
 
-    public async save(state: StudyStateFile): Promise<void> {
-        const filePath = this.getStudyFilePath();
-        const tempFilePath = `${filePath}.tmp`;
+    public transaction<R>(mutator: (state: StudyStateFile) => R | Promise<R>): Promise<R> {
+        return this.store.transaction(mutator);
+    }
 
-        await fse.ensureDir(path.dirname(filePath));
+    public load(): Promise<StudyStateFile> {
+        return this.read();
+    }
 
-        try {
-            await fse.writeJson(tempFilePath, {
-                version: STUDY_STATE_VERSION,
-                backlog: state.backlog,
-                dailyPlans: state.dailyPlans,
-            }, { spaces: 2 });
-            await fse.move(tempFilePath, filePath, { overwrite: true });
-        } catch (error) {
-            await fse.remove(tempFilePath).catch(() => undefined);
-            throw new Error(`Failed to save local study state to ${filePath}: ${error instanceof Error ? error.message : error}`);
-        }
+    public save(nextState: StudyStateFile): Promise<void> {
+        return this.transaction((state) => {
+            state.version = nextState.version;
+            state.backlog = nextState.backlog;
+            state.dailyPlans = nextState.dailyPlans;
+        });
     }
 
     public getStudyFilePath(): string {
-        const workspaceFolder = getWorkspaceFolder().trim();
+        const workspaceFolder = this.workspaceFolder().trim();
         if (!workspaceFolder) {
             throw new Error("Set `leetnotion.workspaceFolder` to enable local study planning.");
         }
-
         return path.join(workspaceFolder, STUDY_STATE_DIRECTORY, STUDY_STATE_FILE);
     }
 }
 
-export const studyStorage: StudyStorage = new StudyStorage();
+export const studyStorage: StudyStateStorage = new StudyStorage();

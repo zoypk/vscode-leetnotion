@@ -1,75 +1,60 @@
-import * as fse from "fs-extra";
 import * as path from "path";
+import { VersionedJsonStore } from "../state/versionedJsonStore";
 import { getWorkspaceFolder } from "../utils/settingUtils";
-import { ReviewStateFile } from "./types";
+import { parseReviewStateFile, ReviewStateFile } from "./types";
 
-const REVIEW_STATE_VERSION = 1;
 const REVIEW_STATE_DIRECTORY = ".leetnotion";
 const REVIEW_STATE_FILE = "reviews.json";
 
-function createEmptyState(): ReviewStateFile {
-    return {
-        version: REVIEW_STATE_VERSION,
-        reviews: {},
-    };
+export interface ReviewStateStorage {
+    isConfigured(): boolean;
+    read(): Promise<ReviewStateFile>;
+    transaction<R>(mutator: (state: ReviewStateFile) => R | Promise<R>): Promise<R>;
+    load(): Promise<ReviewStateFile>;
+    save(state: ReviewStateFile): Promise<void>;
 }
 
-class ReviewStorage {
+export class ReviewStorage implements ReviewStateStorage {
+    private readonly store: VersionedJsonStore<ReviewStateFile>;
+
+    constructor(private readonly workspaceFolder: () => string = getWorkspaceFolder) {
+        this.store = new VersionedJsonStore({
+            filePath: () => this.getReviewFilePath(),
+            createEmpty: () => ({ version: 1, reviews: {} }),
+            parse: parseReviewStateFile,
+        });
+    }
+
     public isConfigured(): boolean {
-        return getWorkspaceFolder().trim() !== "";
+        return this.workspaceFolder().trim() !== "";
     }
 
-    public async load(): Promise<ReviewStateFile> {
-        const filePath = this.getReviewFilePath();
-        if (!await fse.pathExists(filePath)) {
-            return createEmptyState();
-        }
-
-        try {
-            const raw = await fse.readJson(filePath) as Partial<ReviewStateFile>;
-            if (raw.version !== REVIEW_STATE_VERSION) {
-                throw new Error(`Unsupported review state version: ${raw.version ?? "unknown"}.`);
-            }
-
-            if (!raw.reviews || typeof raw.reviews !== "object" || Array.isArray(raw.reviews)) {
-                throw new Error("Review state must contain an object-shaped 'reviews' map.");
-            }
-
-            return {
-                version: REVIEW_STATE_VERSION,
-                reviews: raw.reviews,
-            };
-        } catch (error) {
-            throw new Error(`Failed to load local reviews from ${filePath}: ${error instanceof Error ? error.message : error}`);
-        }
+    public read(): Promise<ReviewStateFile> {
+        return this.store.read();
     }
 
-    public async save(state: ReviewStateFile): Promise<void> {
-        const filePath = this.getReviewFilePath();
-        const tempFilePath = `${filePath}.tmp`;
+    public transaction<R>(mutator: (state: ReviewStateFile) => R | Promise<R>): Promise<R> {
+        return this.store.transaction(mutator);
+    }
 
-        await fse.ensureDir(path.dirname(filePath));
+    public load(): Promise<ReviewStateFile> {
+        return this.read();
+    }
 
-        try {
-            await fse.writeJson(tempFilePath, {
-                version: REVIEW_STATE_VERSION,
-                reviews: state.reviews,
-            }, { spaces: 2 });
-            await fse.move(tempFilePath, filePath, { overwrite: true });
-        } catch (error) {
-            await fse.remove(tempFilePath).catch(() => undefined);
-            throw new Error(`Failed to save local reviews to ${filePath}: ${error instanceof Error ? error.message : error}`);
-        }
+    public save(nextState: ReviewStateFile): Promise<void> {
+        return this.transaction((state) => {
+            state.version = nextState.version;
+            state.reviews = nextState.reviews;
+        });
     }
 
     public getReviewFilePath(): string {
-        const workspaceFolder = getWorkspaceFolder().trim();
+        const workspaceFolder = this.workspaceFolder().trim();
         if (!workspaceFolder) {
             throw new Error("Set `leetnotion.workspaceFolder` to enable local reviews.");
         }
-
         return path.join(workspaceFolder, REVIEW_STATE_DIRECTORY, REVIEW_STATE_FILE);
     }
 }
 
-export const reviewStorage: ReviewStorage = new ReviewStorage();
+export const reviewStorage: ReviewStateStorage = new ReviewStorage();
