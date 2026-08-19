@@ -1,4 +1,5 @@
 const assert = require("node:assert/strict");
+const { execFileSync } = require("node:child_process");
 const { cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } = require("node:fs");
 const { tmpdir } = require("node:os");
 const path = require("node:path");
@@ -13,6 +14,7 @@ const provenance = {
     sourceRepository: "https://github.com/liquidslr/leetcode-company-wise-problems",
     sourceRevision: "03850eb5d16892514491cf1381c32ec0330a2719",
     generatedAt: "2026-08-19T00:00:00.000Z",
+    counts: { companies: 2, questions: 3, memberships: 4 },
 };
 
 async function modules() {
@@ -97,6 +99,68 @@ test("validator rejects unsorted forward company names", async () => {
         () => validation.validateCompanyDataset(reversed, dataset.questionCompanyTags, provenance),
         /companyTags company names are not in deterministic sort order/,
     );
+});
+
+test("validator rejects unexpected reverse question IDs even when their company list is empty", async () => {
+    const { company, validation } = await modules();
+    const dataset = company.buildCompanyData(sourceFixture, slugMap());
+    const reverseWithEmptyExtra = { ...dataset.questionCompanyTags, "9999": [] };
+    assert.throws(
+        () => validation.validateCompanyDataset(dataset.companyTags, reverseWithEmptyExtra),
+        /Reverse mapping has unexpected question 9999/,
+    );
+});
+
+test("production floors and provenance counts reject consistently truncated data", async () => {
+    const { company, validation } = await modules();
+    const dataset = company.buildCompanyData(sourceFixture, slugMap());
+    assert.throws(
+        () => validation.validateCompanyDataset(dataset.companyTags, dataset.questionCompanyTags, provenance, {
+            minimums: validation.COMPANY_PRODUCTION_MINIMUMS,
+        }),
+        /companies count 2 is below production minimum 400/,
+    );
+    const incorrectProvenance = {
+        ...provenance,
+        counts: { ...provenance.counts, memberships: 3 },
+    };
+    assert.throws(
+        () => validation.validateCompanyDataset(dataset.companyTags, dataset.questionCompanyTags, incorrectProvenance),
+        /provenance memberships count 3 does not match 4/,
+    );
+});
+
+test("source-dir provenance uses a clean checkout at the live revision", async () => {
+    const { company } = await modules();
+    const sourceRoot = mkdtempSync(path.join(tmpdir(), "company-source-checkout-"));
+    try {
+        execFileSync("git", ["init", "--quiet", sourceRoot]);
+        execFileSync("git", ["-C", sourceRoot, "config", "user.email", "tests@example.com"]);
+        execFileSync("git", ["-C", sourceRoot, "config", "user.name", "Company Data Tests"]);
+        execFileSync("git", ["-C", sourceRoot, "config", "core.autocrlf", "false"]);
+        writeFileSync(path.join(sourceRoot, "source.txt"), "committed\n");
+        execFileSync("git", ["-C", sourceRoot, "add", "source.txt"]);
+        execFileSync("git", ["-C", sourceRoot, "commit", "--quiet", "-m", "fixture"]);
+        const revision = execFileSync("git", ["-C", sourceRoot, "rev-parse", "HEAD"], { encoding: "utf8" }).trim();
+        assert.equal(company.verifyCurrentSourceCheckout(sourceRoot, revision), revision);
+        assert.throws(
+            () => company.verifyCurrentSourceCheckout(sourceRoot, "0".repeat(40)),
+            /source checkout is at .* live main is 000000/,
+        );
+        const generated = company.createCompanyProvenance(revision, {
+            companies: 2, questions: 3, memberships: 4,
+        }, "2026-08-19T00:00:00.000Z");
+        assert.equal(generated.sourceRevision, revision);
+        assert.deepEqual(generated.counts, { companies: 2, questions: 3, memberships: 4 });
+
+        writeFileSync(path.join(sourceRoot, "source.txt"), "modified\n");
+        assert.throws(
+            () => company.verifyCurrentSourceCheckout(sourceRoot, revision),
+            /uncommitted or untracked changes/,
+        );
+    } finally {
+        rmSync(sourceRoot, { recursive: true, force: true });
+    }
 });
 
 test("failed staged validation preserves all prior outputs", async () => {

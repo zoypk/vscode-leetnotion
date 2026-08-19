@@ -27,12 +27,18 @@ export function downloadBuffer(url, options = {}) {
         throw new Error("downloadBuffer requires a positive maxBytes limit");
     }
     return downloadBufferWithRedirects(url, {
+        deadline: Date.now() + timeoutMs,
         headers: options.headers ?? {}, maxBytes, maxRedirects, timeoutMs,
     });
 }
 
 async function downloadBufferWithRedirects(url, options) {
     return new Promise((resolve, reject) => {
+        const remainingTimeMs = options.deadline - Date.now();
+        if (remainingTimeMs <= 0) {
+            reject(new Error(`Download timed out after ${options.timeoutMs}ms: ${url}`));
+            return;
+        }
         const parsedUrl = new URL(url);
         const get = parsedUrl.protocol === "http:" ? httpGet : parsedUrl.protocol === "https:" ? httpsGet : undefined;
         if (!get) {
@@ -40,9 +46,17 @@ async function downloadBufferWithRedirects(url, options) {
             return;
         }
         let settled = false;
+        let deadlineTimer;
+        const clearDeadline = () => {
+            if (deadlineTimer) {
+                clearTimeout(deadlineTimer);
+                deadlineTimer = undefined;
+            }
+        };
         const fail = (error) => {
             if (!settled) {
                 settled = true;
+                clearDeadline();
                 reject(error);
             }
         };
@@ -56,6 +70,7 @@ async function downloadBufferWithRedirects(url, options) {
                     return;
                 }
                 settled = true;
+                clearDeadline();
                 resolve(downloadBufferWithRedirects(new URL(location, url).toString(), {
                     ...options, maxRedirects: options.maxRedirects - 1,
                 }));
@@ -88,14 +103,15 @@ async function downloadBufferWithRedirects(url, options) {
             response.on("end", () => {
                 if (!settled) {
                     settled = true;
+                    clearDeadline();
                     resolve(Buffer.concat(chunks));
                 }
             });
             response.on("error", fail);
         });
-        request.setTimeout(options.timeoutMs, () => {
+        deadlineTimer = setTimeout(() => {
             request.destroy(new Error(`Download timed out after ${options.timeoutMs}ms: ${url}`));
-        });
+        }, remainingTimeMs);
         request.on("error", fail);
     });
 }
@@ -162,6 +178,7 @@ export function atomicWriteFiles(outputs, options = {}) {
         hadOriginal: false,
         installed: false,
     }));
+    let committed = false;
     try {
         for (const entry of staged) {
             fsOperations.mkdirSync(dirname(entry.path), { recursive: true });
@@ -174,11 +191,7 @@ export function atomicWriteFiles(outputs, options = {}) {
             fsOperations.renameSync(entry.tempPath, entry.path);
             entry.installed = true;
         }
-        for (const entry of staged) {
-            if (entry.hadOriginal && fsOperations.existsSync(entry.backupPath)) {
-                fsOperations.rmSync(entry.backupPath, { force: true, recursive: true });
-            }
-        }
+        committed = true;
     } catch (error) {
         for (const entry of [...staged].reverse()) {
             try {
@@ -195,7 +208,10 @@ export function atomicWriteFiles(outputs, options = {}) {
         throw error;
     } finally {
         for (const entry of staged) {
-            for (const temporaryPath of [entry.tempPath, entry.backupPath]) {
+            const cleanupPaths = committed
+                ? [entry.tempPath, entry.backupPath]
+                : [entry.tempPath];
+            for (const temporaryPath of cleanupPaths) {
                 try {
                     if (fsOperations.existsSync(temporaryPath)) {
                         fsOperations.rmSync(temporaryPath, { force: true, recursive: true });

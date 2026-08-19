@@ -11,6 +11,7 @@ import {
 } from "./lib/sync-utils.mjs";
 import {
     COMPANY_WINDOWS,
+    COMPANY_PRODUCTION_MINIMUMS,
     compareNames,
     compareQuestionIds,
     validateCompanyDataset,
@@ -214,6 +215,38 @@ export function buildCompanyData(sourceDirectory, slugToQuestionId) {
     return { companyTags, questionCompanyTags };
 }
 
+export function verifyCurrentSourceCheckout(sourceDirectory, liveRevision) {
+    const sourceRevision = runGit(["-C", sourceDirectory, "rev-parse", "HEAD"]).toLowerCase();
+    if (!/^[0-9a-f]{40}$/.test(sourceRevision)) {
+        throw new Error(`Could not verify company source revision in ${sourceDirectory}`);
+    }
+    const workingTreeChanges = runGit(["-C", sourceDirectory, "status", "--porcelain"]);
+    if (workingTreeChanges) {
+        throw new Error(`Company source checkout has uncommitted or untracked changes: ${sourceDirectory}`);
+    }
+    if (sourceRevision !== liveRevision.toLowerCase()) {
+        throw new Error(`Company source checkout is at ${sourceRevision}, live main is ${liveRevision}`);
+    }
+    return sourceRevision;
+}
+
+export function createCompanyProvenance(sourceRevision, counts, generatedAt = new Date().toISOString()) {
+    if (!/^[0-9a-f]{40}$/.test(sourceRevision)) {
+        throw new Error(`Invalid company source revision for provenance: ${sourceRevision}`);
+    }
+    return {
+        schemaVersion: 1,
+        sourceRepository: SOURCE_REPOSITORY,
+        sourceRevision,
+        generatedAt,
+        counts: {
+            companies: counts.companies,
+            questions: counts.questions,
+            memberships: counts.memberships,
+        },
+    };
+}
+
 export async function synchronizeCompanyData(options = {}) {
     const liveRevision = resolveRemoteHead(SOURCE_GIT_URL, "main");
     if (options.expectedSourceRevision && options.expectedSourceRevision.toLowerCase() !== liveRevision) {
@@ -221,31 +254,24 @@ export async function synchronizeCompanyData(options = {}) {
     }
     let temporaryDirectory;
     let sourceDirectory = options.sourceDirectory;
+    let sourceRevision;
     try {
         if (!sourceDirectory) {
             temporaryDirectory = mkdtempSync(join(tmpdir(), "vscode-leetnotion-company-data-"));
             sourceDirectory = join(temporaryDirectory, "source");
             checkoutExactRevision(SOURCE_GIT_URL, liveRevision, sourceDirectory);
-        } else {
-            try {
-                const sourceRevision = runGit(["-C", sourceDirectory, "rev-parse", "HEAD"]);
-                if (options.expectedSourceRevision && sourceRevision.toLowerCase() !== liveRevision) {
-                    throw new Error(`Source directory is at ${sourceRevision}, live main is ${liveRevision}`);
-                }
-            } catch (error) {
-                if (options.expectedSourceRevision) { throw error; }
-            }
         }
+        sourceRevision = verifyCurrentSourceCheckout(sourceDirectory, liveRevision);
 
         const slugToQuestionId = await loadSlugToQuestionId(options.problemsFile);
         const { companyTags, questionCompanyTags } = buildCompanyData(sourceDirectory, slugToQuestionId);
-        const provenance = {
-            schemaVersion: 1,
-            sourceRepository: SOURCE_REPOSITORY,
-            sourceRevision: liveRevision,
-            generatedAt: new Date().toISOString(),
-        };
-        validateCompanyDataset(companyTags, questionCompanyTags, provenance);
+        const counts = validateCompanyDataset(companyTags, questionCompanyTags, undefined, {
+            minimums: COMPANY_PRODUCTION_MINIMUMS,
+        });
+        const provenance = createCompanyProvenance(sourceRevision, counts);
+        validateCompanyDataset(companyTags, questionCompanyTags, provenance, {
+            minimums: COMPANY_PRODUCTION_MINIMUMS,
+        });
 
         const outputDirectory = options.outputDirectory ?? join(repositoryRoot, "data");
         const outputPaths = {
@@ -262,12 +288,13 @@ export async function synchronizeCompanyData(options = {}) {
                 JSON.parse(readFileSync(stagedPaths.get(outputPaths.companyTags), "utf8")),
                 JSON.parse(readFileSync(stagedPaths.get(outputPaths.questionCompanyTags), "utf8")),
                 JSON.parse(readFileSync(stagedPaths.get(outputPaths.provenance), "utf8")),
+                { minimums: COMPANY_PRODUCTION_MINIMUMS },
             ),
         });
         return {
             companies: Object.keys(companyTags).length,
             questions: Object.keys(questionCompanyTags).length,
-            revision: liveRevision,
+            revision: sourceRevision,
         };
     } finally {
         if (temporaryDirectory) { rmSync(temporaryDirectory, { recursive: true, force: true }); }

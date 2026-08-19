@@ -2,5 +2,10 @@
   "schemaVersion": 1,
   "sourceRepository": "https://github.com/liquidslr/leetcode-company-wise-problems",
   "sourceRevision": "03850eb5d16892514491cf1381c32ec0330a2719",
-  "generatedAt": "2026-08-19T08:17:20.944Z"
+  "generatedAt": "2026-08-19T08:27:50.736Z",
+  "counts": {
+    "companies": 470,
+    "questions": 3392,
+    "memberships": 17340
+  }
 }

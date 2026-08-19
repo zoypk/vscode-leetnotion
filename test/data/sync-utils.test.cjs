@@ -34,6 +34,22 @@ test("downloadText enforces timeout", async () => {
     });
 });
 
+test("downloadText enforces a total deadline against slow-drip responses", async () => {
+    const sync = await syncUtils();
+    await withServer((_request, response) => {
+        response.writeHead(200);
+        const interval = setInterval(() => response.write("x"), 10);
+        response.on("close", () => clearInterval(interval));
+    }, async (baseUrl) => {
+        const startedAt = Date.now();
+        await assert.rejects(
+            sync.downloadText(baseUrl, { maxBytes: 10_000, timeoutMs: 60 }),
+            /timed out after 60ms/,
+        );
+        assert.ok(Date.now() - startedAt < 500, "slow-drip request exceeded its wall-clock deadline");
+    });
+});
+
 test("downloadText enforces declared and streamed byte limits", async () => {
     const sync = await syncUtils();
     await withServer((request, response) => {
@@ -123,6 +139,37 @@ test("atomicWriteFiles rolls back earlier outputs after a rename failure", async
         assert.equal(fs.readFileSync(first, "utf8"), "old-first");
         assert.equal(fs.readFileSync(second, "utf8"), "old-second");
         assert.deepEqual(fs.readdirSync(temporaryRoot).sort(), ["first.json", "second.json"]);
+    } finally {
+        fs.rmSync(temporaryRoot, { recursive: true, force: true });
+    }
+});
+
+test("backup cleanup failure never rolls back already installed outputs", async () => {
+    const sync = await syncUtils();
+    const temporaryRoot = fs.mkdtempSync(path.join(tmpdir(), "atomic-cleanup-"));
+    const first = path.join(temporaryRoot, "first.json");
+    const second = path.join(temporaryRoot, "second.json");
+    fs.writeFileSync(first, "old-first");
+    fs.writeFileSync(second, "old-second");
+    let injectedFailure = false;
+    try {
+        sync.atomicWriteFiles([
+            { path: first, content: "new-first" },
+            { path: second, content: "new-second" },
+        ], {
+            fsOperations: {
+                rmSync: (target, options) => {
+                    if (!injectedFailure && target.includes(".backup-")) {
+                        injectedFailure = true;
+                        throw new Error("simulated backup cleanup failure");
+                    }
+                    fs.rmSync(target, options);
+                },
+            },
+        });
+        assert.equal(injectedFailure, true);
+        assert.equal(fs.readFileSync(first, "utf8"), "new-first");
+        assert.equal(fs.readFileSync(second, "utf8"), "new-second");
     } finally {
         fs.rmSync(temporaryRoot, { recursive: true, force: true });
     }

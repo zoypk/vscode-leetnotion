@@ -2,6 +2,12 @@ export const COMPANY_WINDOWS = [
     "Last 30 Days", "Last 3 Months", "Last 6 Months", "More Than 6 Months", "All Time",
 ];
 
+export const COMPANY_PRODUCTION_MINIMUMS = Object.freeze({
+    companies: 400,
+    questions: 3_000,
+    memberships: 15_000,
+});
+
 export function compareNames(left, right) {
     return left.localeCompare(right, "en", { sensitivity: "variant" });
 }
@@ -14,7 +20,7 @@ export function compareQuestionIds(left, right) {
         : compareNames(left, right);
 }
 
-export function validateCompanyDataset(companyTags, questionCompanyTags, provenance) {
+export function validateCompanyDataset(companyTags, questionCompanyTags, provenance, options = {}) {
     const errors = [];
     if (!isPlainObject(companyTags)) { throw new Error("companyTags.json must contain a JSON object"); }
     if (!isPlainObject(questionCompanyTags)) { throw new Error("questionCompanyTags.json must contain a JSON object"); }
@@ -76,20 +82,57 @@ export function validateCompanyDataset(companyTags, questionCompanyTags, provena
         const extras = actual.filter((company) => !expected.includes(company));
         if (missing.length > 0) { errors.push(`Reverse entry ${questionId} is missing: ${missing.join(", ")}`); }
         if (extras.length > 0) { errors.push(`Reverse entry ${questionId} has extras: ${extras.join(", ")}`); }
+        if (!expectedReverse.has(questionId)) {
+            errors.push(`Reverse mapping has unexpected question ${questionId}`);
+        }
     }
     for (const [questionId, companies] of expectedReverse) {
         if (!Object.prototype.hasOwnProperty.call(questionCompanyTags, questionId)) {
             errors.push(`Reverse mapping is missing question ${questionId} (${companies.sort(compareNames).join(", ")})`);
         }
     }
-    if (provenance !== undefined && (!isPlainObject(provenance)
-        || provenance.schemaVersion !== 1
-        || provenance.sourceRepository !== "https://github.com/liquidslr/leetcode-company-wise-problems"
-        || typeof provenance.sourceRevision !== "string"
-        || !/^[0-9a-f]{40}$/.test(provenance.sourceRevision)
-        || typeof provenance.generatedAt !== "string"
-        || Number.isNaN(Date.parse(provenance.generatedAt)))) {
-        errors.push("Company data provenance is malformed");
+    if (provenance !== undefined) {
+        const validShape = isPlainObject(provenance)
+            && provenance.schemaVersion === 1
+            && provenance.sourceRepository === "https://github.com/liquidslr/leetcode-company-wise-problems"
+            && typeof provenance.sourceRevision === "string"
+            && /^[0-9a-f]{40}$/.test(provenance.sourceRevision)
+            && typeof provenance.generatedAt === "string"
+            && !Number.isNaN(Date.parse(provenance.generatedAt))
+            && isPlainObject(provenance.counts)
+            && Object.keys(provenance.counts).sort().join(",") === "companies,memberships,questions"
+            && Object.values(provenance.counts).every((count) => Number.isSafeInteger(count) && count >= 0);
+        if (!validShape) {
+            errors.push("Company data provenance is malformed");
+        } else {
+            const actualCounts = {
+                companies: companyNames.length,
+                questions: reverseQuestionIds.length,
+                memberships: forwardMemberships,
+            };
+            for (const [countName, actual] of Object.entries(actualCounts)) {
+                if (provenance.counts[countName] !== actual) {
+                    errors.push(`Company provenance ${countName} count ${provenance.counts[countName]} does not match ${actual}`);
+                }
+            }
+        }
+    }
+    const minimums = options.minimums;
+    if (minimums) {
+        const actualCounts = {
+            companies: companyNames.length,
+            questions: reverseQuestionIds.length,
+            memberships: forwardMemberships,
+        };
+        for (const [countName, minimum] of Object.entries(minimums)) {
+            if (!Object.prototype.hasOwnProperty.call(actualCounts, countName)) {
+                errors.push(`Unknown company production minimum: ${countName}`);
+            } else if (!Number.isSafeInteger(minimum) || minimum < 0) {
+                errors.push(`Invalid production minimum for ${countName}: ${minimum}`);
+            } else if (actualCounts[countName] < minimum) {
+                errors.push(`Company data ${countName} count ${actualCounts[countName]} is below production minimum ${minimum}`);
+            }
+        }
     }
     if (errors.length > 0) {
         throw new Error(`Company data validation failed (${errors.length} issue(s)):\n- ${errors.join("\n- ")}`);
