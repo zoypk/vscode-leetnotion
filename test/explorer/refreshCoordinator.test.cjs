@@ -110,3 +110,63 @@ test("reports a failed refresh once, preserves the last good snapshot, and can r
     assert.equal(errors.length, 1);
 });
 
+test("does not lose a request queued at the completion boundary", async () => {
+    const builtGenerations = [];
+    const installedGenerations = [];
+    let boundaryRefresh;
+    let coordinator;
+
+    coordinator = new RefreshCoordinator({
+        buildSnapshot: async (generation) => {
+            builtGenerations.push(generation);
+            return { generation };
+        },
+        installSnapshot: (_snapshot, generation) => {
+            installedGenerations.push(generation);
+            if (generation === 1) {
+                queueMicrotask(() => {
+                    boundaryRefresh = coordinator.requestRefresh();
+                });
+            }
+        },
+    });
+
+    await coordinator.requestRefresh();
+    assert.ok(boundaryRefresh);
+    await boundaryRefresh;
+
+    assert.deepEqual(builtGenerations, [1, 2]);
+    assert.deepEqual(installedGenerations, [1, 2]);
+});
+
+test("dispose invalidates an in-flight generation and prevents future builds", async () => {
+    const build = deferred();
+    let buildCount = 0;
+    let visibleSnapshot = { value: "last-good" };
+    let installCount = 0;
+    const errors = [];
+    const coordinator = new RefreshCoordinator({
+        buildSnapshot: () => {
+            buildCount += 1;
+            return build.promise;
+        },
+        installSnapshot: (snapshot) => {
+            installCount += 1;
+            visibleSnapshot = snapshot;
+        },
+        reportError: (error) => errors.push(error),
+    });
+
+    const refresh = coordinator.requestRefresh();
+    await Promise.resolve();
+    coordinator.dispose();
+    build.resolve({ value: "must-not-publish" });
+    await refresh;
+
+    assert.deepEqual(visibleSnapshot, { value: "last-good" });
+    assert.equal(installCount, 0);
+    assert.equal(errors.length, 0);
+
+    await coordinator.requestRefresh();
+    assert.equal(buildCount, 1);
+});

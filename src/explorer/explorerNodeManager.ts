@@ -140,6 +140,7 @@ class ExplorerNodeManager implements Disposable {
     }
 
     public dispose(): void {
+        this.refreshCoordinator.dispose();
         this.explorerNodeMap.clear();
         this.dataTree = {};
         this.onDidRefreshEvent.dispose();
