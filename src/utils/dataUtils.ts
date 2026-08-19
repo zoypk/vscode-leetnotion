@@ -3,7 +3,7 @@
 
 import * as fsExtra from 'fs-extra';
 import * as path from 'path';
-import { NeetCodeDataset } from '../integrations/neetcode/types';
+import { JitLearningDataset, NeetCodeDataset } from '../integrations/neetcode/types';
 import { leetcodeClient } from '../leetCodeClient';
 import { globalState } from '../globalState';
 import { leetCodeChannel } from '../leetCodeChannel';
@@ -15,6 +15,7 @@ const sheetsPath = '../../data/sheets.json';
 const companyTagsPath = '../../data/companyTags.json';
 const questionCompanyTagsPath = '../../data/questionCompanyTags.json';
 const neetCodeDatasetPath = '../../data/neetcode-enrichment.json';
+const jitLearningDatasetPath = '../../data/jit-learning-resources.json';
 
 export function getSheets(): Sheets {
     const sheets = fsExtra.readJSONSync(path.join(__dirname, sheetsPath)) as Sheets;
@@ -37,6 +38,18 @@ export function getNeetCodeDataset(): NeetCodeDataset {
         return {
             generatedAt: '',
             sourceRepo: '',
+            problems: {},
+        };
+    }
+}
+
+export function getJitLearningDataset(): JitLearningDataset {
+    try {
+        return fsExtra.readJSONSync(path.join(__dirname, jitLearningDatasetPath)) as JitLearningDataset;
+    } catch (_error) {
+        return {
+            source: '',
+            problemCount: 0,
             problems: {},
         };
     }

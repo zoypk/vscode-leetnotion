@@ -1,0 +1,1206 @@
+{
+  "source": "NeetCode-150-full-inline-JIT-concept-resources.md",
+  "problemCount": 150,
+  "problems": {
+    "contains-duplicate": {
+      "sourceIndex": 1,
+      "title": "Contains Duplicate",
+      "titleSlug": "contains-duplicate",
+      "section": "Arrays & Hashing",
+      "difficulty": "Easy",
+      "markdown": "**Cue:** You only need to know whether a value has appeared before.\n\n🔴 [MIT 6.006 — Hashing](https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-spring-2020/resources/lecture-4-hashing/) · 🟡 [VisuAlgo — Hash Table](https://visualgo.net/en/hashtable)\n\n**Return:** State the set invariant before each insertion and why the first failed insertion answers the question."
+    },
+    "valid-anagram": {
+      "sourceIndex": 2,
+      "title": "Valid Anagram",
+      "titleSlug": "valid-anagram",
+      "section": "Arrays & Hashing",
+      "difficulty": "Easy",
+      "markdown": "**Cue:** Two strings are equivalent when every character has the same net frequency.\n\n♻️ [MIT 6.006 — Hashing](https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-spring-2020/resources/lecture-4-hashing/) **(watch once; first at #1)** · 🟡 [VisuAlgo — Hash Table](https://visualgo.net/en/hashtable)\n\n**Return:** Define the frequency invariant and explain why length mismatch can be rejected immediately."
+    },
+    "two-sum": {
+      "sourceIndex": 3,
+      "title": "Two Sum",
+      "titleSlug": "two-sum",
+      "section": "Arrays & Hashing",
+      "difficulty": "Easy",
+      "markdown": "**Cue:** For each value, ask whether its required complement has already appeared.\n\n♻️ [MIT 6.006 — Hashing](https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-spring-2020/resources/lecture-4-hashing/) **(watch once; first at #1)** · 🟡 [VisuAlgo — Hash Table](https://visualgo.net/en/hashtable)\n\n**Return:** Explain why checking before inserting prevents pairing an element with itself and why one pass is enough."
+    },
+    "group-anagrams": {
+      "sourceIndex": 4,
+      "title": "Group Anagrams",
+      "titleSlug": "group-anagrams",
+      "section": "Arrays & Hashing",
+      "difficulty": "Medium",
+      "markdown": "**Cue:** Design a canonical key so all strings in one equivalence class collide intentionally.\n\n♻️ [MIT 6.006 — Hashing](https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-spring-2020/resources/lecture-4-hashing/) **(watch once; first at #1)** · 🔴 [MIT 6.006 — Sets and Sorting](https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-spring-2020/resources/lecture-3-sets-and-sorting/) · 🟡 [VisuAlgo — Hash Table](https://visualgo.net/en/hashtable)\n\n**Return:** Compare a sorted-string key with a frequency-vector key and include their costs in terms of word length."
+    },
+    "top-k-frequent-elements": {
+      "sourceIndex": 5,
+      "title": "Top K Frequent Elements",
+      "titleSlug": "top-k-frequent-elements",
+      "section": "Arrays & Hashing",
+      "difficulty": "Medium",
+      "markdown": "**Cue:** Separate counting from selecting the largest frequencies.\n\n♻️ [MIT 6.006 — Hashing](https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-spring-2020/resources/lecture-4-hashing/) **(watch once; first at #1)** · 🔴 [MIT 6.006 — Binary Heaps](https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-spring-2020/resources/lecture-8-binary-heaps/) · 🟡 [VisuAlgo — Binary Heap](https://visualgo.net/en/heap)\n\n**Return:** Explain the heap-size invariant or why bucket index equals frequency, then derive the full complexity."
+    },
+    "product-of-array-except-self": {
+      "sourceIndex": 6,
+      "title": "Product of Array Except Self",
+      "titleSlug": "product-of-array-except-self",
+      "section": "Arrays & Hashing",
+      "difficulty": "Medium",
+      "markdown": "**Cue:** Precompute information from the left and right without division.\n\n🔴 [USACO Guide — Prefix Sums](https://usaco.guide/silver/prefix-sums)\n\n**Return:** Define what the output slot contains after the left pass and after the right pass; test zeros and length two."
+    },
+    "valid-sudoku": {
+      "sourceIndex": 7,
+      "title": "Valid Sudoku",
+      "titleSlug": "valid-sudoku",
+      "section": "Arrays & Hashing",
+      "difficulty": "Medium",
+      "markdown": "**Cue:** Each filled cell participates in three independent uniqueness constraints.\n\n♻️ [MIT 6.006 — Hashing](https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-spring-2020/resources/lecture-4-hashing/) **(watch once; first at #1)** · 🟡 [VisuAlgo — Hash Table](https://visualgo.net/en/hashtable)\n\n**Return:** Give the key used for row, column, and 3×3 box membership and show how the box index is calculated."
+    },
+    "encode-and-decode-strings": {
+      "sourceIndex": 8,
+      "title": "Encode and Decode Strings",
+      "titleSlug": "encode-and-decode-strings",
+      "section": "Arrays & Hashing",
+      "difficulty": "Medium",
+      "markdown": "**Cue:** A stream needs unambiguous framing; raw delimiters are unsafe when payloads are unrestricted.\n\n🔴 [Protocol Buffers — Encoding and Framing](https://protobuf.dev/programming-guides/encoding/)\n\n**Return:** Explain length-prefix framing, multi-digit lengths, empty strings, and the distinction between an empty list and one empty string."
+    },
+    "longest-consecutive-sequence": {
+      "sourceIndex": 9,
+      "title": "Longest Consecutive Sequence",
+      "titleSlug": "longest-consecutive-sequence",
+      "section": "Arrays & Hashing",
+      "difficulty": "Medium",
+      "markdown": "**Cue:** Only start walking from numbers that have no predecessor.\n\n♻️ [MIT 6.006 — Hashing](https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-spring-2020/resources/lecture-4-hashing/) **(watch once; first at #1)** · 🟡 [VisuAlgo — Hash Table](https://visualgo.net/en/hashtable)\n\n**Return:** Prove that each run is counted once and that each value participates in only constant expected work."
+    },
+    "valid-palindrome": {
+      "sourceIndex": 10,
+      "title": "Valid Palindrome",
+      "titleSlug": "valid-palindrome",
+      "section": "Two Pointers",
+      "difficulty": "Easy",
+      "markdown": "**Cue:** Two indices can consume the only characters that still matter from opposite ends.\n\n🔴 [USACO Guide — Two Pointers](https://usaco.guide/silver/two-pointers)\n\n**Return:** State how each pointer skips irrelevant characters and why a mismatch cannot be repaired later."
+    },
+    "two-sum-ii-input-array-is-sorted": {
+      "sourceIndex": 11,
+      "title": "Two Sum II - Input Array Is Sorted",
+      "titleSlug": "two-sum-ii-input-array-is-sorted",
+      "section": "Two Pointers",
+      "difficulty": "Medium",
+      "markdown": "**Cue:** Sorted order makes the sum move monotonically when either endpoint moves.\n\n♻️ [USACO Guide — Two Pointers](https://usaco.guide/silver/two-pointers) **(watch once; first at #10)** · 🟡 [CP-Algorithms — Binary Search and Invariants](https://cp-algorithms.com/num_methods/binary_search.html)\n\n**Return:** Prove which pointer must move when the sum is too small or too large."
+    },
+    "3sum": {
+      "sourceIndex": 12,
+      "title": "3Sum",
+      "titleSlug": "3sum",
+      "section": "Two Pointers",
+      "difficulty": "Medium",
+      "markdown": "**Cue:** Sort once, fix one value, then solve a monotone two-sum search on the suffix.\n\n♻️ [USACO Guide — Two Pointers](https://usaco.guide/silver/two-pointers) **(watch once; first at #10)** · ♻️ [MIT 6.006 — Sets and Sorting](https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-spring-2020/resources/lecture-3-sets-and-sorting/) **(watch once; first at #4)**\n\n**Return:** Explain duplicate skipping at both the fixed index and moving pointers without skipping a distinct triplet."
+    },
+    "container-with-most-water": {
+      "sourceIndex": 13,
+      "title": "Container With Most Water",
+      "titleSlug": "container-with-most-water",
+      "section": "Two Pointers",
+      "difficulty": "Medium",
+      "markdown": "**Cue:** Area is limited by the shorter wall, so moving the taller wall cannot improve that pair.\n\n♻️ [USACO Guide — Two Pointers](https://usaco.guide/silver/two-pointers) **(watch once; first at #10)**\n\n**Return:** Give the dominance argument for discarding the shorter endpoint and include width in the invariant."
+    },
+    "trapping-rain-water": {
+      "sourceIndex": 14,
+      "title": "Trapping Rain Water",
+      "titleSlug": "trapping-rain-water",
+      "section": "Two Pointers",
+      "difficulty": "Hard",
+      "markdown": "**Cue:** Water at an index depends on the smaller of the best boundaries on both sides.\n\n♻️ [USACO Guide — Two Pointers](https://usaco.guide/silver/two-pointers) **(watch once; first at #10)** · 🟡 [USACO Guide — Prefix Sums](https://usaco.guide/silver/prefix-sums)\n\n**Return:** Explain why the side with the smaller current maximum can be finalized and test monotone and flat arrays."
+    },
+    "best-time-to-buy-and-sell-stock": {
+      "sourceIndex": 15,
+      "title": "Best Time to Buy and Sell Stock",
+      "titleSlug": "best-time-to-buy-and-sell-stock",
+      "section": "Sliding Window",
+      "difficulty": "Easy",
+      "markdown": "**Cue:** Maintain the cheapest valid buy seen before the current sell.\n\n🔴 [Sliding Window — Concept Walkthrough](https://www.youtube.com/watch?v=y2d0VHdvfdc) · 🟡 [USACO Guide — Sliding Window](https://usaco.guide/gold/sliding-window)\n\n**Return:** State the meaning of the left boundary or running minimum and why a losing buy should be replaced."
+    },
+    "longest-substring-without-repeating-characters": {
+      "sourceIndex": 16,
+      "title": "Longest Substring Without Repeating Characters",
+      "titleSlug": "longest-substring-without-repeating-characters",
+      "section": "Sliding Window",
+      "difficulty": "Medium",
+      "markdown": "**Cue:** Maintain a window whose characters are unique.\n\n♻️ [Sliding Window — Concept Walkthrough](https://www.youtube.com/watch?v=y2d0VHdvfdc) **(watch once; first at #15)** · 🟡 [USACO Guide — Sliding Window](https://usaco.guide/gold/sliding-window)\n\n**Return:** Define window validity, visited timing, and why the left pointer never moves backward."
+    },
+    "longest-repeating-character-replacement": {
+      "sourceIndex": 17,
+      "title": "Longest Repeating Character Replacement",
+      "titleSlug": "longest-repeating-character-replacement",
+      "section": "Sliding Window",
+      "difficulty": "Medium",
+      "markdown": "**Cue:** A window is feasible when its non-majority characters fit within the replacement budget.\n\n♻️ [Sliding Window — Concept Walkthrough](https://www.youtube.com/watch?v=y2d0VHdvfdc) **(watch once; first at #15)** · 🟡 [USACO Guide — Sliding Window](https://usaco.guide/gold/sliding-window)\n\n**Return:** Derive `window length - maximum frequency <= k` and explain why a stale maximum frequency is still safe."
+    },
+    "permutation-in-string": {
+      "sourceIndex": 18,
+      "title": "Permutation in String",
+      "titleSlug": "permutation-in-string",
+      "section": "Sliding Window",
+      "difficulty": "Medium",
+      "markdown": "**Cue:** Every candidate has fixed length, so slide a frequency-difference window.\n\n♻️ [Sliding Window — Concept Walkthrough](https://www.youtube.com/watch?v=y2d0VHdvfdc) **(watch once; first at #15)** · 🟡 [USACO Guide — Sliding Window](https://usaco.guide/gold/sliding-window)\n\n**Return:** State what enters and leaves on every step and how validity is tested without recounting the whole window."
+    },
+    "minimum-window-substring": {
+      "sourceIndex": 19,
+      "title": "Minimum Window Substring",
+      "titleSlug": "minimum-window-substring",
+      "section": "Sliding Window",
+      "difficulty": "Hard",
+      "markdown": "**Cue:** Expand until all requirements are met, then shrink while validity remains.\n\n♻️ [Sliding Window — Concept Walkthrough](https://www.youtube.com/watch?v=y2d0VHdvfdc) **(watch once; first at #15)** · 🟡 [USACO Guide — Sliding Window](https://usaco.guide/gold/sliding-window)\n\n**Return:** Define the exact satisfied-requirements counter and prove that discarded left boundaries never need reconsideration."
+    },
+    "sliding-window-maximum": {
+      "sourceIndex": 20,
+      "title": "Sliding Window Maximum",
+      "titleSlug": "sliding-window-maximum",
+      "section": "Sliding Window",
+      "difficulty": "Hard",
+      "markdown": "**Cue:** Keep only nonexpired candidates that are not dominated by a newer, larger value.\n\n🔴 [Labuladong — Monotonic Queue](https://labuladong.online/en/algo/data-structure/monotonic-queue/) · 🟡 [Monotonic Deque — Dry Runs](https://www.youtube.com/watch?v=cnOtN6T_zMY)\n\n**Return:** State index order, value order, expiry, and why each index enters and leaves the deque at most once."
+    },
+    "valid-parentheses": {
+      "sourceIndex": 21,
+      "title": "Valid Parentheses",
+      "titleSlug": "valid-parentheses",
+      "section": "Stack",
+      "difficulty": "Easy",
+      "markdown": "**Cue:** A closer must match the most recent unmatched opener.\n\n🔴 [VisuAlgo — Stack, Queue, and Deque](https://visualgo.net/en/list)\n\n**Return:** Define exactly what the stack represents after each character and handle an early closer and leftover openers."
+    },
+    "min-stack": {
+      "sourceIndex": 22,
+      "title": "Min Stack",
+      "titleSlug": "min-stack",
+      "section": "Stack",
+      "difficulty": "Medium",
+      "markdown": "**Cue:** Augment every stack state with enough information to answer the minimum query immediately.\n\n🔴 [CP-Algorithms — Minimum Stack and Queue](https://cp-algorithms.com/data_structures/stack_queue_modification.html) · 🟡 [VisuAlgo — Stack, Queue, and Deque](https://visualgo.net/en/list)\n\n**Return:** Explain the stored pair or second-stack invariant, especially when the minimum value appears more than once."
+    },
+    "evaluate-reverse-polish-notation": {
+      "sourceIndex": 23,
+      "title": "Evaluate Reverse Polish Notation",
+      "titleSlug": "evaluate-reverse-polish-notation",
+      "section": "Stack",
+      "difficulty": "Medium",
+      "markdown": "**Cue:** Postfix order makes every operator consume the two most recent complete operands.\n\n🔴 [Reverse Polish Notation — Mental Model](https://en.wikipedia.org/wiki/Reverse_Polish_notation) · ♻️ [VisuAlgo — Stack, Queue, and Deque](https://visualgo.net/en/list) **(watch once; first at #21)**\n\n**Return:** State operand order for subtraction and division and why one final stack value remains."
+    },
+    "daily-temperatures": {
+      "sourceIndex": 24,
+      "title": "Daily Temperatures",
+      "titleSlug": "daily-temperatures",
+      "section": "Stack",
+      "difficulty": "Medium",
+      "markdown": "**Cue:** Unresolved indices form a monotone stack until a warmer value resolves them.\n\n🔴 [Labuladong — Monotonic Stack](https://labuladong.online/en/algo/data-structure/monotonic-stack/)\n\n**Return:** State the stack’s value order, why indices are stored, and why each index is pushed and popped once."
+    },
+    "car-fleet": {
+      "sourceIndex": 25,
+      "title": "Car Fleet",
+      "titleSlug": "car-fleet",
+      "section": "Stack",
+      "difficulty": "Medium",
+      "markdown": "**Cue:** After sorting by position, arrival times merge into a monotone sequence of fleets.\n\n♻️ [Labuladong — Monotonic Stack](https://labuladong.online/en/algo/data-structure/monotonic-stack/) **(watch once; first at #24)** · 🔴 [CodePath — Greedy Algorithms](https://guides.codepath.org/compsci/Greedy-Algorithms) · 🟡 [MIT 6.006 — Sets and Sorting](https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-spring-2020/resources/lecture-3-sets-and-sorting/)\n\n**Return:** Explain why a faster car behind cannot pass and when its arrival time is absorbed into the fleet ahead."
+    },
+    "largest-rectangle-in-histogram": {
+      "sourceIndex": 26,
+      "title": "Largest Rectangle in Histogram",
+      "titleSlug": "largest-rectangle-in-histogram",
+      "section": "Stack",
+      "difficulty": "Hard",
+      "markdown": "**Cue:** An increasing stack delays a bar until its first smaller boundary is known.\n\n♻️ [Labuladong — Monotonic Stack](https://labuladong.online/en/algo/data-structure/monotonic-stack/) **(watch once; first at #24)**\n\n**Return:** For every popped bar, identify its height, exclusive right boundary, carried left boundary, and width."
+    },
+    "binary-search": {
+      "sourceIndex": 27,
+      "title": "Binary Search",
+      "titleSlug": "binary-search",
+      "section": "Binary Search",
+      "difficulty": "Easy",
+      "markdown": "**Cue:** Maintain an interval guaranteed to contain every still-possible answer.\n\n🔴 [CP-Algorithms — Binary Search and Invariants](https://cp-algorithms.com/num_methods/binary_search.html) · 🟡 [USACO Guide — Binary Search](https://usaco.guide/silver/binary-search)\n\n**Return:** Choose a closed or half-open invariant and make every update preserve it without off-by-one ambiguity."
+    },
+    "search-a-2d-matrix": {
+      "sourceIndex": 28,
+      "title": "Search a 2D Matrix",
+      "titleSlug": "search-a-2d-matrix",
+      "section": "Binary Search",
+      "difficulty": "Medium",
+      "markdown": "**Cue:** The matrix’s row ordering creates one conceptual sorted array.\n\n♻️ [CP-Algorithms — Binary Search and Invariants](https://cp-algorithms.com/num_methods/binary_search.html) **(watch once; first at #27)** · 🟡 [Row-Major and Column-Major Order](https://en.wikipedia.org/wiki/Row-_and_column-major_order)\n\n**Return:** Map a flattened index back to row and column and define the searchable interval precisely."
+    },
+    "koko-eating-bananas": {
+      "sourceIndex": 29,
+      "title": "Koko Eating Bananas",
+      "titleSlug": "koko-eating-bananas",
+      "section": "Binary Search",
+      "difficulty": "Medium",
+      "markdown": "**Cue:** Binary-search the smallest speed satisfying a monotone feasibility predicate.\n\n♻️ [CP-Algorithms — Binary Search and Invariants](https://cp-algorithms.com/num_methods/binary_search.html) **(watch once; first at #27)** · 🟡 [USACO Guide — Binary Search](https://usaco.guide/silver/binary-search)\n\n**Return:** Write the predicate, prove faster speeds stay feasible, and state whether the boundaries are feasible or infeasible."
+    },
+    "find-minimum-in-rotated-sorted-array": {
+      "sourceIndex": 30,
+      "title": "Find Minimum in Rotated Sorted Array",
+      "titleSlug": "find-minimum-in-rotated-sorted-array",
+      "section": "Binary Search",
+      "difficulty": "Medium",
+      "markdown": "**Cue:** Compare the middle with the right boundary to identify the unsorted side containing the pivot.\n\n♻️ [CP-Algorithms — Binary Search and Invariants](https://cp-algorithms.com/num_methods/binary_search.html) **(watch once; first at #27)**\n\n**Return:** Explain why `mid > right` discards the left including `mid`, while the opposite case keeps `mid`."
+    },
+    "search-in-rotated-sorted-array": {
+      "sourceIndex": 31,
+      "title": "Search in Rotated Sorted Array",
+      "titleSlug": "search-in-rotated-sorted-array",
+      "section": "Binary Search",
+      "difficulty": "Medium",
+      "markdown": "**Cue:** At least one half around the middle is normally sorted.\n\n♻️ [CP-Algorithms — Binary Search and Invariants](https://cp-algorithms.com/num_methods/binary_search.html) **(watch once; first at #27)**\n\n**Return:** Identify the sorted half, test whether the target lies inside its value range, and preserve the search invariant."
+    },
+    "time-based-key-value-store": {
+      "sourceIndex": 32,
+      "title": "Time Based Key-Value Store",
+      "titleSlug": "time-based-key-value-store",
+      "section": "Binary Search",
+      "difficulty": "Medium",
+      "markdown": "**Cue:** Append-only timestamps permit predecessor search inside each key’s history.\n\n♻️ [CP-Algorithms — Binary Search and Invariants](https://cp-algorithms.com/num_methods/binary_search.html) **(watch once; first at #27)** · 🟡 [MIT 6.006 — Hashing](https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-spring-2020/resources/lecture-4-hashing/)\n\n**Return:** Define the answer as the greatest timestamp not exceeding the query and handle “no predecessor” cleanly."
+    },
+    "median-of-two-sorted-arrays": {
+      "sourceIndex": 33,
+      "title": "Median of Two Sorted Arrays",
+      "titleSlug": "median-of-two-sorted-arrays",
+      "section": "Binary Search",
+      "difficulty": "Hard",
+      "markdown": "**Cue:** Binary-search a partition whose two cross-boundary inequalities are valid.\n\n♻️ [CP-Algorithms — Binary Search and Invariants](https://cp-algorithms.com/num_methods/binary_search.html) **(watch once; first at #27)** · 🛟 [Median Partition — Rescue Explanation](https://www.youtube.com/watch?v=q6IEA26hvXc) **(only after 45–60 min solo)**\n\n**Return:** Search the shorter array, write both partition inequalities and sentinels, and derive odd versus even median handling."
+    },
+    "reverse-linked-list": {
+      "sourceIndex": 34,
+      "title": "Reverse Linked List",
+      "titleSlug": "reverse-linked-list",
+      "section": "Linked List",
+      "difficulty": "Easy",
+      "markdown": "**Cue:** Rewire one edge at a time while preserving the unprocessed suffix.\n\n🔴 [Pointer Reversal — Linked List](https://www.youtube.com/watch?v=O0By4Zq0OFc) · 🟡 [VisuAlgo — Linked List](https://visualgo.net/en/list)\n\n**Return:** Before each assignment, name `previous`, `current`, and the saved next node; prove no nodes are lost."
+    },
+    "merge-two-sorted-lists": {
+      "sourceIndex": 35,
+      "title": "Merge Two Sorted Lists",
+      "titleSlug": "merge-two-sorted-lists",
+      "section": "Linked List",
+      "difficulty": "Easy",
+      "markdown": "**Cue:** Advance the smaller frontier and attach it to a growing sorted prefix.\n\n🔴 [VisuAlgo — Linked List](https://visualgo.net/en/list)\n\n**Return:** Define what the tail points to and why attaching the remaining suffix is safe."
+    },
+    "linked-list-cycle": {
+      "sourceIndex": 36,
+      "title": "Linked List Cycle",
+      "titleSlug": "linked-list-cycle",
+      "section": "Linked List",
+      "difficulty": "Easy",
+      "markdown": "**Cue:** A linked list is a deterministic state transition, so repeated nodes form a cycle.\n\n🔴 [CP-Algorithms — Tortoise and Hare](https://cp-algorithms.com/others/tortoise_and_hare.html) · 🟡 [VisuAlgo — Linked List](https://visualgo.net/en/list)\n\n**Return:** Explain why fast eventually meets slow in a cycle and why null terminates the acyclic case."
+    },
+    "reorder-list": {
+      "sourceIndex": 37,
+      "title": "Reorder List",
+      "titleSlug": "reorder-list",
+      "section": "Linked List",
+      "difficulty": "Medium",
+      "markdown": "**Cue:** Compose three primitives: find the midpoint, reverse the second half, then weave both halves.\n\n♻️ [Pointer Reversal — Linked List](https://www.youtube.com/watch?v=O0By4Zq0OFc) **(watch once; first at #34)** · ♻️ [CP-Algorithms — Tortoise and Hare](https://cp-algorithms.com/others/tortoise_and_hare.html) **(watch once; first at #36)** · 🟡 [VisuAlgo — Linked List](https://visualgo.net/en/list)\n\n**Return:** State where the first half ends, how the second is reversed, and which next pointers must be saved while weaving."
+    },
+    "remove-nth-node-from-end-of-list": {
+      "sourceIndex": 38,
+      "title": "Remove Nth Node From End of List",
+      "titleSlug": "remove-nth-node-from-end-of-list",
+      "section": "Linked List",
+      "difficulty": "Medium",
+      "markdown": "**Cue:** A fixed gap between two pointers converts an end-relative position into a forward scan.\n\n♻️ [USACO Guide — Two Pointers](https://usaco.guide/silver/two-pointers) **(watch once; first at #10)** · 🟡 [VisuAlgo — Linked List](https://visualgo.net/en/list)\n\n**Return:** Define the gap, explain the dummy node, and show where the slow pointer stops before deletion."
+    },
+    "copy-list-with-random-pointer": {
+      "sourceIndex": 39,
+      "title": "Copy List with Random Pointer",
+      "titleSlug": "copy-list-with-random-pointer",
+      "section": "Linked List",
+      "difficulty": "Medium",
+      "markdown": "**Cue:** Clone identity separately from wiring so arbitrary references can be reconstructed.\n\n♻️ [MIT 6.006 — Hashing](https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-spring-2020/resources/lecture-4-hashing/) **(watch once; first at #1)** · ♻️ [VisuAlgo — Linked List](https://visualgo.net/en/list) **(watch once; first at #35)**\n\n**Return:** Explain the old-to-new mapping or interleaving invariant and why random pointers must target clones, not originals."
+    },
+    "add-two-numbers": {
+      "sourceIndex": 40,
+      "title": "Add Two Numbers",
+      "titleSlug": "add-two-numbers",
+      "section": "Linked List",
+      "difficulty": "Medium",
+      "markdown": "**Cue:** Simulate grade-school addition while digits arrive least significant first.\n\n🔴 [Positional Notation](https://en.wikipedia.org/wiki/Positional_notation) · 🟡 [VisuAlgo — Linked List](https://visualgo.net/en/list)\n\n**Return:** State the carry invariant, how unequal lengths are handled, and when a final carry creates a node."
+    },
+    "find-the-duplicate-number": {
+      "sourceIndex": 41,
+      "title": "Find the Duplicate Number",
+      "titleSlug": "find-the-duplicate-number",
+      "section": "Linked List",
+      "difficulty": "Medium",
+      "markdown": "**Cue:** Treat each array value as a next pointer in a functional graph.\n\n♻️ [CP-Algorithms — Tortoise and Hare](https://cp-algorithms.com/others/tortoise_and_hare.html) **(watch once; first at #36)**\n\n**Return:** Explain why a cycle must exist and derive both Floyd phases, including why the second meeting is the duplicate."
+    },
+    "lru-cache": {
+      "sourceIndex": 42,
+      "title": "LRU Cache",
+      "titleSlug": "lru-cache",
+      "section": "Linked List",
+      "difficulty": "Medium",
+      "markdown": "**Cue:** Combine O(1) lookup with O(1) movement and eviction in recency order.\n\n♻️ [MIT 6.006 — Hashing](https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-spring-2020/resources/lecture-4-hashing/) **(watch once; first at #1)** · ♻️ [VisuAlgo — Linked List](https://visualgo.net/en/list) **(watch once; first at #35)**\n\n**Return:** Define head/tail sentinel roles, the map-to-node invariant, and every pointer update for remove and insert."
+    },
+    "merge-k-sorted-lists": {
+      "sourceIndex": 43,
+      "title": "Merge k Sorted Lists",
+      "titleSlug": "merge-k-sorted-lists",
+      "section": "Linked List",
+      "difficulty": "Hard",
+      "markdown": "**Cue:** Only the current head of each sorted stream can be the next global minimum.\n\n🔴 [K-Way Merge with a Heap](https://www.youtube.com/watch?v=ptYUCjfNhJY) · ♻️ [MIT 6.006 — Binary Heaps](https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-spring-2020/resources/lecture-8-binary-heaps/) **(watch once; first at #5)** · 🟡 [VisuAlgo — Binary Heap](https://visualgo.net/en/heap)\n\n**Return:** Explain why one candidate per list is sufficient and how popping exposes exactly one replacement candidate."
+    },
+    "reverse-nodes-in-k-group": {
+      "sourceIndex": 44,
+      "title": "Reverse Nodes in k-Group",
+      "titleSlug": "reverse-nodes-in-k-group",
+      "section": "Linked List",
+      "difficulty": "Hard",
+      "markdown": "**Cue:** Reverse a bounded segment while preserving both its prefix connection and untouched suffix.\n\n♻️ [Pointer Reversal — Linked List](https://www.youtube.com/watch?v=O0By4Zq0OFc) **(watch once; first at #34)** · 🟡 [VisuAlgo — Linked List](https://visualgo.net/en/list)\n\n**Return:** Before rewiring, identify the group predecessor, kth node, saved suffix, and new group tail."
+    },
+    "invert-binary-tree": {
+      "sourceIndex": 45,
+      "title": "Invert Binary Tree",
+      "titleSlug": "invert-binary-tree",
+      "section": "Trees",
+      "difficulty": "Easy",
+      "markdown": "**Cue:** A tree transformation is defined locally and applied recursively to both subtrees.\n\n🔴 [MIT 6.006 — Binary Trees, Part 1](https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-spring-2020/resources/lecture-6-binary-trees-part-1/) · 🟡 [VisuAlgo — Binary Search Tree](https://visualgo.net/en/bst)\n\n**Return:** State the recursive contract and whether swapping occurs before or after recursive calls."
+    },
+    "maximum-depth-of-binary-tree": {
+      "sourceIndex": 46,
+      "title": "Maximum Depth of Binary Tree",
+      "titleSlug": "maximum-depth-of-binary-tree",
+      "section": "Trees",
+      "difficulty": "Easy",
+      "markdown": "**Cue:** A node’s answer is one plus the larger child answer.\n\n♻️ [MIT 6.006 — Binary Trees, Part 1](https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-spring-2020/resources/lecture-6-binary-trees-part-1/) **(watch once; first at #45)** · 🟡 [VisuAlgo — Recursion](https://visualgo.net/en/recursion)\n\n**Return:** Define the empty-tree base case and what each recursive call returns."
+    },
+    "diameter-of-binary-tree": {
+      "sourceIndex": 47,
+      "title": "Diameter of Binary Tree",
+      "titleSlug": "diameter-of-binary-tree",
+      "section": "Trees",
+      "difficulty": "Easy",
+      "markdown": "**Cue:** The returned one-arm height and the best path passing through a node are different quantities.\n\n♻️ [MIT 6.006 — Binary Trees, Part 1](https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-spring-2020/resources/lecture-6-binary-trees-part-1/) **(watch once; first at #45)**\n\n**Return:** Explain what recursion returns, what updates the global answer, and whether diameter counts nodes or edges."
+    },
+    "balanced-binary-tree": {
+      "sourceIndex": 48,
+      "title": "Balanced Binary Tree",
+      "titleSlug": "balanced-binary-tree",
+      "section": "Trees",
+      "difficulty": "Easy",
+      "markdown": "**Cue:** Return height together with failure information so no subtree is recomputed.\n\n♻️ [MIT 6.006 — Binary Trees, Part 1](https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-spring-2020/resources/lecture-6-binary-trees-part-1/) **(watch once; first at #45)**\n\n**Return:** Define the sentinel or pair contract and the exact condition that propagates imbalance upward."
+    },
+    "same-tree": {
+      "sourceIndex": 49,
+      "title": "Same Tree",
+      "titleSlug": "same-tree",
+      "section": "Trees",
+      "difficulty": "Easy",
+      "markdown": "**Cue:** Compare two recursive structures in lockstep.\n\n♻️ [MIT 6.006 — Binary Trees, Part 1](https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-spring-2020/resources/lecture-6-binary-trees-part-1/) **(watch once; first at #45)**\n\n**Return:** List the both-null, one-null, unequal-value, and recursive cases in a complete order."
+    },
+    "subtree-of-another-tree": {
+      "sourceIndex": 50,
+      "title": "Subtree of Another Tree",
+      "titleSlug": "subtree-of-another-tree",
+      "section": "Trees",
+      "difficulty": "Easy",
+      "markdown": "**Cue:** At each candidate root, separate “same tree here” from “search below.”\n\n♻️ [MIT 6.006 — Binary Trees, Part 1](https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-spring-2020/resources/lecture-6-binary-trees-part-1/) **(watch once; first at #45)**\n\n**Return:** Explain the two recursive predicates and the empty-subtree convention."
+    },
+    "lowest-common-ancestor-of-a-binary-search-tree": {
+      "sourceIndex": 51,
+      "title": "Lowest Common Ancestor of a Binary Search Tree",
+      "titleSlug": "lowest-common-ancestor-of-a-binary-search-tree",
+      "section": "Trees",
+      "difficulty": "Medium",
+      "markdown": "**Cue:** BST ordering tells whether both targets lie on one side or split at the current node.\n\n♻️ [MIT 6.006 — Binary Trees, Part 1](https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-spring-2020/resources/lecture-6-binary-trees-part-1/) **(watch once; first at #45)** · 🟡 [VisuAlgo — Binary Search Tree](https://visualgo.net/en/bst)\n\n**Return:** State all three ordering cases and why the first split point is the lowest common ancestor."
+    },
+    "binary-tree-level-order-traversal": {
+      "sourceIndex": 52,
+      "title": "Binary Tree Level Order Traversal",
+      "titleSlug": "binary-tree-level-order-traversal",
+      "section": "Trees",
+      "difficulty": "Medium",
+      "markdown": "**Cue:** A queue frontier represents exactly one BFS layer at a time.\n\n🔴 [MIT 6.006 — Breadth-First Search](https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-spring-2020/resources/lecture-9-breadth-first-search/) · 🟡 [VisuAlgo — DFS and BFS](https://visualgo.net/en/dfsbfs)\n\n**Return:** Capture the level size before processing and explain why newly enqueued children belong to the next level."
+    },
+    "binary-tree-right-side-view": {
+      "sourceIndex": 53,
+      "title": "Binary Tree Right Side View",
+      "titleSlug": "binary-tree-right-side-view",
+      "section": "Trees",
+      "difficulty": "Medium",
+      "markdown": "**Cue:** The visible node is the last or first node encountered at each depth, depending on traversal order.\n\n♻️ [MIT 6.006 — Breadth-First Search](https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-spring-2020/resources/lecture-9-breadth-first-search/) **(watch once; first at #52)** · 🟡 [VisuAlgo — DFS and BFS](https://visualgo.net/en/dfsbfs)\n\n**Return:** Choose BFS or right-first DFS and state the invariant that selects exactly one node per depth."
+    },
+    "count-good-nodes-in-binary-tree": {
+      "sourceIndex": 54,
+      "title": "Count Good Nodes in Binary Tree",
+      "titleSlug": "count-good-nodes-in-binary-tree",
+      "section": "Trees",
+      "difficulty": "Medium",
+      "markdown": "**Cue:** Carry the maximum value on the current root-to-node path.\n\n🔴 [MIT 6.006 — Depth-First Search](https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-spring-2020/resources/lecture-10-depth-first-search/) · 🟡 [MIT 6.006 — Binary Trees, Part 1](https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-spring-2020/resources/lecture-6-binary-trees-part-1/)\n\n**Return:** Define the path-state parameter, when a node is counted, and how state branches independently."
+    },
+    "validate-binary-search-tree": {
+      "sourceIndex": 55,
+      "title": "Validate Binary Search Tree",
+      "titleSlug": "validate-binary-search-tree",
+      "section": "Trees",
+      "difficulty": "Medium",
+      "markdown": "**Cue:** Every node must satisfy constraints inherited from all ancestors, not only its parent.\n\n♻️ [MIT 6.006 — Binary Trees, Part 1](https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-spring-2020/resources/lecture-6-binary-trees-part-1/) **(watch once; first at #45)** · 🟡 [VisuAlgo — Binary Search Tree](https://visualgo.net/en/bst)\n\n**Return:** Pass open lower and upper bounds and explain why duplicates fail under strict BST ordering."
+    },
+    "kth-smallest-element-in-a-bst": {
+      "sourceIndex": 56,
+      "title": "Kth Smallest Element in a BST",
+      "titleSlug": "kth-smallest-element-in-a-bst",
+      "section": "Trees",
+      "difficulty": "Medium",
+      "markdown": "**Cue:** Inorder traversal emits BST values in sorted order.\n\n♻️ [MIT 6.006 — Binary Trees, Part 1](https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-spring-2020/resources/lecture-6-binary-trees-part-1/) **(watch once; first at #45)** · 🟡 [VisuAlgo — Binary Search Tree](https://visualgo.net/en/bst)\n\n**Return:** Explain the traversal order, early stopping, and how an explicit stack simulates recursion."
+    },
+    "construct-binary-tree-from-preorder-and-inorder-traversal": {
+      "sourceIndex": 57,
+      "title": "Construct Binary Tree from Preorder and Inorder Traversal",
+      "titleSlug": "construct-binary-tree-from-preorder-and-inorder-traversal",
+      "section": "Trees",
+      "difficulty": "Medium",
+      "markdown": "**Cue:** Preorder identifies the root; inorder determines left and right subtree ranges.\n\n♻️ [MIT 6.006 — Binary Trees, Part 1](https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-spring-2020/resources/lecture-6-binary-trees-part-1/) **(watch once; first at #45)** · 🟡 [MIT 6.006 — Hashing](https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-spring-2020/resources/lecture-4-hashing/)\n\n**Return:** Define recursive index ranges, use a value-to-inorder-index map, and avoid slicing costs."
+    },
+    "binary-tree-maximum-path-sum": {
+      "sourceIndex": 58,
+      "title": "Binary Tree Maximum Path Sum",
+      "titleSlug": "binary-tree-maximum-path-sum",
+      "section": "Trees",
+      "difficulty": "Hard",
+      "markdown": "**Cue:** A parent can extend only one child branch, while the global answer may use both.\n\n♻️ [MIT 6.006 — Binary Trees, Part 1](https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-spring-2020/resources/lecture-6-binary-trees-part-1/) **(watch once; first at #45)** · 🟡 [MIT 6.006 — Dynamic Programming I](https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-spring-2020/resources/lecture-15-dynamic-programming-part-1-srtbot-fib-dags-bowling/)\n\n**Return:** Separate the return value from the through-node candidate and clamp harmful negative branches."
+    },
+    "serialize-and-deserialize-binary-tree": {
+      "sourceIndex": 59,
+      "title": "Serialize and Deserialize Binary Tree",
+      "titleSlug": "serialize-and-deserialize-binary-tree",
+      "section": "Trees",
+      "difficulty": "Hard",
+      "markdown": "**Cue:** Serialization needs traversal order plus explicit structure markers.\n\n♻️ [Protocol Buffers — Encoding and Framing](https://protobuf.dev/programming-guides/encoding/) **(watch once; first at #8)** · ♻️ [MIT 6.006 — Binary Trees, Part 1](https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-spring-2020/resources/lecture-6-binary-trees-part-1/) **(watch once; first at #45)**\n\n**Return:** Explain why null markers make reconstruction unique and how the decoder consumes tokens exactly once."
+    },
+    "kth-largest-element-in-a-stream": {
+      "sourceIndex": 60,
+      "title": "Kth Largest Element in a Stream",
+      "titleSlug": "kth-largest-element-in-a-stream",
+      "section": "Heap / Priority Queue",
+      "difficulty": "Easy",
+      "markdown": "**Cue:** A min-heap of size k keeps exactly the k largest values seen so far.\n\n♻️ [MIT 6.006 — Binary Heaps](https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-spring-2020/resources/lecture-8-binary-heaps/) **(watch once; first at #5)** · 🟡 [VisuAlgo — Binary Heap](https://visualgo.net/en/heap)\n\n**Return:** State the heap-size invariant and why its root is the kth largest, not the largest."
+    },
+    "last-stone-weight": {
+      "sourceIndex": 61,
+      "title": "Last Stone Weight",
+      "titleSlug": "last-stone-weight",
+      "section": "Heap / Priority Queue",
+      "difficulty": "Easy",
+      "markdown": "**Cue:** Repeatedly extract the two largest elements, so the data structure must expose maxima efficiently.\n\n♻️ [MIT 6.006 — Binary Heaps](https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-spring-2020/resources/lecture-8-binary-heaps/) **(watch once; first at #5)** · 🟡 [VisuAlgo — Binary Heap](https://visualgo.net/en/heap)\n\n**Return:** Trace one collision and derive the number of heap operations and total complexity."
+    },
+    "k-closest-points-to-origin": {
+      "sourceIndex": 62,
+      "title": "K Closest Points to Origin",
+      "titleSlug": "k-closest-points-to-origin",
+      "section": "Heap / Priority Queue",
+      "difficulty": "Medium",
+      "markdown": "**Cue:** Selection needs only a comparable key; square roots are unnecessary.\n\n♻️ [MIT 6.006 — Binary Heaps](https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-spring-2020/resources/lecture-8-binary-heaps/) **(watch once; first at #5)** · 🟡 [Princeton Algorithms — Quicksort and Selection](https://algs4.cs.princeton.edu/23quicksort/)\n\n**Return:** Compare a size-k max-heap with quickselect and explain the distance key and expected versus worst-case costs."
+    },
+    "kth-largest-element-in-an-array": {
+      "sourceIndex": 63,
+      "title": "Kth Largest Element in an Array",
+      "titleSlug": "kth-largest-element-in-an-array",
+      "section": "Heap / Priority Queue",
+      "difficulty": "Medium",
+      "markdown": "**Cue:** Partition-based selection discards the side that cannot contain the target rank.\n\n🔴 [Princeton Algorithms — Quicksort and Selection](https://algs4.cs.princeton.edu/23quicksort/) · 🟡 [MIT 6.046 — Randomized Median](https://ocw.mit.edu/courses/6-046j-design-and-analysis-of-algorithms-spring-2015/resources/recitation-4-randomization-randomized-median/) · 🟡 [MIT 6.006 — Binary Heaps](https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-spring-2020/resources/lecture-8-binary-heaps/)\n\n**Return:** Translate kth largest into a zero-based sorted index and state the partition invariant."
+    },
+    "task-scheduler": {
+      "sourceIndex": 64,
+      "title": "Task Scheduler",
+      "titleSlug": "task-scheduler",
+      "section": "Heap / Priority Queue",
+      "difficulty": "Medium",
+      "markdown": "**Cue:** The most frequent tasks determine idle pressure; a heap can simulate available choices over cooldown time.\n\n♻️ [CodePath — Greedy Algorithms](https://guides.codepath.org/compsci/Greedy-Algorithms) **(watch once; first at #25)** · ♻️ [MIT 6.006 — Binary Heaps](https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-spring-2020/resources/lecture-8-binary-heaps/) **(watch once; first at #5)**\n\n**Return:** Explain the frequency lower bound or the heap-plus-cooldown invariant and test a case with no required idles."
+    },
+    "design-twitter": {
+      "sourceIndex": 65,
+      "title": "Design Twitter",
+      "titleSlug": "design-twitter",
+      "section": "Heap / Priority Queue",
+      "difficulty": "Medium",
+      "markdown": "**Cue:** Merge the newest frontier from several timestamp-sorted streams.\n\n♻️ [K-Way Merge with a Heap](https://www.youtube.com/watch?v=ptYUCjfNhJY) **(watch once; first at #43)** · 🟡 [ByteByteGo — News Feed Design](https://bytebytego.com/courses/system-design-interview/design-a-news-feed-system) · 🟡 [System Design Primer — Twitter](https://github.com/donnemartin/system-design-primer/blob/master/solutions/system_design/twitter/README.md)\n\n**Return:** Explain why one candidate per followed stream is sufficient and how each pop reveals one next candidate."
+    },
+    "find-median-from-data-stream": {
+      "sourceIndex": 66,
+      "title": "Find Median from Data Stream",
+      "titleSlug": "find-median-from-data-stream",
+      "section": "Heap / Priority Queue",
+      "difficulty": "Hard",
+      "markdown": "**Cue:** Maintain lower and upper halves whose boundary values expose the median.\n\n🔴 [Two Heaps for a Running Median](https://www.youtube.com/watch?v=VmogG01IjYc) · ♻️ [MIT 6.006 — Binary Heaps](https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-spring-2020/resources/lecture-8-binary-heaps/) **(watch once; first at #5)** · 🟡 [VisuAlgo — Binary Heap](https://visualgo.net/en/heap)\n\n**Return:** State the allowed size difference and ordering relation between the max-heap and min-heap."
+    },
+    "subsets": {
+      "sourceIndex": 67,
+      "title": "Subsets",
+      "titleSlug": "subsets",
+      "section": "Backtracking",
+      "difficulty": "Medium",
+      "markdown": "**Cue:** At each position, choose whether the element belongs to the current subset.\n\n🔴 [Stanford CS106B — Backtracking](https://web.stanford.edu/class/archive/cs/cs106b/cs106b.1258/lectures/11-backtracking1/) · 🟡 [VisuAlgo — Recursion](https://visualgo.net/en/recursion)\n\n**Return:** Define the decision-tree state, when output is recorded, and how the path is restored."
+    },
+    "combination-sum": {
+      "sourceIndex": 68,
+      "title": "Combination Sum",
+      "titleSlug": "combination-sum",
+      "section": "Backtracking",
+      "difficulty": "Medium",
+      "markdown": "**Cue:** Build nondecreasing combinations so the same multiset is not generated in different orders.\n\n♻️ [Stanford CS106B — Backtracking](https://web.stanford.edu/class/archive/cs/cs106b/cs106b.1258/lectures/11-backtracking1/) **(watch once; first at #67)** · 🟡 [Backtracking Template — Concept Video](https://www.youtube.com/watch?v=vqnZ9RhhkmY)\n\n**Return:** State the start-index rule, why reuse keeps the same index, and the pruning condition on remaining sum."
+    },
+    "combination-sum-ii": {
+      "sourceIndex": 69,
+      "title": "Combination Sum II",
+      "titleSlug": "combination-sum-ii",
+      "section": "Backtracking",
+      "difficulty": "Medium",
+      "markdown": "**Cue:** Sort candidates and skip equal choices only when they compete at the same recursion depth.\n\n♻️ [Stanford CS106B — Backtracking](https://web.stanford.edu/class/archive/cs/cs106b/cs106b.1258/lectures/11-backtracking1/) **(watch once; first at #67)** · ♻️ [MIT 6.006 — Sets and Sorting](https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-spring-2020/resources/lecture-3-sets-and-sorting/) **(watch once; first at #4)**\n\n**Return:** Explain same-depth duplicate skipping, why the next call advances the index, and when to stop the loop."
+    },
+    "permutations": {
+      "sourceIndex": 70,
+      "title": "Permutations",
+      "titleSlug": "permutations",
+      "section": "Backtracking",
+      "difficulty": "Medium",
+      "markdown": "**Cue:** Every position chooses one still-unused element.\n\n♻️ [Stanford CS106B — Backtracking](https://web.stanford.edu/class/archive/cs/cs106b/cs106b.1258/lectures/11-backtracking1/) **(watch once; first at #67)** · 🟡 [VisuAlgo — Recursion](https://visualgo.net/en/recursion)\n\n**Return:** Choose a used set or in-place swap invariant and show how each complete ordering appears exactly once."
+    },
+    "subsets-ii": {
+      "sourceIndex": 71,
+      "title": "Subsets II",
+      "titleSlug": "subsets-ii",
+      "section": "Backtracking",
+      "difficulty": "Medium",
+      "markdown": "**Cue:** Sorting makes duplicate branches adjacent so equivalent choices can be suppressed per depth.\n\n♻️ [Stanford CS106B — Backtracking](https://web.stanford.edu/class/archive/cs/cs106b/cs106b.1258/lectures/11-backtracking1/) **(watch once; first at #67)** · ♻️ [MIT 6.006 — Sets and Sorting](https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-spring-2020/resources/lecture-3-sets-and-sorting/) **(watch once; first at #4)**\n\n**Return:** Explain why skipping duplicates across siblings is correct but skipping the value at deeper levels is not."
+    },
+    "generate-parentheses": {
+      "sourceIndex": 72,
+      "title": "Generate Parentheses",
+      "titleSlug": "generate-parentheses",
+      "section": "Backtracking",
+      "difficulty": "Medium",
+      "markdown": "**Cue:** Generate only prefixes that can still be completed into a valid string.\n\n♻️ [Stanford CS106B — Backtracking](https://web.stanford.edu/class/archive/cs/cs106b/cs106b.1258/lectures/11-backtracking1/) **(watch once; first at #67)** · 🟡 [VisuAlgo — Recursion](https://visualgo.net/en/recursion)\n\n**Return:** State the constraints `open <= n` and `close <= open`, plus the exact completion condition."
+    },
+    "word-search": {
+      "sourceIndex": 73,
+      "title": "Word Search",
+      "titleSlug": "word-search",
+      "section": "Backtracking",
+      "difficulty": "Medium",
+      "markdown": "**Cue:** The board path is a backtracking state: choose a neighbor, mark it, explore, then restore.\n\n♻️ [Stanford CS106B — Backtracking](https://web.stanford.edu/class/archive/cs/cs106b/cs106b.1258/lectures/11-backtracking1/) **(watch once; first at #67)** · 🟡 [VisuAlgo — DFS and BFS](https://visualgo.net/en/dfsbfs)\n\n**Return:** Name the board mutation, restoration point, boundary checks, and why a cell cannot be reused in one path."
+    },
+    "palindrome-partitioning": {
+      "sourceIndex": 74,
+      "title": "Palindrome Partitioning",
+      "titleSlug": "palindrome-partitioning",
+      "section": "Backtracking",
+      "difficulty": "Medium",
+      "markdown": "**Cue:** Each recursion chooses the next palindromic prefix and partitions the remaining suffix.\n\n♻️ [Stanford CS106B — Backtracking](https://web.stanford.edu/class/archive/cs/cs106b/cs106b.1258/lectures/11-backtracking1/) **(watch once; first at #67)** · 🟡 [MIT 6.006 — Dynamic Programming II: Coins, LIS, LCS](https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-spring-2020/resources/lecture-16-dynamic-programming-part-2-lcs-lis-coins/)\n\n**Return:** Define the start index, validity test, path restoration, and the optional palindrome-precomputation trade-off."
+    },
+    "letter-combinations-of-a-phone-number": {
+      "sourceIndex": 75,
+      "title": "Letter Combinations of a Phone Number",
+      "titleSlug": "letter-combinations-of-a-phone-number",
+      "section": "Backtracking",
+      "difficulty": "Medium",
+      "markdown": "**Cue:** The output is a Cartesian product generated one digit at a time.\n\n♻️ [Stanford CS106B — Backtracking](https://web.stanford.edu/class/archive/cs/cs106b/cs106b.1258/lectures/11-backtracking1/) **(watch once; first at #67)** · 🟡 [VisuAlgo — Recursion](https://visualgo.net/en/recursion)\n\n**Return:** State the recursion depth, branching source, empty-input behavior, and completion condition."
+    },
+    "n-queens": {
+      "sourceIndex": 76,
+      "title": "N-Queens",
+      "titleSlug": "n-queens",
+      "section": "Backtracking",
+      "difficulty": "Hard",
+      "markdown": "**Cue:** Place one queen per row while maintaining attacked columns and diagonals.\n\n♻️ [Stanford CS106B — Backtracking](https://web.stanford.edu/class/archive/cs/cs106b/cs106b.1258/lectures/11-backtracking1/) **(watch once; first at #67)** · 🟡 [Backtracking Template — Concept Video](https://www.youtube.com/watch?v=vqnZ9RhhkmY)\n\n**Return:** Derive the two diagonal keys, state all maintained sets, and show exactly where each choice is undone."
+    },
+    "implement-trie-prefix-tree": {
+      "sourceIndex": 77,
+      "title": "Implement Trie (Prefix Tree)",
+      "titleSlug": "implement-trie-prefix-tree",
+      "section": "Tries",
+      "difficulty": "Medium",
+      "markdown": "**Cue:** A prefix is a path through character-labeled edges; word completion is separate from path existence.\n\n🔴 [Princeton Algorithms — Tries](https://algs4.cs.princeton.edu/52trie/) · 🟡 [Trie Data Structure — Concept Video](https://www.youtube.com/watch?v=AXjmTQ8LEoI)\n\n**Return:** Define node children and end-of-word state, then distinguish search from starts-with."
+    },
+    "design-add-and-search-words-data-structure": {
+      "sourceIndex": 78,
+      "title": "Design Add and Search Words Data Structure",
+      "titleSlug": "design-add-and-search-words-data-structure",
+      "section": "Tries",
+      "difficulty": "Medium",
+      "markdown": "**Cue:** A wildcard turns one deterministic trie edge into a branch over all children.\n\n♻️ [Princeton Algorithms — Tries](https://algs4.cs.princeton.edu/52trie/) **(watch once; first at #77)** · 🟡 [Trie Data Structure — Concept Video](https://www.youtube.com/watch?v=AXjmTQ8LEoI)\n\n**Return:** Explain why ordinary characters stay iterative while `.` requires DFS from the current trie node."
+    },
+    "word-search-ii": {
+      "sourceIndex": 79,
+      "title": "Word Search II",
+      "titleSlug": "word-search-ii",
+      "section": "Tries",
+      "difficulty": "Hard",
+      "markdown": "**Cue:** Trie prefixes prune one shared board search for many words.\n\n♻️ [Princeton Algorithms — Tries](https://algs4.cs.princeton.edu/52trie/) **(watch once; first at #77)** · ♻️ [Stanford CS106B — Backtracking](https://web.stanford.edu/class/archive/cs/cs106b/cs106b.1258/lectures/11-backtracking1/) **(watch once; first at #67)** · 🟡 [Trie Data Structure — Concept Video](https://www.youtube.com/watch?v=AXjmTQ8LEoI)\n\n**Return:** Name the restored board state, prefix-pruning test, duplicate-output prevention method, and optional dead-branch deletion."
+    },
+    "number-of-islands": {
+      "sourceIndex": 80,
+      "title": "Number of Islands",
+      "titleSlug": "number-of-islands",
+      "section": "Graphs",
+      "difficulty": "Medium",
+      "markdown": "**Cue:** Treat land cells as vertices and four-direction adjacency as edges.\n\n♻️ [MIT 6.006 — Depth-First Search](https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-spring-2020/resources/lecture-10-depth-first-search/) **(watch once; first at #54)** · 🟡 [VisuAlgo — DFS and BFS](https://visualgo.net/en/dfsbfs)\n\n**Return:** Define when a component count increments, when a cell becomes visited, and why each cell is processed once."
+    },
+    "max-area-of-island": {
+      "sourceIndex": 81,
+      "title": "Max Area of Island",
+      "titleSlug": "max-area-of-island",
+      "section": "Graphs",
+      "difficulty": "Medium",
+      "markdown": "**Cue:** A component traversal can return an aggregate size instead of only marking reachability.\n\n♻️ [MIT 6.006 — Depth-First Search](https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-spring-2020/resources/lecture-10-depth-first-search/) **(watch once; first at #54)** · 🟡 [VisuAlgo — DFS and BFS](https://visualgo.net/en/dfsbfs)\n\n**Return:** Define the DFS return value, water and boundary base cases, and how child areas combine."
+    },
+    "clone-graph": {
+      "sourceIndex": 82,
+      "title": "Clone Graph",
+      "titleSlug": "clone-graph",
+      "section": "Graphs",
+      "difficulty": "Medium",
+      "markdown": "**Cue:** Memoize one clone per original vertex before recursively wiring neighbors.\n\n♻️ [MIT 6.006 — Depth-First Search](https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-spring-2020/resources/lecture-10-depth-first-search/) **(watch once; first at #54)** · ♻️ [MIT 6.006 — Hashing](https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-spring-2020/resources/lecture-4-hashing/) **(watch once; first at #1)** · 🟡 [VisuAlgo — DFS and BFS](https://visualgo.net/en/dfsbfs)\n\n**Return:** Explain why the old-to-new map prevents both infinite recursion and duplicate clone objects."
+    },
+    "walls-and-gates": {
+      "sourceIndex": 83,
+      "title": "Walls and Gates",
+      "titleSlug": "walls-and-gates",
+      "section": "Graphs",
+      "difficulty": "Medium",
+      "markdown": "**Cue:** Start one BFS simultaneously from every source so the first arrival is the nearest distance.\n\n♻️ [MIT 6.006 — Breadth-First Search](https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-spring-2020/resources/lecture-9-breadth-first-search/) **(watch once; first at #52)** · 🟡 [VisuAlgo — DFS and BFS](https://visualgo.net/en/dfsbfs)\n\n**Return:** Initialize all gates in the queue, define discovery-time updates, and explain why every room is finalized once."
+    },
+    "rotting-oranges": {
+      "sourceIndex": 84,
+      "title": "Rotting Oranges",
+      "titleSlug": "rotting-oranges",
+      "section": "Graphs",
+      "difficulty": "Medium",
+      "markdown": "**Cue:** All initially rotten cells form a multi-source BFS wave.\n\n♻️ [MIT 6.006 — Breadth-First Search](https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-spring-2020/resources/lecture-9-breadth-first-search/) **(watch once; first at #52)** · 🟡 [VisuAlgo — DFS and BFS](https://visualgo.net/en/dfsbfs)\n\n**Return:** Define what one queue layer means in minutes, track fresh cells, and avoid an off-by-one minute after the last spread."
+    },
+    "pacific-atlantic-water-flow": {
+      "sourceIndex": 85,
+      "title": "Pacific Atlantic Water Flow",
+      "titleSlug": "pacific-atlantic-water-flow",
+      "section": "Graphs",
+      "difficulty": "Medium",
+      "markdown": "**Cue:** Reverse the edges: search uphill from each ocean instead of downhill from every cell.\n\n♻️ [MIT 6.006 — Depth-First Search](https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-spring-2020/resources/lecture-10-depth-first-search/) **(watch once; first at #54)** · 🟡 [VisuAlgo — DFS and BFS](https://visualgo.net/en/dfsbfs)\n\n**Return:** State the reversed movement condition and why the intersection of two reachability sets is the answer."
+    },
+    "surrounded-regions": {
+      "sourceIndex": 86,
+      "title": "Surrounded Regions",
+      "titleSlug": "surrounded-regions",
+      "section": "Graphs",
+      "difficulty": "Medium",
+      "markdown": "**Cue:** Only regions connected to the boundary are safe from capture.\n\n♻️ [MIT 6.006 — Depth-First Search](https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-spring-2020/resources/lecture-10-depth-first-search/) **(watch once; first at #54)** · 🟡 [VisuAlgo — DFS and BFS](https://visualgo.net/en/dfsbfs)\n\n**Return:** Mark boundary-connected cells first, then explain the final two-way transformation without losing information."
+    },
+    "course-schedule": {
+      "sourceIndex": 87,
+      "title": "Course Schedule",
+      "titleSlug": "course-schedule",
+      "section": "Graphs",
+      "difficulty": "Medium",
+      "markdown": "**Cue:** Prerequisites form a directed graph; feasibility is equivalent to absence of a directed cycle.\n\n🔴 [CP-Algorithms — Topological Sorting](https://cp-algorithms.com/graph/topological-sort.html) · 🟡 [MIT 6.006 — Depth-First Search](https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-spring-2020/resources/lecture-10-depth-first-search/)\n\n**Return:** Choose DFS colors or Kahn’s indegrees and state exactly how a cycle or incomplete ordering is detected."
+    },
+    "course-schedule-ii": {
+      "sourceIndex": 88,
+      "title": "Course Schedule II",
+      "titleSlug": "course-schedule-ii",
+      "section": "Graphs",
+      "difficulty": "Medium",
+      "markdown": "**Cue:** A topological order repeatedly emits vertices whose prerequisites are already satisfied.\n\n♻️ [CP-Algorithms — Topological Sorting](https://cp-algorithms.com/graph/topological-sort.html) **(watch once; first at #87)** · 🟡 [MIT 6.006 — Depth-First Search](https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-spring-2020/resources/lecture-10-depth-first-search/)\n\n**Return:** Define indegree updates or DFS postorder and explain why fewer than n emitted courses means failure."
+    },
+    "graph-valid-tree": {
+      "sourceIndex": 89,
+      "title": "Graph Valid Tree",
+      "titleSlug": "graph-valid-tree",
+      "section": "Graphs",
+      "difficulty": "Medium",
+      "markdown": "**Cue:** A tree is connected and acyclic; with n vertices it has exactly n-1 edges.\n\n🔴 [CP-Algorithms — Disjoint Set Union](https://cp-algorithms.com/data_structures/disjoint_set_union.html) · 🟡 [VisuAlgo — Union-Find](https://visualgo.net/en/ufds)\n\n**Return:** Use either the edge-count plus connectivity proof or explain why a failed union detects a cycle."
+    },
+    "number-of-connected-components-in-an-undirected-graph": {
+      "sourceIndex": 90,
+      "title": "Number of Connected Components in an Undirected Graph",
+      "titleSlug": "number-of-connected-components-in-an-undirected-graph",
+      "section": "Graphs",
+      "difficulty": "Medium",
+      "markdown": "**Cue:** Every unvisited start launches exactly one component traversal, or every successful union reduces the component count.\n\n♻️ [CP-Algorithms — Disjoint Set Union](https://cp-algorithms.com/data_structures/disjoint_set_union.html) **(watch once; first at #89)** · ♻️ [MIT 6.006 — Depth-First Search](https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-spring-2020/resources/lecture-10-depth-first-search/) **(watch once; first at #54)** · 🟡 [VisuAlgo — Union-Find](https://visualgo.net/en/ufds)\n\n**Return:** State the initial component count and precisely when it changes under your chosen method."
+    },
+    "redundant-connection": {
+      "sourceIndex": 91,
+      "title": "Redundant Connection",
+      "titleSlug": "redundant-connection",
+      "section": "Graphs",
+      "difficulty": "Medium",
+      "markdown": "**Cue:** Dynamic connectivity reveals the first edge whose endpoints were already connected.\n\n🔴 [Union-Find — Concept Video](https://www.youtube.com/watch?v=ibjEGG7ylHk) · 🟡 [CP-Algorithms — Disjoint Set Union](https://cp-algorithms.com/data_structures/disjoint_set_union.html) · 🟡 [VisuAlgo — Union-Find](https://visualgo.net/en/ufds)\n\n**Return:** Explain why a failed union means the new edge closes a cycle and why rank/compression change cost, not meaning."
+    },
+    "word-ladder": {
+      "sourceIndex": 92,
+      "title": "Word Ladder",
+      "titleSlug": "word-ladder",
+      "section": "Graphs",
+      "difficulty": "Hard",
+      "markdown": "**Cue:** Words are vertices of an implicit unweighted graph, so BFS layers equal transformation count.\n\n🔴 [Breadth-First Search — Concept Video](https://www.youtube.com/watch?v=oDqjPvD54Ss) · 🟡 [VisuAlgo — DFS and BFS](https://visualgo.net/en/dfsbfs) · 🟡 [Bidirectional BFS — Pattern Article](https://dilipkumar.medium.com/bidirectional-breadth-first-search-bi-bfs-coding-pattern-48d998930610)\n\n**Return:** Define neighbor generation, visited timing, and why the first target layer is shortest."
+    },
+    "network-delay-time": {
+      "sourceIndex": 93,
+      "title": "Network Delay Time",
+      "titleSlug": "network-delay-time",
+      "section": "Advanced Graphs",
+      "difficulty": "Medium",
+      "markdown": "**Cue:** Use single-source shortest paths because every edge weight is nonnegative.\n\n🔴 [Dijkstra — Concept Video](https://www.youtube.com/watch?v=pSqmAO-m7Lk) · 🟡 [MIT 6.006 — Dijkstra](https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-spring-2020/resources/lecture-13-dijkstra/) · 🟡 [VisuAlgo — Single-Source Shortest Paths](https://visualgo.net/en/sssp)\n\n**Return:** Explain relaxation, why the smallest pending distance is safe, and how stale heap entries are ignored."
+    },
+    "reconstruct-itinerary": {
+      "sourceIndex": 94,
+      "title": "Reconstruct Itinerary",
+      "titleSlug": "reconstruct-itinerary",
+      "section": "Advanced Graphs",
+      "difficulty": "Hard",
+      "markdown": "**Cue:** Consume every directed edge exactly once and append vertices only after exhausting outgoing edges.\n\n🔴 [Hierholzer’s Algorithm — Concept Video](https://www.youtube.com/watch?v=8MpoO2zA2l4) · 🟡 [CP-Algorithms — Eulerian Path](https://cp-algorithms.com/graph/euler_path.html)\n\n**Return:** Explain reverse postorder, duplicate tickets, lexical edge choice, and why the final route is reversed."
+    },
+    "min-cost-to-connect-all-points": {
+      "sourceIndex": 95,
+      "title": "Min Cost to Connect All Points",
+      "titleSlug": "min-cost-to-connect-all-points",
+      "section": "Advanced Graphs",
+      "difficulty": "Medium",
+      "markdown": "**Cue:** Choose the cheapest safe edge crossing the cut between connected and unconnected vertices.\n\n🔴 [Prim’s Algorithm — Concept Video](https://www.youtube.com/watch?v=jsmMtJpPnhU) · 🟡 [Princeton Algorithms — Minimum Spanning Trees](https://algs4.cs.princeton.edu/43mst/) · 🟡 [VisuAlgo — Minimum Spanning Tree](https://visualgo.net/en/mst)\n\n**Return:** Define the cut, justify the minimum crossing edge, and explain on-demand Manhattan edge costs in a complete graph."
+    },
+    "swim-in-rising-water": {
+      "sourceIndex": 96,
+      "title": "Swim in Rising Water",
+      "titleSlug": "swim-in-rising-water",
+      "section": "Advanced Graphs",
+      "difficulty": "Hard",
+      "markdown": "**Cue:** Run Dijkstra with path cost combined by maximum rather than by sum.\n\n♻️ [Dijkstra — Concept Video](https://www.youtube.com/watch?v=pSqmAO-m7Lk) **(watch once; first at #93)** · 🟡 [MIT 6.006 — Dijkstra](https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-spring-2020/resources/lecture-13-dijkstra/) · 🟡 [VisuAlgo — Single-Source Shortest Paths](https://visualgo.net/en/sssp)\n\n**Return:** Define the minimax path cost, use `max(current, next height)`, and justify greedy finalization."
+    },
+    "alien-dictionary": {
+      "sourceIndex": 97,
+      "title": "Alien Dictionary",
+      "titleSlug": "alien-dictionary",
+      "section": "Advanced Graphs",
+      "difficulty": "Hard",
+      "markdown": "**Cue:** The first differing character between adjacent words creates one precedence edge.\n\n♻️ [CP-Algorithms — Topological Sorting](https://cp-algorithms.com/graph/topological-sort.html) **(watch once; first at #87)** · 🟡 [MIT 6.006 — Depth-First Search](https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-spring-2020/resources/lecture-10-depth-first-search/)\n\n**Return:** Handle the invalid prefix case, deduplicate edges, include isolated letters, and detect a directed cycle."
+    },
+    "cheapest-flights-within-k-stops": {
+      "sourceIndex": 98,
+      "title": "Cheapest Flights Within K Stops",
+      "titleSlug": "cheapest-flights-within-k-stops",
+      "section": "Advanced Graphs",
+      "difficulty": "Medium",
+      "markdown": "**Cue:** A stop bound becomes a bound on how many edge-relaxation rounds may contribute.\n\n🔴 [Bellman–Ford — Concept Video](https://www.youtube.com/watch?v=lyw4FaxrwHg) · 🟡 [MIT 6.006 — Bellman–Ford](https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-spring-2020/resources/lecture-12-bellman-ford/)\n\n**Return:** Explain why round r represents paths using at most r edges and why same-round reads can violate the limit."
+    },
+    "climbing-stairs": {
+      "sourceIndex": 99,
+      "title": "Climbing Stairs",
+      "titleSlug": "climbing-stairs",
+      "section": "1-D Dynamic Programming",
+      "difficulty": "Easy",
+      "markdown": "**Cue:** The number of ways to reach a step is the sum of ways to its legal predecessor steps.\n\n🔴 [Dynamic Programming — Five-Step Framework](https://www.youtube.com/watch?v=aPQY__2H3tE) · 🟡 [MIT 6.006 — Dynamic Programming I](https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-spring-2020/resources/lecture-15-dynamic-programming-part-1-srtbot-fib-dags-bowling/)\n\n**Return:** Define `dp[i]`, recurrence, base cases, and evaluation order before compressing space."
+    },
+    "min-cost-climbing-stairs": {
+      "sourceIndex": 100,
+      "title": "Min Cost Climbing Stairs",
+      "titleSlug": "min-cost-climbing-stairs",
+      "section": "1-D Dynamic Programming",
+      "difficulty": "Easy",
+      "markdown": "**Cue:** The state should represent the minimum cost to arrive at a position, including the virtual top.\n\n♻️ [Dynamic Programming — Five-Step Framework](https://www.youtube.com/watch?v=aPQY__2H3tE) **(watch once; first at #99)** · 🟡 [MIT 6.006 — Dynamic Programming I](https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-spring-2020/resources/lecture-15-dynamic-programming-part-1-srtbot-fib-dags-bowling/)\n\n**Return:** Choose whether cost is paid on entering or leaving a step and make bases and recurrence consistent."
+    },
+    "house-robber": {
+      "sourceIndex": 101,
+      "title": "House Robber",
+      "titleSlug": "house-robber",
+      "section": "1-D Dynamic Programming",
+      "difficulty": "Medium",
+      "markdown": "**Cue:** A choice blocks its neighbor, so summarize the best value for each prefix.\n\n♻️ [Dynamic Programming — Five-Step Framework](https://www.youtube.com/watch?v=aPQY__2H3tE) **(watch once; first at #99)** · 🟡 [MIT 6.006 — Dynamic Programming I](https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-spring-2020/resources/lecture-15-dynamic-programming-part-1-srtbot-fib-dags-bowling/)\n\n**Return:** Define the state in words, its two predecessors, recurrence, bases, and evaluation order."
+    },
+    "house-robber-ii": {
+      "sourceIndex": 102,
+      "title": "House Robber II",
+      "titleSlug": "house-robber-ii",
+      "section": "1-D Dynamic Programming",
+      "difficulty": "Medium",
+      "markdown": "**Cue:** Circular adjacency becomes two linear cases that cannot both include the endpoints.\n\n♻️ [Dynamic Programming — Five-Step Framework](https://www.youtube.com/watch?v=aPQY__2H3tE) **(watch once; first at #99)** · 🟡 [MIT 6.006 — Dynamic Programming I](https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-spring-2020/resources/lecture-15-dynamic-programming-part-1-srtbot-fib-dags-bowling/)\n\n**Return:** Explain why excluding the first or excluding the last covers every valid solution, including tiny arrays."
+    },
+    "longest-palindromic-substring": {
+      "sourceIndex": 103,
+      "title": "Longest Palindromic Substring",
+      "titleSlug": "longest-palindromic-substring",
+      "section": "1-D Dynamic Programming",
+      "difficulty": "Medium",
+      "markdown": "🚫 **No pre-watch.** A palindrome grows symmetrically around an odd or even center.\n\n🟡 **After solve:** [CP-Algorithms — Manacher’s Algorithm](https://cp-algorithms.com/string/manacher.html)\n\n**Return:** Derive center expansion first, count the `2n-1` centers, and compare its complexity with Manacher’s algorithm."
+    },
+    "palindromic-substrings": {
+      "sourceIndex": 104,
+      "title": "Palindromic Substrings",
+      "titleSlug": "palindromic-substrings",
+      "section": "1-D Dynamic Programming",
+      "difficulty": "Medium",
+      "markdown": "🚫 **No pre-watch.** Every palindrome is identified by an odd or even center and maximal matching expansion.\n\n🟡 **After solve:** [CP-Algorithms — Manacher’s Algorithm](https://cp-algorithms.com/string/manacher.html)\n\n**Return:** Explain the `2n-1` centers and why each successful expansion corresponds to exactly one substring."
+    },
+    "decode-ways": {
+      "sourceIndex": 105,
+      "title": "Decode Ways",
+      "titleSlug": "decode-ways",
+      "section": "1-D Dynamic Programming",
+      "difficulty": "Medium",
+      "markdown": "**Cue:** A prefix can end with one valid digit or one valid two-digit code.\n\n♻️ [Dynamic Programming — Five-Step Framework](https://www.youtube.com/watch?v=aPQY__2H3tE) **(watch once; first at #99)** · 🟡 [MIT 6.006 — Dynamic Programming I](https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-spring-2020/resources/lecture-15-dynamic-programming-part-1-srtbot-fib-dags-bowling/)\n\n**Return:** Define the prefix state, zero-handling rules, and both predecessor contributions."
+    },
+    "coin-change": {
+      "sourceIndex": 106,
+      "title": "Coin Change",
+      "titleSlug": "coin-change",
+      "section": "1-D Dynamic Programming",
+      "difficulty": "Medium",
+      "markdown": "**Cue:** Amounts are states and each coin creates a transition from a smaller amount.\n\n🔴 [MIT 6.006 — Dynamic Programming II: Coins, LIS, LCS](https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-spring-2020/resources/lecture-16-dynamic-programming-part-2-lcs-lis-coins/) · 🟡 [CP-Algorithms — 0/1 and Unbounded Knapsack](https://cp-algorithms.com/dynamic_programming/knapsack.html)\n\n**Return:** Define `dp[a]`, its incoming transitions, and an unreachable sentinel that cannot look optimal."
+    },
+    "maximum-product-subarray": {
+      "sourceIndex": 107,
+      "title": "Maximum Product Subarray",
+      "titleSlug": "maximum-product-subarray",
+      "section": "1-D Dynamic Programming",
+      "difficulty": "Medium",
+      "markdown": "**Cue:** A negative number can swap the useful maximum and minimum products ending here.\n\n♻️ [Dynamic Programming — Five-Step Framework](https://www.youtube.com/watch?v=aPQY__2H3tE) **(watch once; first at #99)** · 🟡 [MIT 6.006 — Dynamic Programming I](https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-spring-2020/resources/lecture-15-dynamic-programming-part-1-srtbot-fib-dags-bowling/)\n\n**Return:** Explain why both extremes must be carried and how zero resets the possibilities."
+    },
+    "word-break": {
+      "sourceIndex": 108,
+      "title": "Word Break",
+      "titleSlug": "word-break",
+      "section": "1-D Dynamic Programming",
+      "difficulty": "Medium",
+      "markdown": "**Cue:** A prefix is reachable when a previous reachable prefix is followed by one dictionary word.\n\n♻️ [Dynamic Programming — Five-Step Framework](https://www.youtube.com/watch?v=aPQY__2H3tE) **(watch once; first at #99)** · 🟡 [MIT 6.006 — Hashing](https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-spring-2020/resources/lecture-4-hashing/)\n\n**Return:** Define the prefix state and transition, then include substring or trie costs in the complexity."
+    },
+    "longest-increasing-subsequence": {
+      "sourceIndex": 109,
+      "title": "Longest Increasing Subsequence",
+      "titleSlug": "longest-increasing-subsequence",
+      "section": "1-D Dynamic Programming",
+      "difficulty": "Medium",
+      "markdown": "**Cue:** Start with sequence DP; then interpret minimal tails for the faster method.\n\n♻️ [MIT 6.006 — Dynamic Programming II: Coins, LIS, LCS](https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-spring-2020/resources/lecture-16-dynamic-programming-part-2-lcs-lis-coins/) **(watch once; first at #106)** · 🟡 [CP-Algorithms — Longest Increasing Subsequence](https://cp-algorithms.com/dynamic_programming/longest_increasing_subsequence.html) · 🟡 [Patience Sorting and LIS — Intuition](https://www.youtube.com/watch?v=22s1xxRvy28)\n\n**Return:** Derive the quadratic recurrence, then explain why `tails[length]` is a minimal tail rather than the final subsequence."
+    },
+    "partition-equal-subset-sum": {
+      "sourceIndex": 110,
+      "title": "Partition Equal Subset Sum",
+      "titleSlug": "partition-equal-subset-sum",
+      "section": "1-D Dynamic Programming",
+      "difficulty": "Medium",
+      "markdown": "**Cue:** Equal partition is a 0/1 subset-sum feasibility problem at half the total.\n\n🔴 [CP-Algorithms — 0/1 and Unbounded Knapsack](https://cp-algorithms.com/dynamic_programming/knapsack.html) · 🟡 [MIT 6.006 — Subset Sum and Pseudopolynomial DP](https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-spring-2020/resources/lecture-18-dynamic-programming-part-4-rods-subset-sum-pseudopolynomial/)\n\n**Return:** Check parity, explain downward capacity iteration, and state why the runtime is pseudopolynomial."
+    },
+    "unique-paths": {
+      "sourceIndex": 111,
+      "title": "Unique Paths",
+      "titleSlug": "unique-paths",
+      "section": "2-D Dynamic Programming",
+      "difficulty": "Medium",
+      "markdown": "**Cue:** Each grid state depends only on the cell above and the cell to the left.\n\n♻️ [Dynamic Programming — Five-Step Framework](https://www.youtube.com/watch?v=aPQY__2H3tE) **(watch once; first at #99)** · 🟡 [MIT 6.006 — Dynamic Programming I](https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-spring-2020/resources/lecture-15-dynamic-programming-part-1-srtbot-fib-dags-bowling/)\n\n**Return:** Define the state, predecessor transitions, and boundary initialization without scattered special cases."
+    },
+    "longest-common-subsequence": {
+      "sourceIndex": 112,
+      "title": "Longest Common Subsequence",
+      "titleSlug": "longest-common-subsequence",
+      "section": "2-D Dynamic Programming",
+      "difficulty": "Medium",
+      "markdown": "**Cue:** Use two prefix lengths as the state for aligning two sequences.\n\n♻️ [MIT 6.006 — Dynamic Programming II: Coins, LIS, LCS](https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-spring-2020/resources/lecture-16-dynamic-programming-part-2-lcs-lis-coins/) **(watch once; first at #106)** · 🟡 [MIT — Sequence Alignment Grid](https://ocw.mit.edu/courses/7-91j-foundations-of-computational-and-systems-biology-spring-2014/resources/lecture-3-global-alignment-of-protein-sequences-nw-sw-pam-blosum/)\n\n**Return:** Separate matching and nonmatching cases and show every transition shrinks at least one prefix."
+    },
+    "best-time-to-buy-and-sell-stock-with-cooldown": {
+      "sourceIndex": 113,
+      "title": "Best Time to Buy and Sell Stock with Cooldown",
+      "titleSlug": "best-time-to-buy-and-sell-stock-with-cooldown",
+      "section": "2-D Dynamic Programming",
+      "difficulty": "Medium",
+      "markdown": "**Cue:** Model legal holding, sold, and resting statuses as a finite-state machine.\n\n🔴 [State-Machine Dynamic Programming](https://www.thealgorists.com/Algo/DynamicProgramming/StateMachineConcept/Fundamentals) · 🟡 [Labuladong — Stock DP State Machine](https://labuladong.online/en/algo/dynamic-programming/stock-problem-summary/)\n\n**Return:** Name each state, every legal transition, and the transition that enforces the cooldown."
+    },
+    "coin-change-ii": {
+      "sourceIndex": 114,
+      "title": "Coin Change II",
+      "titleSlug": "coin-change-ii",
+      "section": "2-D Dynamic Programming",
+      "difficulty": "Medium",
+      "markdown": "**Cue:** Counting combinations makes loop order part of correctness.\n\n♻️ [CP-Algorithms — 0/1 and Unbounded Knapsack](https://cp-algorithms.com/dynamic_programming/knapsack.html) **(watch once; first at #110)** · 🟡 [MIT 6.006 — Dynamic Programming II: Coins, LIS, LCS](https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-spring-2020/resources/lecture-16-dynamic-programming-part-2-lcs-lis-coins/)\n\n**Return:** Explain why coin-first with increasing amounts counts each multiset once rather than counting permutations."
+    },
+    "target-sum": {
+      "sourceIndex": 115,
+      "title": "Target Sum",
+      "titleSlug": "target-sum",
+      "section": "2-D Dynamic Programming",
+      "difficulty": "Medium",
+      "markdown": "**Cue:** Signed choices can be represented directly or reduced to a counting subset-sum problem.\n\n♻️ [CP-Algorithms — 0/1 and Unbounded Knapsack](https://cp-algorithms.com/dynamic_programming/knapsack.html) **(watch once; first at #110)** · 🟡 [MIT 6.006 — Subset Sum and Pseudopolynomial DP](https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-spring-2020/resources/lecture-18-dynamic-programming-part-4-rods-subset-sum-pseudopolynomial/)\n\n**Return:** Derive the reduction including parity and feasibility conditions, or define the signed-state offset."
+    },
+    "interleaving-string": {
+      "sourceIndex": 116,
+      "title": "Interleaving String",
+      "titleSlug": "interleaving-string",
+      "section": "2-D Dynamic Programming",
+      "difficulty": "Medium",
+      "markdown": "**Cue:** Two source indices determine the consumed destination index.\n\n♻️ [MIT 6.006 — Dynamic Programming II: Coins, LIS, LCS](https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-spring-2020/resources/lecture-16-dynamic-programming-part-2-lcs-lis-coins/) **(watch once; first at #106)** · 🟡 [MIT — Sequence Alignment Grid](https://ocw.mit.edu/courses/7-91j-foundations-of-computational-and-systems-biology-spring-2014/resources/lecture-3-global-alignment-of-protein-sequences-nw-sw-pam-blosum/)\n\n**Return:** Name the two legal predecessors into `(i, j)` and explain why the destination index is `i + j`."
+    },
+    "longest-increasing-path-in-a-matrix": {
+      "sourceIndex": 117,
+      "title": "Longest Increasing Path in a Matrix",
+      "titleSlug": "longest-increasing-path-in-a-matrix",
+      "section": "2-D Dynamic Programming",
+      "difficulty": "Hard",
+      "markdown": "**Cue:** Strictly increasing moves form a DAG, so memoized DFS solves each cell once.\n\n♻️ [MIT 6.006 — Depth-First Search](https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-spring-2020/resources/lecture-10-depth-first-search/) **(watch once; first at #54)** · 🟡 [CP-Algorithms — Topological Sorting](https://cp-algorithms.com/graph/topological-sort.html)\n\n**Return:** Explain acyclicity, the memoized state meaning, and why no visiting-state cycle handling is required."
+    },
+    "distinct-subsequences": {
+      "sourceIndex": 118,
+      "title": "Distinct Subsequences",
+      "titleSlug": "distinct-subsequences",
+      "section": "2-D Dynamic Programming",
+      "difficulty": "Hard",
+      "markdown": "**Cue:** Count ways to form target prefixes from source prefixes by using or skipping source characters.\n\n♻️ [MIT 6.006 — Dynamic Programming II: Coins, LIS, LCS](https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-spring-2020/resources/lecture-16-dynamic-programming-part-2-lcs-lis-coins/) **(watch once; first at #106)** · 🟡 [MIT — Sequence Alignment Grid](https://ocw.mit.edu/courses/7-91j-foundations-of-computational-and-systems-biology-spring-2014/resources/lecture-3-global-alignment-of-protein-sequences-nw-sw-pam-blosum/)\n\n**Return:** At a match, separate use and skip; with 1-D compression, justify backward target iteration."
+    },
+    "edit-distance": {
+      "sourceIndex": 119,
+      "title": "Edit Distance",
+      "titleSlug": "edit-distance",
+      "section": "2-D Dynamic Programming",
+      "difficulty": "Medium",
+      "markdown": "**Cue:** Edit operations are neighboring transitions in a two-prefix alignment grid.\n\n🔴 [MIT — Sequence Alignment Grid](https://ocw.mit.edu/courses/7-91j-foundations-of-computational-and-systems-biology-spring-2014/resources/lecture-3-global-alignment-of-protein-sequences-nw-sw-pam-blosum/) · 🟡 [MIT 6.006 — Dynamic Programming II: Coins, LIS, LCS](https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-spring-2020/resources/lecture-16-dynamic-programming-part-2-lcs-lis-coins/)\n\n**Return:** Map insertion, deletion, and substitution to cells and justify both empty-string borders."
+    },
+    "burst-balloons": {
+      "sourceIndex": 120,
+      "title": "Burst Balloons",
+      "titleSlug": "burst-balloons",
+      "section": "2-D Dynamic Programming",
+      "difficulty": "Hard",
+      "markdown": "**Cue:** Choose the last action inside an interval so both outside boundaries are fixed.\n\n🔴 [MIT 6.006 — Dynamic Programming III: Interval DP](https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-spring-2020/resources/lecture-17-dynamic-programming-part-3-apsp-parens-piano/) · 🟡 [Interval DP — Concept Tutorial](https://www.youtube.com/watch?v=5q9vCX0Y9Uo)\n\n**Return:** Define the open interval, choose the last balloon, and show how the two independent subintervals combine."
+    },
+    "regular-expression-matching": {
+      "sourceIndex": 121,
+      "title": "Regular Expression Matching",
+      "titleSlug": "regular-expression-matching",
+      "section": "2-D Dynamic Programming",
+      "difficulty": "Hard",
+      "markdown": "**Cue:** Treat `.` and `*` as transitions in a small pattern machine over two prefixes.\n\n🔴 [Russ Cox — Regular Expressions as NFAs](https://swtch.com/~rsc/regexp/regexp1.html) · 🟡 [Princeton Algorithms — Regular Expressions](https://algs4.cs.princeton.edu/54regexp/)\n\n**Return:** Define `dp[i][j]`; for `*`, derive zero copies versus consuming one matching character."
+    },
+    "maximum-subarray": {
+      "sourceIndex": 122,
+      "title": "Maximum Subarray",
+      "titleSlug": "maximum-subarray",
+      "section": "Greedy",
+      "difficulty": "Medium",
+      "markdown": "**Cue:** A negative running prefix can only hurt every future subarray that includes it.\n\n♻️ [CodePath — Greedy Algorithms](https://guides.codepath.org/compsci/Greedy-Algorithms) **(watch once; first at #25)** · 🟡 [MIT 6.006 — Dynamic Programming I](https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-spring-2020/resources/lecture-15-dynamic-programming-part-1-srtbot-fib-dags-bowling/)\n\n**Return:** Define the best sum ending here, the global best, and why resetting after a harmful prefix is safe."
+    },
+    "jump-game": {
+      "sourceIndex": 123,
+      "title": "Jump Game",
+      "titleSlug": "jump-game",
+      "section": "Greedy",
+      "difficulty": "Medium",
+      "markdown": "**Cue:** Maintain the farthest index reachable from the processed prefix.\n\n♻️ [CodePath — Greedy Algorithms](https://guides.codepath.org/compsci/Greedy-Algorithms) **(watch once; first at #25)** · 🟡 [Greedy Invariants — Concept Video](https://www.youtube.com/watch?v=W1hdYdsqBJo)\n\n**Return:** State the reachable-prefix invariant and the exact point at which progress becomes impossible."
+    },
+    "jump-game-ii": {
+      "sourceIndex": 124,
+      "title": "Jump Game II",
+      "titleSlug": "jump-game-ii",
+      "section": "Greedy",
+      "difficulty": "Medium",
+      "markdown": "**Cue:** Treat the current reachable interval like one BFS layer and build the next farthest boundary.\n\n♻️ [CodePath — Greedy Algorithms](https://guides.codepath.org/compsci/Greedy-Algorithms) **(watch once; first at #25)** · 🟡 [MIT 6.006 — Breadth-First Search](https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-spring-2020/resources/lecture-9-breadth-first-search/)\n\n**Return:** Define current layer end, farthest next reach, and when the jump count increments."
+    },
+    "gas-station": {
+      "sourceIndex": 125,
+      "title": "Gas Station",
+      "titleSlug": "gas-station",
+      "section": "Greedy",
+      "difficulty": "Medium",
+      "markdown": "**Cue:** A failed partial route proves every station inside that failed segment is also an invalid start.\n\n♻️ [CodePath — Greedy Algorithms](https://guides.codepath.org/compsci/Greedy-Algorithms) **(watch once; first at #25)** · 🟡 [Greedy Invariants — Concept Video](https://www.youtube.com/watch?v=W1hdYdsqBJo)\n\n**Return:** Separate total feasibility from candidate reset and give the proof for skipping failed starts."
+    },
+    "hand-of-straights": {
+      "sourceIndex": 126,
+      "title": "Hand of Straights",
+      "titleSlug": "hand-of-straights",
+      "section": "Greedy",
+      "difficulty": "Medium",
+      "markdown": "**Cue:** The smallest remaining card must begin a group, so greedily consume consecutive counts.\n\n♻️ [CodePath — Greedy Algorithms](https://guides.codepath.org/compsci/Greedy-Algorithms) **(watch once; first at #25)** · ♻️ [MIT 6.006 — Hashing](https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-spring-2020/resources/lecture-4-hashing/) **(watch once; first at #1)** · 🟡 [MIT 6.006 — Binary Heaps](https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-spring-2020/resources/lecture-8-binary-heaps/)\n\n**Return:** Explain why the minimum cannot be placed later and how zero counts are removed without breaking order."
+    },
+    "merge-triplets-to-form-target-triplet": {
+      "sourceIndex": 127,
+      "title": "Merge Triplets to Form Target Triplet",
+      "titleSlug": "merge-triplets-to-form-target-triplet",
+      "section": "Greedy",
+      "difficulty": "Medium",
+      "markdown": "**Cue:** Any triplet exceeding the target in one coordinate is permanently unusable.\n\n♻️ [CodePath — Greedy Algorithms](https://guides.codepath.org/compsci/Greedy-Algorithms) **(watch once; first at #25)**\n\n**Return:** After filtering overshoots, explain why independently witnessing each target coordinate is sufficient."
+    },
+    "partition-labels": {
+      "sourceIndex": 128,
+      "title": "Partition Labels",
+      "titleSlug": "partition-labels",
+      "section": "Greedy",
+      "difficulty": "Medium",
+      "markdown": "**Cue:** A segment must extend through the last occurrence of every character it already contains.\n\n♻️ [CodePath — Greedy Algorithms](https://guides.codepath.org/compsci/Greedy-Algorithms) **(watch once; first at #25)** · ♻️ [MIT 6.006 — Hashing](https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-spring-2020/resources/lecture-4-hashing/) **(watch once; first at #1)**\n\n**Return:** Maintain the current segment end and explain why cutting exactly when the scan reaches it is safe."
+    },
+    "valid-parenthesis-string": {
+      "sourceIndex": 129,
+      "title": "Valid Parenthesis String",
+      "titleSlug": "valid-parenthesis-string",
+      "section": "Greedy",
+      "difficulty": "Medium",
+      "markdown": "**Cue:** Compress all possible open-parenthesis balances into a feasible lower-to-upper range.\n\n🔴 [Greedy Invariants — Concept Video](https://www.youtube.com/watch?v=W1hdYdsqBJo) · 🟡 [CodePath — Greedy Algorithms](https://guides.codepath.org/compsci/Greedy-Algorithms)\n\n**Return:** Define both bounds, why the lower bound is clamped at zero, and when the upper bound proves failure."
+    },
+    "insert-interval": {
+      "sourceIndex": 130,
+      "title": "Insert Interval",
+      "titleSlug": "insert-interval",
+      "section": "Intervals",
+      "difficulty": "Medium",
+      "markdown": "**Cue:** A sorted interval list splits into intervals before, overlapping, and after the new interval.\n\n🔴 [MIT 6.046 — Interval Scheduling](https://www.ocw.mit.edu/courses/6-046j-design-and-analysis-of-algorithms-spring-2015/resources/lecture-1-course-overview-interval-scheduling/) · 🟡 [MIT 6.006 — Sets and Sorting](https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-spring-2020/resources/lecture-3-sets-and-sorting/)\n\n**Return:** State the three phases and why all overlapping intervals can be merged into one running interval."
+    },
+    "merge-intervals": {
+      "sourceIndex": 131,
+      "title": "Merge Intervals",
+      "titleSlug": "merge-intervals",
+      "section": "Intervals",
+      "difficulty": "Medium",
+      "markdown": "**Cue:** Sorting by start time makes every possible overlap appear next to the current merged interval.\n\n♻️ [MIT 6.046 — Interval Scheduling](https://www.ocw.mit.edu/courses/6-046j-design-and-analysis-of-algorithms-spring-2015/resources/lecture-1-course-overview-interval-scheduling/) **(watch once; first at #130)** · 🟡 [MIT 6.006 — Sets and Sorting](https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-spring-2020/resources/lecture-3-sets-and-sorting/)\n\n**Return:** Define the current merged interval and the exact overlap condition, including touching endpoints."
+    },
+    "non-overlapping-intervals": {
+      "sourceIndex": 132,
+      "title": "Non-overlapping Intervals",
+      "titleSlug": "non-overlapping-intervals",
+      "section": "Intervals",
+      "difficulty": "Medium",
+      "markdown": "**Cue:** When intervals conflict, keeping the one that finishes earlier preserves the most future space.\n\n♻️ [MIT 6.046 — Interval Scheduling](https://www.ocw.mit.edu/courses/6-046j-design-and-analysis-of-algorithms-spring-2015/resources/lecture-1-course-overview-interval-scheduling/) **(watch once; first at #130)** · 🟡 [CodePath — Greedy Algorithms](https://guides.codepath.org/compsci/Greedy-Algorithms)\n\n**Return:** Give the exchange argument for earliest finish and connect removals to the maximum compatible set."
+    },
+    "meeting-rooms": {
+      "sourceIndex": 133,
+      "title": "Meeting Rooms",
+      "titleSlug": "meeting-rooms",
+      "section": "Intervals",
+      "difficulty": "Easy",
+      "markdown": "**Cue:** After sorting by start time, only the previous meeting can conflict with the current one.\n\n♻️ [MIT 6.046 — Interval Scheduling](https://www.ocw.mit.edu/courses/6-046j-design-and-analysis-of-algorithms-spring-2015/resources/lecture-1-course-overview-interval-scheduling/) **(watch once; first at #130)** · 🟡 [MIT 6.006 — Sets and Sorting](https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-spring-2020/resources/lecture-3-sets-and-sorting/)\n\n**Return:** State the endpoint convention and explain why checking adjacent sorted intervals is sufficient."
+    },
+    "meeting-rooms-ii": {
+      "sourceIndex": 134,
+      "title": "Meeting Rooms II",
+      "titleSlug": "meeting-rooms-ii",
+      "section": "Intervals",
+      "difficulty": "Medium",
+      "markdown": "**Cue:** The answer is the maximum number of intervals active at the same time.\n\n♻️ [MIT 6.006 — Binary Heaps](https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-spring-2020/resources/lecture-8-binary-heaps/) **(watch once; first at #5)** · 🟡 [MIT 6.046 — Interval Scheduling](https://www.ocw.mit.edu/courses/6-046j-design-and-analysis-of-algorithms-spring-2015/resources/lecture-1-course-overview-interval-scheduling/)\n\n**Return:** Choose a min-heap of end times or a start/end sweep and state how equal timestamps are ordered."
+    },
+    "minimum-interval-to-include-each-query": {
+      "sourceIndex": 135,
+      "title": "Minimum Interval to Include Each Query",
+      "titleSlug": "minimum-interval-to-include-each-query",
+      "section": "Intervals",
+      "difficulty": "Hard",
+      "markdown": "**Cue:** Sort queries offline, add newly eligible intervals, and remove expired ones from a size-ordered heap.\n\n🔴 [Offline Queries with a Sweep Line](https://cfstep.com/training/tutorials/general-techniques/answering-queries-offline-with-sweepline/) · 🟡 [MIT 6.006 — Binary Heaps](https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-spring-2020/resources/lecture-8-binary-heaps/)\n\n**Return:** At query q, identify eligible, expired, heap key, and how answers return to original query order."
+    },
+    "rotate-image": {
+      "sourceIndex": 136,
+      "title": "Rotate Image",
+      "titleSlug": "rotate-image",
+      "section": "Math & Geometry",
+      "difficulty": "Medium",
+      "markdown": "🚫 **No pre-watch.** Derive the coordinate mapping or the equivalent transpose-then-reverse transformation on a small square.\n\n🟡 **After solve:** [Rotation Matrices and Coordinate Mapping](https://en.wikipedia.org/wiki/Rotation_matrix)\n\n**Return:** Map `(row, column)` to its rotated coordinate and show every cell is moved exactly once."
+    },
+    "spiral-matrix": {
+      "sourceIndex": 137,
+      "title": "Spiral Matrix",
+      "titleSlug": "spiral-matrix",
+      "section": "Math & Geometry",
+      "difficulty": "Medium",
+      "markdown": "🚫 **No pre-watch.** Maintain shrinking top, bottom, left, and right boundaries around the unvisited rectangle.\n\n🟡 **After solve:** [Row-Major and Column-Major Order](https://en.wikipedia.org/wiki/Row-_and_column-major_order)\n\n**Return:** State the remaining-region invariant and the checks needed before traversing the final row or column."
+    },
+    "set-matrix-zeroes": {
+      "sourceIndex": 138,
+      "title": "Set Matrix Zeroes",
+      "titleSlug": "set-matrix-zeroes",
+      "section": "Math & Geometry",
+      "difficulty": "Medium",
+      "markdown": "🚫 **No pre-watch.** Reuse the first row and column as marker storage without losing their original zero state.\n\n🟡 **After solve:** [Row-Major and Column-Major Order](https://en.wikipedia.org/wiki/Row-_and_column-major_order)\n\n**Return:** Name the two extra flags and the safe order for marking, filling the interior, then filling borders."
+    },
+    "happy-number": {
+      "sourceIndex": 139,
+      "title": "Happy Number",
+      "titleSlug": "happy-number",
+      "section": "Math & Geometry",
+      "difficulty": "Easy",
+      "markdown": "**Cue:** A deterministic number transformation either reaches one or eventually repeats a state.\n\n♻️ [CP-Algorithms — Tortoise and Hare](https://cp-algorithms.com/others/tortoise_and_hare.html) **(watch once; first at #36)** · 🟡 [VisuAlgo — Cycle Finding](https://visualgo.net/en/cyclefinding)\n\n**Return:** Explain why repetition means a cycle and how slow and fast transformations detect it in constant space."
+    },
+    "plus-one": {
+      "sourceIndex": 140,
+      "title": "Plus One",
+      "titleSlug": "plus-one",
+      "section": "Math & Geometry",
+      "difficulty": "Easy",
+      "markdown": "🚫 **No pre-watch.** Simulate carrying in positional notation from the least significant digit.\n\n🟡 **After solve:** [Positional Notation](https://en.wikipedia.org/wiki/Positional_notation)\n\n**Return:** Explain when the loop stops early and why an all-nine input needs one additional leading digit."
+    },
+    "powx-n": {
+      "sourceIndex": 141,
+      "title": "Pow(x, n)",
+      "titleSlug": "powx-n",
+      "section": "Math & Geometry",
+      "difficulty": "Medium",
+      "markdown": "**Cue:** Read the exponent in binary and reuse successively squared powers.\n\n🔴 [CP-Algorithms — Binary Exponentiation](https://cp-algorithms.com/algebra/binary-exp.html)\n\n**Return:** Maintain `answer × base^remaining exponent = original power` and handle zero and negative exponents."
+    },
+    "multiply-strings": {
+      "sourceIndex": 142,
+      "title": "Multiply Strings",
+      "titleSlug": "multiply-strings",
+      "section": "Math & Geometry",
+      "difficulty": "Medium",
+      "markdown": "🚫 **No pre-watch.** Rebuild grade-school multiplication with explicit digit positions and carry propagation.\n\n🟡 **After solve:** [Multiplication Algorithms and Carry Propagation](https://en.wikipedia.org/wiki/Multiplication_algorithm) · [Positional Notation](https://en.wikipedia.org/wiki/Positional_notation)\n\n**Return:** Explain contributions to positions `i+j` and `i+j+1`, carry normalization, and leading-zero removal."
+    },
+    "detect-squares": {
+      "sourceIndex": 143,
+      "title": "Detect Squares",
+      "titleSlug": "detect-squares",
+      "section": "Math & Geometry",
+      "difficulty": "Medium",
+      "markdown": "**Cue:** Fix the query point, enumerate possible diagonal points, and retrieve the other corners by coordinates.\n\n♻️ [MIT 6.006 — Hashing](https://ocw.mit.edu/courses/6-006-introduction-to-algorithms-spring-2020/resources/lecture-4-hashing/) **(watch once; first at #1)** · 🟡 [VisuAlgo — Hash Table](https://visualgo.net/en/hashtable)\n\n**Return:** Derive both missing corners, reject zero side length, and multiply independent point frequencies."
+    },
+    "single-number": {
+      "sourceIndex": 144,
+      "title": "Single Number",
+      "titleSlug": "single-number",
+      "section": "Bit Manipulation",
+      "difficulty": "Easy",
+      "markdown": "**Cue:** Even-frequency values cancel under XOR.\n\n🔴 [XOR — Intuition and Identities](https://www.youtube.com/watch?v=VPw9vPN-3ac) · 🟡 [Bit-Manipulation Toolkit](https://www.youtube.com/watch?v=1um-WUyjess)\n\n**Return:** Use `x XOR x = 0`, `x XOR 0 = x`, associativity, and commutativity without memorizing a trick."
+    },
+    "number-of-1-bits": {
+      "sourceIndex": 145,
+      "title": "Number of 1 Bits",
+      "titleSlug": "number-of-1-bits",
+      "section": "Bit Manipulation",
+      "difficulty": "Easy",
+      "markdown": "**Cue:** Remove exactly one known set bit per iteration.\n\n🔴 [CP-Algorithms — Bit Manipulation](https://cp-algorithms.com/algebra/bit-manipulation.html) · 🟡 [Bit-Manipulation Toolkit](https://www.youtube.com/watch?v=1um-WUyjess)\n\n**Return:** Show algebraically why `n AND (n-1)` clears the lowest set bit and derive work proportional to set bits."
+    },
+    "counting-bits": {
+      "sourceIndex": 146,
+      "title": "Counting Bits",
+      "titleSlug": "counting-bits",
+      "section": "Bit Manipulation",
+      "difficulty": "Easy",
+      "markdown": "**Cue:** Each answer can reference a smaller integer obtained by dropping one known bit.\n\n♻️ [CP-Algorithms — Bit Manipulation](https://cp-algorithms.com/algebra/bit-manipulation.html) **(watch once; first at #145)** · ♻️ [Dynamic Programming — Five-Step Framework](https://www.youtube.com/watch?v=aPQY__2H3tE) **(watch once; first at #99)**\n\n**Return:** Derive either `bits[i] = bits[i >> 1] + (i AND 1)` or the lowest-set-bit recurrence."
+    },
+    "reverse-bits": {
+      "sourceIndex": 147,
+      "title": "Reverse Bits",
+      "titleSlug": "reverse-bits",
+      "section": "Bit Manipulation",
+      "difficulty": "Easy",
+      "markdown": "**Cue:** Move bits between opposite ends of a fixed-width representation.\n\n🔴 [Bit-Manipulation Toolkit](https://www.youtube.com/watch?v=1um-WUyjess) · 🟡 [CP-Algorithms — Bit Manipulation](https://cp-algorithms.com/algebra/bit-manipulation.html)\n\n**Return:** State the width, source end, destination end, and shift behavior before coding."
+    },
+    "missing-number": {
+      "sourceIndex": 148,
+      "title": "Missing Number",
+      "titleSlug": "missing-number",
+      "section": "Bit Manipulation",
+      "difficulty": "Easy",
+      "markdown": "**Cue:** Pair indices with values so every present number cancels and one unmatched value remains.\n\n♻️ [XOR — Intuition and Identities](https://www.youtube.com/watch?v=VPw9vPN-3ac) **(watch once; first at #144)** · 🟡 [CP-Algorithms — Bit Manipulation](https://cp-algorithms.com/algebra/bit-manipulation.html)\n\n**Return:** Name exactly which index-value pairs cancel and include the extra index n."
+    },
+    "sum-of-two-integers": {
+      "sourceIndex": 149,
+      "title": "Sum of Two Integers",
+      "titleSlug": "sum-of-two-integers",
+      "section": "Bit Manipulation",
+      "difficulty": "Medium",
+      "markdown": "**Cue:** Binary addition is carry-free XOR plus shifted carry bits.\n\n🔴 [Two’s Complement — Concept Video](https://www.youtube.com/watch?v=lKTsv6iVxV4) · ♻️ [XOR — Intuition and Identities](https://www.youtube.com/watch?v=VPw9vPN-3ac) **(watch once; first at #144)** · 🟡 [Binary Integer Overflow](https://www.youtube.com/watch?v=WN8i5cwjkSE)\n\n**Return:** Explain XOR, `(a AND b) << 1`, fixed-width masking, termination, and negative-result conversion."
+    },
+    "reverse-integer": {
+      "sourceIndex": 150,
+      "title": "Reverse Integer",
+      "titleSlug": "reverse-integer",
+      "section": "Bit Manipulation",
+      "difficulty": "Medium",
+      "markdown": "**Cue:** Prevent fixed-width overflow before multiplying the partial result by ten and adding a digit.\n\n♻️ [Two’s Complement — Concept Video](https://www.youtube.com/watch?v=lKTsv6iVxV4) **(watch once; first at #149)** · 🟡 [Binary Integer Overflow](https://www.youtube.com/watch?v=WN8i5cwjkSE)\n\n**Return:** Derive the precondition for `result * 10 + digit`, including boundary digits for minimum and maximum integers."
+    }
+  }
+}

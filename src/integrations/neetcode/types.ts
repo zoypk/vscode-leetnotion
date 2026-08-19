@@ -11,6 +11,7 @@ export interface NeetCodeProblemMetadata {
     videoUrl?: string;
     articleMarkdown?: string;
     hintMarkdown?: string;
+    learningMarkdown?: string;
     neetcode150?: boolean;
     blind75?: boolean;
 }
@@ -19,4 +20,19 @@ export interface NeetCodeDataset {
     generatedAt: string;
     sourceRepo: string;
     problems: Record<string, NeetCodeProblemMetadata>;
+}
+
+export interface JitLearningProblemMetadata {
+    sourceIndex: number;
+    title: string;
+    titleSlug: string;
+    section: string;
+    difficulty: string;
+    markdown: string;
+}
+
+export interface JitLearningDataset {
+    source: string;
+    problemCount: number;
+    problems: Record<string, JitLearningProblemMetadata>;
 }

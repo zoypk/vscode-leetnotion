@@ -70,6 +70,7 @@ class LeetCodePreviewProvider extends LeetCodeWebview {
         };
         const { title, url, category, difficulty, likes, dislikes, body } = this.description;
         const neetCodeSection: string = this.getNeetCodeSection();
+        const learningResourcesSection: string = this.getLearningResourcesSection();
         const head: string = markdownEngine.render(`# [${title}](${url})`);
         let info: string;
         if(!this.node.rating) {
@@ -200,6 +201,7 @@ class LeetCodePreviewProvider extends LeetCodeWebview {
                 <section id="description">
                     <hr />
                     ${body}
+                    ${learningResourcesSection}
                 </section>
                 ${neetCodeSection ? `<section id="neetcode">${neetCodeSection}</section>` : ""}
                 <section id="links">
@@ -358,6 +360,21 @@ class LeetCodePreviewProvider extends LeetCodeWebview {
         sections.push(`</div>`);
 
         return sections.join("\n");
+    }
+
+    private getLearningResourcesSection(): string {
+        const learningMarkdown = neetCodeService.getProblemMetadata(this.node)?.learningMarkdown;
+        if (!learningMarkdown) {
+            return "";
+        }
+
+        return [
+            `<hr />`,
+            `<details class="learning-resources" open>`,
+            `<summary><strong>Learning resources</strong></summary>`,
+            markdownEngine.render(learningMarkdown),
+            `</details>`,
+        ].join("\n");
     }
 
     private getTagLink(tag: string): string {

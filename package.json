@@ -2,7 +2,7 @@
     "name": "vscode-leetnotion",
     "displayName": "Leetnotion",
     "description": "Solve LeetCode problems in VsCode and keep your submissions in sync with your Ultimate LeetCode Tracker template in notion",
-    "version": "1.5.2",
+    "version": "1.5.3",
     "author": "Leetnotion",
     "publisher": "Leetnotion",
     "license": "MIT",
@@ -1185,6 +1185,7 @@
         "lint": "tslint --project tsconfig.json -e src/*.d.ts -t verbose",
         "sync:companies": "node ./scripts/sync-company-data.mjs",
         "sync:neetcode": "tsc --module Node16 --moduleResolution Node16 --target ES2020 --esModuleInterop --skipLibCheck --outDir ./out ./scripts/sync-neetcode-data.ts && node ./out/sync-neetcode-data.js",
+        "import:jit-resources": "node ./scripts/import-jit-learning-resources.mjs",
         "build": "vsce package",
         "vs-publish": "vsce publish"
     },

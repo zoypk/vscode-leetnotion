@@ -1,11 +1,12 @@
 import { globalState } from "../../globalState";
 import { IProblem } from "../../shared";
 import { Mapping } from "../../types";
-import { getNeetCodeDataset } from "../../utils/dataUtils";
-import { NeetCodeDataset, NeetCodeProblemMetadata } from "./types";
+import { getJitLearningDataset, getNeetCodeDataset } from "../../utils/dataUtils";
+import { JitLearningDataset, NeetCodeDataset, NeetCodeProblemMetadata } from "./types";
 
 class NeetCodeService {
     private dataset?: NeetCodeDataset;
+    private learningDataset?: JitLearningDataset;
     private problemByTitleSlug?: Record<string, NeetCodeProblemMetadata>;
     private questionNumberTitleSlugMapping?: Mapping;
 
@@ -13,7 +14,7 @@ class NeetCodeService {
         const dataset = this.getDataset();
         const exactMatch = dataset.problems[problem.id];
         if (exactMatch) {
-            return this.withDerivedSolutionUrl(exactMatch);
+            return this.withDerivedMetadata(exactMatch);
         }
 
         const titleSlug = this.getTitleSlugByQuestionNumber(problem.id);
@@ -22,7 +23,7 @@ class NeetCodeService {
         }
 
         const matchedProblem = this.getProblemByTitleSlug()[titleSlug];
-        return matchedProblem ? this.withDerivedSolutionUrl(matchedProblem) : undefined;
+        return matchedProblem ? this.withDerivedMetadata(matchedProblem) : undefined;
     }
 
     private getDataset(): NeetCodeDataset {
@@ -30,6 +31,13 @@ class NeetCodeService {
             this.dataset = getNeetCodeDataset();
         }
         return this.dataset;
+    }
+
+    private getLearningDataset(): JitLearningDataset {
+        if (!this.learningDataset) {
+            this.learningDataset = getJitLearningDataset();
+        }
+        return this.learningDataset;
     }
 
     private getProblemByTitleSlug(): Record<string, NeetCodeProblemMetadata> {
@@ -79,6 +87,13 @@ class NeetCodeService {
                 ? `https://neetcode.io/problems/${solutionSlug}/question?list=${list}`
                 : `https://neetcode.io/problems/${solutionSlug}/question`,
         };
+    }
+
+    private withDerivedMetadata(problem: NeetCodeProblemMetadata): NeetCodeProblemMetadata {
+        const metadata = this.withDerivedSolutionUrl(problem);
+        const learningMarkdown = this.getLearningDataset().problems[problem.titleSlug]?.markdown;
+
+        return learningMarkdown ? { ...metadata, learningMarkdown } : metadata;
     }
 }
 
