@@ -32,10 +32,10 @@ class LeetnotionManager {
             const previousQuestionsDatabaseId = globalState.getQuestionsDatabaseId();
             await leetnotionClient.setDatabaseIds();
             if (!previousQuestionsDatabaseId || previousQuestionsDatabaseId !== globalState.getQuestionsDatabaseId()) {
-                globalState.setNotionIntegrationStatus("pending");
+                await globalState.setNotionIntegrationStatus("pending");
                 await this.updateNotionInfo();
             }
-            globalState.setNotionIntegrationStatus("done");
+            await globalState.setNotionIntegrationStatus("done");
         } catch (error) {
             leetCodeChannel.appendLine(`Error enabling notion integration: ${error}`);
         }
@@ -220,8 +220,8 @@ class LeetnotionManager {
     public async clearAllData(): Promise<void> {
         try {
             await leetCodeManager.signOut();
-            globalState.clearAllNotionDetails();
-            templateUpdateSession.close();
+            await globalState.clearAllNotionDetails();
+            await templateUpdateSession.close();
             leetnotionClient.signOut();
         } catch (error) {
 

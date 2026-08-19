@@ -70,7 +70,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         });
 
         leetCodeTreeDataProvider.initialize(context);
-        globalState.initialize(context);
+        await globalState.initialize(context);
         leetcodeClient.initialize();
         leetnotionClient.initialize();
         await sessionState.initialize((key, value) => vscode.commands.executeCommand("setContext", key, value));
@@ -80,10 +80,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
             startRecurringTasks();
         }
 
-        leetcodeClient.setTitleSlugQuestionNumberMapping();
+        void leetcodeClient.setTitleSlugQuestionNumberMapping();
         if (globalState.getNotionIntegrationStatus() === "pending") {
             leetnotionManager.updateNotionInfo().then(async () => {
-                globalState.setNotionIntegrationStatus("done");
+                await globalState.setNotionIntegrationStatus("done");
                 await reviewTreeDataProvider.refresh();
             });
         }

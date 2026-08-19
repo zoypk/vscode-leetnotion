@@ -56,13 +56,13 @@ class LeetnotionClient {
             leetCodeChannel.appendLine(`Invalid notion questions database id`);
             return;
         }
-        globalState.setQuestionsDatabaseId(questionsDatabaseId);
+        await globalState.setQuestionsDatabaseId(questionsDatabaseId);
         const submissionsDatabaseId = await this.notion?.getDatabaseId(SubmissionsDatabaseKey);
         if (!submissionsDatabaseId) {
             leetCodeChannel.appendLine(`Invalid notion submissions database id`);
             return;
         }
-        globalState.setSubmissionsDatabaseId(submissionsDatabaseId);
+        await globalState.setSubmissionsDatabaseId(submissionsDatabaseId);
     }
 
     public async updateTemplateInformation(callbackFn: () => void = noop) {
@@ -78,7 +78,7 @@ class LeetnotionClient {
                 if (!questionNumber) return;
                 questionNumberPageIdMapping[questionNumber.toString()] = page.id;
             })
-        globalState.setQuestionNumberPageIdMapping(questionNumberPageIdMapping);
+        await globalState.setQuestionNumberPageIdMapping(questionNumberPageIdMapping);
     }
 
     public getPageIdOfQuestion(questionNumber: string): string | null {
@@ -249,7 +249,7 @@ class LeetnotionClient {
                 let prevTags = globalState.getUserQuestionTags();
                 if (!prevTags) prevTags = [];
                 const allTags = Array.from(new Set([...prevTags, ...message.finalTags]));
-                globalState.setUserQuestionTags(allTags);
+                await globalState.setUserQuestionTags(allTags);
             }
             return true;
         } catch (error) {
@@ -321,7 +321,7 @@ class LeetnotionClient {
             })
             const tags = databaseProperties.properties["Tags"] as MultiSelectDatabasePropertyConfigResponse
             const questionTags = tags.multi_select.options.map(({ name }) => name);
-            globalState.setUserQuestionTags(questionTags);
+            await globalState.setUserQuestionTags(questionTags);
         } catch (error) {
             leetCodeChannel.appendLine(`Failed to set user question tags: ${error}`);
         }

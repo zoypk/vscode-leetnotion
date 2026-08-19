@@ -13,7 +13,7 @@ export class TemplateUpdateSession {
         const pendingSessionDetails = globalState.getPendingSession();
         if (!pendingSessionDetails) {
             leetCodeChannel.appendLine('There is no pending session. So creating a new session');
-            this.currentSessionId = this.createNewSession();
+            this.currentSessionId = await this.createNewSession();
         } else {
             const option = await window.showQuickPick(['Continue', 'Restart'], {
                 title: `You have a discontinued template update session`,
@@ -26,20 +26,20 @@ export class TemplateUpdateSession {
                 this.currentSessionId = pendingSessionDetails.id;
                 leetCodeChannel.appendLine('There is a pending session. The pending session will be continued to update template.');
             } else {
-                globalState.setPendingSession(undefined);
+                await globalState.setPendingSession(undefined);
                 for (const key of this.keys) {
-                    globalState.update(`${pendingSessionDetails.id}.${key}`, undefined);
+                    await globalState.update(`${pendingSessionDetails.id}.${key}`, undefined);
                 }
-                this.currentSessionId = this.createNewSession();
+                this.currentSessionId = await this.createNewSession();
                 leetCodeChannel.appendLine('Created a new update session');
             }
         }
     }
 
-    private createNewSession() {
+    private async createNewSession() {
         const createdTime = new Date();
         const newSessionId = `session-${createdTime.getTime()}`;
-        globalState.setPendingSession({
+        await globalState.setPendingSession({
             id: newSessionId,
             createdTime
         })
@@ -49,7 +49,7 @@ export class TemplateUpdateSession {
             [UPDATED_PAGES]: {},
         };
         for (const [key, value] of Object.entries(newSession)) {
-            globalState.update(`${newSessionId}.${key}`, value);
+            await globalState.update(`${newSessionId}.${key}`, value);
         }
         leetCodeChannel.appendLine(`Created new session with session ID: ${newSessionId}`);
         return newSessionId;
@@ -80,9 +80,9 @@ export class TemplateUpdateSession {
     }
 
     async close() {
-        globalState.setPendingSession(undefined);
+        await globalState.setPendingSession(undefined);
         for (const key of this.keys) {
-            this.update(key, undefined);
+            await this.update(key, undefined);
         }
     }
 }

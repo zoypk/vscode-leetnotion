@@ -95,7 +95,7 @@ export class TemplateUpdater {
                         throw new Error(`question-number-not-found-in-page`);
                     }
                     questionNumberPageIdMapping[questionNumber.toString()] = response.id;
-                    globalState.setQuestionNumberPageIdMapping(questionNumberPageIdMapping);
+                    await globalState.setQuestionNumberPageIdMapping(questionNumberPageIdMapping);
                     count += 1;
                     progress.report({
                         increment: (1 / noOfPages) * 100,

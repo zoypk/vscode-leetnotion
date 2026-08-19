@@ -1,4 +1,5 @@
 import * as vscode from "vscode";
+import { ExtensionStorage } from "./storage/extensionStorage";
 import { Lists, Mapping, PendingSessionDetails, ProblemRatingMap, QuestionsOfList, TopicTags } from "./types";
 
 export const CookieKey = "leetcode-cookie";
@@ -28,256 +29,81 @@ export type UserDataType = {
 
 export type NotionIntegrationStatus = "done" | "pending";
 
-class GlobalState {
+export class GlobalState {
     private context: vscode.ExtensionContext;
-    private _state: vscode.Memento;
+    private readonly storage = new ExtensionStorage();
 
-    private _cookie?: string;
-    private _userStatus?: UserDataType;
-
-    private _topicTags?: TopicTags;
-    private _dailyProblemId?: string;
-    private _notionAccessToken?: string;
-    private _questionsDatabaseId?: string;
-    private _submissionsDatabaseId?: string;
-    private _questionNumberPageIdMapping?: Mapping;
-    private _titleSlugQuestionNumberMapping?: Mapping;
-    private _notionIntegrationStatus?: NotionIntegrationStatus;
-    private _userQuestionTags?: string[];
-    private _pendingSession?: PendingSessionDetails;
-    private _lists?: Lists;
-    private _questionsOfList?: Record<string, QuestionsOfList>;
-    private _problemRatingMap?: ProblemRatingMap;
-    private _pinnedSheets?: string[];
-
-    public initialize(context: vscode.ExtensionContext): void {
+    public async initialize(context: vscode.ExtensionContext): Promise<void> {
         this.context = context;
-        this._state = this.context.globalState;
+        await this.storage.initialize(context);
     }
 
-    public setCookie(cookie: string): any {
-        this._cookie = cookie;
-        return this._state.update(CookieKey, cookie);
-    }
-
-    public getCookie(): string | undefined {
-        return this._cookie ?? this._state.get(CookieKey);
-    }
-
-    public setUserStatus(userStatus: UserDataType): any {
-        this._userStatus = userStatus;
-        return this._state.update(UserStatusKey, userStatus);
-    }
-
-    public getUserStatus(): UserDataType | undefined {
-        return this._userStatus ?? this._state.get(UserStatusKey);
-    }
-
-    public removeCookie(): void {
-        this._cookie = undefined;
-        this._state.update(CookieKey, undefined);
-    }
-
-    public removeAll(): void {
-        this._cookie = undefined;
-        this._userStatus = undefined;
-        this._state.update(CookieKey, undefined);
-        this._state.update(UserStatusKey, undefined);
-    }
-
-    public setTopicTags(topicTags: TopicTags): any {
-        this._topicTags = topicTags;
-        return this._state.update(TopicTagsKey, topicTags);
-    }
-
-    public getTopicTags(): TopicTags | undefined {
-        return this._topicTags ?? this._state.get(TopicTagsKey);
-    }
-
-    public async setDailyProblem(dailyProblemId: string): Promise<any> {
-        this._dailyProblemId = dailyProblemId;
-        return await this._state.update(DailyProblemKey, dailyProblemId);
-    }
-
-    public getDailyProblem(): string | undefined {
-        return this._dailyProblemId ?? this._state.get(DailyProblemKey);
-    }
-
-    public async setNotionAccessToken(accessToken: string): Promise<any> {
-        this._notionAccessToken = accessToken;
-        return await this._state.update(NotionAccessTokenKey, accessToken);
-    }
-
-    public getNotionAccessToken(): string | undefined {
-        return this._notionAccessToken ?? this._state.get(NotionAccessTokenKey);
-    }
-
-    public setQuestionsDatabaseId(id: string): any {
-        this._questionsDatabaseId = id;
-        return this._state.update(QuestionsDatabaseIdKey, id);
-    }
-
-    public getQuestionsDatabaseId(): string | undefined {
-        return this._questionsDatabaseId ?? this._state.get(QuestionsDatabaseIdKey);
-    }
-
-    public setSubmissionsDatabaseId(id: string): any {
-        this._submissionsDatabaseId = id;
-        return this._state.update(SubmissionsDatabaseIdKey, id);
-    }
-
-    public getSubmissionsDatabaseId(): string | undefined {
-        return this._submissionsDatabaseId ?? this._state.get(SubmissionsDatabaseIdKey);
-    }
-
-    public setQuestionNumberPageIdMapping(mapping: Mapping): any {
-        this._questionNumberPageIdMapping = mapping;
-        return this._state.update(QuestionNumberPageIdMappingKey, mapping);
-    }
-
-    public getQuestionNumberPageIdMapping(): Mapping | undefined {
-        return this._questionNumberPageIdMapping ?? this._state.get(QuestionNumberPageIdMappingKey);
-    }
-
-    public setTitleSlugQuestionNumberMapping(mapping: Mapping): any {
-        this._titleSlugQuestionNumberMapping = mapping;
-        return this._state.update(TitleSlugQuestionNumberMappingKey, mapping);
-    }
-
-    public getTitleSlugQuestionNumberMapping(): Mapping | undefined {
-        return this._titleSlugQuestionNumberMapping ?? this._state.get(TitleSlugQuestionNumberMappingKey);
-    }
-
-    public setNotionIntegrationStatus(status: NotionIntegrationStatus): any {
-        this._notionIntegrationStatus = status;
-        return this._state.update(NotionIntegrationStatusKey, status);
-    }
-
-    public getNotionIntegrationStatus(): NotionIntegrationStatus | undefined {
-        return this._notionIntegrationStatus ?? this._state.get(NotionIntegrationStatusKey);
-    }
-
-    public getExtensionUri(): vscode.Uri {
-        return this.context.extensionUri;
-    }
-
-    public setUserQuestionTags(tags: string[]): any {
-        this._userQuestionTags = tags;
-        return this._state.update(UserQuestionTagsKey, tags);
-    }
-
-    public getUserQuestionTags(): string[] | undefined {
-        return this._userQuestionTags ?? this._state.get(UserQuestionTagsKey);
-    }
-
-    public setPendingSession(pendingSession: PendingSessionDetails | undefined): any {
-        this._pendingSession = pendingSession;
-        return this._state.update(PendingSessionKey, pendingSession);
-    }
-
-    public getPendingSession(): PendingSessionDetails | undefined {
-        return this._pendingSession ?? this._state.get(PendingSessionKey);
-    }
-
-    public setLists(lists: Lists | undefined): any {
-        this._lists = lists;
-        return this._state.update(LeetcodeListsKey, lists);
-    }
-
-    public getLists(): Lists | undefined {
-        return this._lists ?? this._state.get(LeetcodeListsKey);
-    }
+    public setCookie(value: string): Promise<void> { return this.update(CookieKey, value); }
+    public getCookie(): string | undefined { return this.get(CookieKey); }
+    public setUserStatus(value: UserDataType): Promise<void> { return this.update(UserStatusKey, value); }
+    public getUserStatus(): UserDataType | undefined { return this.get(UserStatusKey); }
+    public removeCookie(): Promise<void> { return this.update(CookieKey, undefined); }
+    public async removeAll(): Promise<void> { await this.storage.clear([CookieKey, UserStatusKey]); }
+    public setTopicTags(value: TopicTags): Promise<void> { return this.update(TopicTagsKey, value); }
+    public getTopicTags(): TopicTags | undefined { return this.get(TopicTagsKey); }
+    public setDailyProblem(value: string): Promise<void> { return this.update(DailyProblemKey, value); }
+    public getDailyProblem(): string | undefined { return this.get(DailyProblemKey); }
+    public setNotionAccessToken(value: string): Promise<void> { return this.update(NotionAccessTokenKey, value); }
+    public getNotionAccessToken(): string | undefined { return this.get(NotionAccessTokenKey); }
+    public setQuestionsDatabaseId(value: string): Promise<void> { return this.update(QuestionsDatabaseIdKey, value); }
+    public getQuestionsDatabaseId(): string | undefined { return this.get(QuestionsDatabaseIdKey); }
+    public setSubmissionsDatabaseId(value: string): Promise<void> { return this.update(SubmissionsDatabaseIdKey, value); }
+    public getSubmissionsDatabaseId(): string | undefined { return this.get(SubmissionsDatabaseIdKey); }
+    public setQuestionNumberPageIdMapping(value: Mapping): Promise<void> { return this.update(QuestionNumberPageIdMappingKey, value); }
+    public getQuestionNumberPageIdMapping(): Mapping | undefined { return this.get(QuestionNumberPageIdMappingKey); }
+    public setTitleSlugQuestionNumberMapping(value: Mapping): Promise<void> { return this.update(TitleSlugQuestionNumberMappingKey, value); }
+    public getTitleSlugQuestionNumberMapping(): Mapping | undefined { return this.get(TitleSlugQuestionNumberMappingKey); }
+    public setNotionIntegrationStatus(value: NotionIntegrationStatus): Promise<void> { return this.update(NotionIntegrationStatusKey, value); }
+    public getNotionIntegrationStatus(): NotionIntegrationStatus | undefined { return this.get(NotionIntegrationStatusKey); }
+    public setUserQuestionTags(value: string[]): Promise<void> { return this.update(UserQuestionTagsKey, value); }
+    public getUserQuestionTags(): string[] | undefined { return this.get(UserQuestionTagsKey); }
+    public setPendingSession(value: PendingSessionDetails | undefined): Promise<void> { return this.update(PendingSessionKey, value); }
+    public getPendingSession(): PendingSessionDetails | undefined { return this.get(PendingSessionKey); }
+    public setLists(value: Lists | undefined): Promise<void> { return this.update(LeetcodeListsKey, value); }
+    public getLists(): Lists | undefined { return this.get(LeetcodeListsKey); }
+    public getProblemRatingMap(): ProblemRatingMap | undefined { return this.get(ProblemRatingMapKey); }
+    public setProblemRatingMap(value: ProblemRatingMap): Promise<void> { return this.update(ProblemRatingMapKey, value); }
+    public setPinnedSheets(value: string[]): Promise<void> { return this.update(PinnedSheetsKey, value); }
+    public getPinnedSheets(): string[] { return this.get(PinnedSheetsKey) ?? []; }
+    public isPinnedSheet(sheet: string): boolean { return this.getPinnedSheets().includes(sheet); }
 
     public async setQuestionsOfList(questions: QuestionsOfList, listId: string): Promise<void> {
-        if (!this._questionsOfList) {
-            this._initializeQuestionsOfList();
-        }
-        this._questionsOfList[listId] = questions;
-        await this._state.update(QuestionsOfListKey, this._questionsOfList);
+        const saved = this.get<Record<string, QuestionsOfList>>(QuestionsOfListKey) ?? {};
+        await this.update(QuestionsOfListKey, { ...saved, [listId]: questions });
     }
 
     public async getQuestionsOfList(listId: string): Promise<QuestionsOfList | undefined> {
-        if (!this._questionsOfList) {
-            await this._initializeQuestionsOfList();
-        }
-        return this._questionsOfList[listId] ?? [];
+        return this.get<Record<string, QuestionsOfList>>(QuestionsOfListKey)?.[listId] ?? [];
     }
 
-    private async _initializeQuestionsOfList(): Promise<void> {
-        const savedState = this._state.get<Record<string, QuestionsOfList>>(QuestionsOfListKey) || {};
-        this._questionsOfList = { ...savedState };
-    }
-
-    public getProblemRatingMap() {
-        return this._problemRatingMap ?? this._state.get(ProblemRatingMapKey);
-    }
-
-    public setProblemRatingMap(problemRatingMap: ProblemRatingMap) {
-        this._problemRatingMap = problemRatingMap;
-        return this._state.update(ProblemRatingMapKey, problemRatingMap);
-    }
-
-    public setPinnedSheets(pinnedSheets: string[]): any {
-        this._pinnedSheets = pinnedSheets;
-        return this._state.update(PinnedSheetsKey, pinnedSheets);
-    }
-
-    public getPinnedSheets(): string[] {
-        return this._pinnedSheets ?? this._state.get(PinnedSheetsKey) ?? [];
-    }
-
-    public isPinnedSheet(sheet: string): boolean {
-        return this.getPinnedSheets().includes(sheet);
-    }
-
-    public async getWithBackgroundRefresh<T>(
-        key: string,
-        fetchFn: () => Promise<T>,
-    ): Promise<any> {
-        const cached = this.get(key);
-        if (cached) {
-            fetchFn()
-                .then((fresh) => this.update(key, fresh))
-                .catch(() => {});
+    public async getWithBackgroundRefresh<T>(key: string, fetchFn: () => Promise<T>): Promise<T> {
+        const cached = this.get<T>(key);
+        if (cached !== undefined) {
+            void fetchFn().then((refreshedValue) => this.update(key, refreshedValue)).catch(() => undefined);
             return cached;
-        } else {
-            const fresh = await fetchFn();
-            await this.update(key, fresh);
-            return fresh;
         }
+        const loadedValue = await fetchFn();
+        await this.update(key, loadedValue);
+        return loadedValue;
     }
 
-    public clearAllNotionDetails(): void {
-        this._topicTags = undefined;
-        this._dailyProblemId = undefined;
-        this._notionAccessToken = undefined;
-        this._questionsDatabaseId = undefined;
-        this._submissionsDatabaseId = undefined;
-        this._questionNumberPageIdMapping = undefined;
-        this._notionIntegrationStatus = undefined
-        this._userQuestionTags = undefined;
-        this._pendingSession = undefined;
-        this._state.update(TopicTagsKey, undefined);
-        this._state.update(DailyProblemKey, undefined);
-        this._state.update(NotionAccessTokenKey, undefined);
-        this._state.update(QuestionsDatabaseIdKey, undefined);
-        this._state.update(SubmissionsDatabaseIdKey, undefined);
-        this._state.update(QuestionNumberPageIdMappingKey, undefined);
-        this._state.update(NotionIntegrationStatusKey, undefined);
-        this._state.update(UserQuestionTagsKey, undefined);
-        this._state.update(PendingSessionKey, undefined);
-        this._state.update(LeetcodeListsKey, undefined);
-        this._state.update(QuestionsOfListKey, undefined);
-        this._state.update(ProblemRatingMapKey, undefined);
+    public async clearAllNotionDetails(): Promise<void> {
+        await this.storage.clear([
+            TopicTagsKey, DailyProblemKey, NotionAccessTokenKey, QuestionsDatabaseIdKey,
+            SubmissionsDatabaseIdKey, QuestionNumberPageIdMappingKey, NotionIntegrationStatusKey,
+            UserQuestionTagsKey, PendingSessionKey, LeetcodeListsKey, QuestionsOfListKey,
+            ProblemRatingMapKey,
+        ]);
     }
 
-    public get(key: string) {
-        return this._state.get(key);
-    }
-
-    public async update(key: string, value: any) {
-        await this._state.update(key, value);
-    }
+    public getExtensionUri(): vscode.Uri { return this.context.extensionUri; }
+    public get<T = unknown>(key: string): T | undefined { return this.storage.get<T>(key); }
+    public update(key: string, value: unknown): Promise<void> { return this.storage.update(key, value); }
 }
 
-export const globalState: GlobalState = new GlobalState();
+export const globalState = new GlobalState();

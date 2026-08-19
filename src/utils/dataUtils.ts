@@ -97,7 +97,7 @@ export async function getQuestionTopicTags(): Promise<TopicTags> {
 
     if (!topicTags) {
         topicTags = await leetcodeClient.getTopicTags();
-        globalState.setTopicTags(topicTags);
+        await globalState.setTopicTags(topicTags);
     }
 
     return topicTags;
@@ -108,7 +108,7 @@ export async function getProblemRatingMap(): Promise<ProblemRatingMap> {
 
     if (!problemRatingMap) {
         problemRatingMap = await leetcodeClient.getProblemRatingsMap();
-        globalState.setProblemRatingMap(problemRatingMap);
+        await globalState.setProblemRatingMap(problemRatingMap);
     }
 
     return problemRatingMap;
@@ -116,7 +116,7 @@ export async function getProblemRatingMap(): Promise<ProblemRatingMap> {
 
 export async function setProblemRatingMap() {
     const problemRatingMap = await leetcodeClient.getProblemRatingsMap();
-    globalState.setProblemRatingMap(problemRatingMap);
+    await globalState.setProblemRatingMap(problemRatingMap);
 }
 
 export function getCompanyPopularity(): Record<string, number> {
@@ -149,7 +149,7 @@ export async function getLists(): Promise<Lists> {
     let lists = globalState.getLists();
     if (!lists) {
         lists = await leetcodeClient.getLists();
-        globalState.setLists(lists);
+        await globalState.setLists(lists);
     }
     return lists;
 }
@@ -168,7 +168,7 @@ export async function getListsWithQuestions(): Promise<ListsWithQuestions> {
 
 export async function setLists() {
     const lists = await leetcodeClient.getLists();
-    globalState.setLists(lists);
+    await globalState.setLists(lists);
 }
 
 export async function setQuestionsOfAllLists() {

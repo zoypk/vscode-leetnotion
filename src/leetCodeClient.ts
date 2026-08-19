@@ -121,7 +121,7 @@ class LeetcodeClient {
 
     public async setTitleSlugQuestionNumberMapping() {
         const mapping = await this.leetcode.getTitleSlugQuestionNumberMapping();
-        globalState.setTitleSlugQuestionNumberMapping(mapping);
+        await globalState.setTitleSlugQuestionNumberMapping(mapping);
         return mapping;
     }
 
