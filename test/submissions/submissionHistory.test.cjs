@@ -47,6 +47,26 @@ test("terminates on a duplicate-only page and keeps the first authoritative row"
     assert.deepEqual(result, first);
 });
 
+test("requests a full page near the cap so mixed duplicates cannot stop collection at 99", async () => {
+    const pages = new Map();
+    for (let offset = 0; offset < 80; offset += 20) {
+        pages.set(offset, Array.from({ length: 20 }, (_, index) => row(offset + index + 1)));
+    }
+    pages.set(80, [row(1), row(2), ...Array.from({ length: 18 }, (_, index) => row(81 + index))]);
+    pages.set(100, [row(98), row(99), row(100), ...Array.from({ length: 17 }, (_, index) => row(101 + index))]);
+    const calls = [];
+
+    const result = await collectSubmissionHistory(async (offset, limit) => {
+        calls.push([offset, limit]);
+        return (pages.get(offset) || []).slice(0, limit);
+    });
+
+    assert.deepEqual(calls, [[0, 20], [20, 20], [40, 20], [60, 20], [80, 20], [100, 20]]);
+    assert.equal(result.length, 100);
+    assert.ok(result.some((item) => item.id === 99));
+    assert.ok(result.some((item) => item.id === 100));
+});
+
 test("ignores invalid identifiers and supports an empty partial page", async () => {
     const result = await collectSubmissionHistory(async () => [row(0), row(-1)], { pageSize: 20 });
     assert.deepEqual(result, []);

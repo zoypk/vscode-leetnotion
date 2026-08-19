@@ -22,7 +22,7 @@ export async function collectSubmissionHistory<T extends SubmissionHistoryPageIt
     const submissions = new Map<number, T>();
 
     for (let offset = 0; submissions.size < cap; offset += pageSize) {
-        const page = await fetchPage(offset, Math.min(pageSize, cap - submissions.size));
+        const page = await fetchPage(offset, pageSize);
         let added = 0;
 
         for (const submission of page) {
