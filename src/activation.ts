@@ -90,6 +90,28 @@ export interface ExtensionRegistrationDependencies {
     recurringWork: DisposableLike;
 }
 
+export async function initializeDurableMapping(initialize: () => Promise<unknown>): Promise<void> {
+    await initialize();
+}
+
+export async function runActivationGuard(
+    resources: DisposableLike,
+    initialize: () => Promise<void>,
+    handleFailure: (error: unknown) => Promise<void> | void,
+): Promise<boolean> {
+    try {
+        await initialize();
+        return true;
+    } catch (error) {
+        try {
+            await handleFailure(error);
+        } finally {
+            resources.dispose();
+        }
+        return false;
+    }
+}
+
 export class ActivationResources implements DisposableLike {
     private readonly resources: DisposableLike[] = [];
     private disposed = false;

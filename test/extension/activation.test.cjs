@@ -7,10 +7,12 @@ const {
     CORE_RESOURCE_KEYS,
     EXTENSION_COMMAND_IDS,
     INTERNAL_COMMAND_IDS,
+    initializeDurableMapping,
     registerCoreActivationResources,
     registerActivationResources,
     registerExtensionResources,
     registerNodeEvent,
+    runActivationGuard,
 } = require("../../out-test/activation");
 
 test("every injected registration is disposed exactly once in reverse order", () => {
@@ -130,4 +132,45 @@ test("a failed real registration disposes everything registered before the failu
         EXTENSION_COMMAND_IDS[1], EXTENSION_COMMAND_IDS[0], "uri", "status",
         "study", "reviews", "explorer", "webview", "decoration",
     ]);
+});
+
+test("durable mapping rejection is handled, stops later initialization, and cleans activation resources", async () => {
+    const events = [];
+    let disposeCount = 0;
+    const resources = { dispose() { disposeCount += 1; events.push("dispose"); } };
+
+    const succeeded = await runActivationGuard(resources, async () => {
+        events.push("mapping:start");
+        await initializeDurableMapping(async () => {
+            throw new Error("mapping write failed");
+        });
+        events.push("later-initialization");
+    }, async (error) => {
+        events.push(`handled:${error.message}`);
+    });
+
+    assert.equal(succeeded, false);
+    assert.equal(disposeCount, 1);
+    assert.deepEqual(events, ["mapping:start", "handled:mapping write failed", "dispose"]);
+});
+
+test("durable mapping completes before later activation work", async () => {
+    const events = [];
+    const gate = {};
+    gate.promise = new Promise((resolve) => { gate.resolve = resolve; });
+    const activation = runActivationGuard({ dispose() {} }, async () => {
+        await initializeDurableMapping(async () => {
+            events.push("mapping:start");
+            await gate.promise;
+            events.push("mapping:stored");
+        });
+        events.push("later-initialization");
+    }, () => undefined);
+
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.deepEqual(events, ["mapping:start"]);
+    gate.resolve();
+
+    assert.equal(await activation, true);
+    assert.deepEqual(events, ["mapping:start", "mapping:stored", "later-initialization"]);
 });

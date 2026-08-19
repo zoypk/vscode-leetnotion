@@ -5,9 +5,11 @@ import * as vscode from "vscode";
 import {
     ActivationResources,
     ExtensionCommandHandlers,
+    initializeDurableMapping,
     registerCoreActivationResources,
     registerExtensionResources,
     registerNodeEvent,
+    runActivationGuard,
 } from "./activation";
 import { codeLensController } from "./codelens/CodeLensController";
 import * as cache from "./commands/cache";
@@ -81,7 +83,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         studyTreeProvider: studyTreeDataProvider,
         explorerNodeManager,
     }));
-    try {
+    const activationSucceeded = await runActivationGuard(activeResources, async () => {
         if (!(await leetCodeExecutor.meetRequirements(context))) {
             throw new Error("The environment doesn't meet requirements.");
         }
@@ -111,7 +113,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
             startRecurringTasks();
         }
 
-        void leetcodeClient.setTitleSlugQuestionNumberMapping();
+        await initializeDurableMapping(() => leetcodeClient.setTitleSlugQuestionNumberMapping());
         if (globalState.getNotionIntegrationStatus() === "pending") {
             leetnotionManager.updateNotionInfo().then(async () => {
                 await globalState.setNotionIntegrationStatus("done");
@@ -229,11 +231,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
         await leetCodeExecutor.switchEndpoint(plugin.getLeetCodeEndpoint());
         await leetCodeManager.getLoginStatus();
-    } catch (error) {
+    }, async (error) => {
         await sessionState.dispose();
-        leetCodeChannel.appendLine(error.toString());
+        leetCodeChannel.appendLine(String(error));
         promptForOpenOutputChannel("Extension initialization failed. Please open output channel for details.", DialogType.error);
-        activeResources?.dispose();
+    });
+    if (!activationSucceeded) {
         activeResources = undefined;
     }
 }
