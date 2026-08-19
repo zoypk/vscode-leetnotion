@@ -814,7 +814,7 @@
                         }
                     },
                     "leetnotion.study.newProblemsPerDay": {
-                        "type": "number",
+                        "type": "integer",
                         "scope": "application",
                         "description": "How many new backlog problems to plan each day.",
                         "default": 3,

@@ -1,8 +1,4 @@
-import { explorerNodeManager } from "../explorer/explorerNodeManager";
-import { globalState } from "../globalState";
-import { getUrl } from "../shared";
-import { getReviewSheetFilters } from "../utils/settingUtils";
-import { extractArrayElements, getSheets } from "../utils/dataUtils";
+import { ReviewStateStorage, reviewStorage } from "./reviewStorage";
 import {
     ReviewItem,
     ReviewProblemSnapshot,
@@ -11,13 +7,11 @@ import {
     ReviewSchedulingOption,
     ReviewSection,
     ReviewSectionId,
-    ReviewStateFile,
     ReviewStatus,
     SerializedFsrsCard,
 } from "./types";
-import { reviewStorage } from "./reviewStorage";
 
-type FsrsCard = {
+export type FsrsCard = {
     due: Date;
     stability: number;
     difficulty: number;
@@ -30,22 +24,57 @@ type FsrsCard = {
     last_review?: Date;
 };
 
-// Load ts-fsrs at runtime so the extension host uses the package's native
-// CommonJS entrypoint instead of an inlined bundle transform.
-const { createEmptyCard, fsrs, Rating } = eval("require")("ts-fsrs");
+interface FsrsScheduler {
+    repeat(card: FsrsCard, now: Date): Record<number, { card: FsrsCard }>;
+    next(card: FsrsCard, now: Date, rating: number): { card: FsrsCard };
+    get_retrievability(card: FsrsCard, now: Date, decimal: boolean): number;
+}
 
-const scheduler = fsrs();
+interface ReviewServiceOptions {
+    storage: ReviewStateStorage;
+    clock: () => Date;
+    scheduler: FsrsScheduler;
+    createEmptyCard: (now: Date) => FsrsCard;
+    resolveProblem: (
+        questionNumber: string,
+        snapshot?: Partial<ReviewProblemSnapshot>,
+        existing?: ReviewProblemSnapshot,
+    ) => ReviewProblemSnapshot;
+    activeFilters: () => string[];
+}
 
-const reviewRatingOrder: Array<{ rating: ReviewRating; label: string; fsrsRating: number }> = [
-    { rating: "again", label: "Again", fsrsRating: Rating.Again },
-    { rating: "hard", label: "Hard", fsrsRating: Rating.Hard },
-    { rating: "good", label: "Good", fsrsRating: Rating.Good },
-    { rating: "easy", label: "Easy", fsrsRating: Rating.Easy },
+// tslint:disable-next-line:no-eval
+const fsrsPackage = eval("require")("ts-fsrs");
+const defaultScheduler: FsrsScheduler = fsrsPackage.fsrs();
+const ratingValues: Record<ReviewRating, number> = {
+    again: fsrsPackage.Rating.Again,
+    hard: fsrsPackage.Rating.Hard,
+    good: fsrsPackage.Rating.Good,
+    easy: fsrsPackage.Rating.Easy,
+};
+const reviewRatingOrder: { rating: ReviewRating; label: string }[] = [
+    { rating: "again", label: "Again" },
+    { rating: "hard", label: "Hard" },
+    { rating: "good", label: "Good" },
+    { rating: "easy", label: "Easy" },
 ];
 
-class ReviewService {
+export class ReviewService {
+    private readonly options: ReviewServiceOptions;
+
+    constructor(options: Partial<ReviewServiceOptions> = {}) {
+        this.options = {
+            storage: options.storage ?? reviewStorage,
+            clock: options.clock ?? (() => new Date()),
+            scheduler: options.scheduler ?? defaultScheduler,
+            createEmptyCard: options.createEmptyCard ?? fsrsPackage.createEmptyCard,
+            resolveProblem: options.resolveProblem ?? this.resolveProblemFromExtension.bind(this),
+            activeFilters: options.activeFilters ?? this.getConfiguredFilters,
+        };
+    }
+
     public isConfigured(): boolean {
-        return reviewStorage.isConfigured();
+        return this.options.storage.isConfigured();
     }
 
     public async getSections(): Promise<ReviewSection[]> {
@@ -57,42 +86,77 @@ class ReviewService {
     }
 
     public getActiveReviewFilters(): string[] {
-        const sheets = getSheets();
-        const availableFilters = new Set(Object.keys(sheets));
-        return getReviewSheetFilters().filter((filter) => availableFilters.has(filter));
+        return this.options.activeFilters();
     }
 
-    public async addProblem(questionNumber: string, snapshot?: Partial<ReviewProblemSnapshot>): Promise<"added" | "updated"> {
-        const state = await reviewStorage.load();
-        const existingRecord = state.reviews[questionNumber];
-        const now = new Date();
-        const nowIso = now.toISOString();
-        const card = existingRecord ? this.deserializeCard(existingRecord.fsrsCard) : createEmptyCard(now);
+    public addProblem(
+        questionNumber: string,
+        snapshot?: Partial<ReviewProblemSnapshot>,
+    ): Promise<"added" | "updated"> {
+        const now = this.options.clock();
+        return this.options.storage.transaction((state) => {
+            const existing = state.reviews[questionNumber];
+            if (!existing) {
+                state.reviews[questionNumber] = this.createRecord(questionNumber, now, snapshot);
+                return "added";
+            }
+            state.reviews[questionNumber] = {
+                ...existing,
+                problem: this.options.resolveProblem(questionNumber, snapshot, existing.problem),
+                updatedAt: now.toISOString(),
+            };
+            return "updated";
+        });
+    }
 
-        card.due = now;
+    public ensureInitiallyScheduled(
+        questionNumber: string,
+        snapshot?: Partial<ReviewProblemSnapshot>,
+        initialRating?: ReviewRating,
+    ): Promise<"added" | "existing"> {
+        const now = this.options.clock();
+        return this.options.storage.transaction((state) => {
+            const existing = state.reviews[questionNumber];
+            if (existing) {
+                state.reviews[questionNumber] = {
+                    ...existing,
+                    problem: this.options.resolveProblem(questionNumber, snapshot, existing.problem),
+                    updatedAt: now.toISOString(),
+                };
+                return "existing";
+            }
 
-        state.reviews[questionNumber] = {
-            questionNumber,
-            problem: this.resolveProblemSnapshot(questionNumber, snapshot, existingRecord?.problem),
-            fsrsCard: this.serializeCard(card),
-            createdAt: existingRecord?.createdAt ?? nowIso,
-            updatedAt: nowIso,
-            lastReviewedAt: existingRecord?.lastReviewedAt,
-            lastRating: existingRecord?.lastRating,
-        };
+            const created = this.createRecord(questionNumber, now, snapshot);
+            state.reviews[questionNumber] = initialRating
+                ? this.rateRecord(created, initialRating, now)
+                : created;
+            return "added";
+        });
+    }
 
-        await reviewStorage.save(state);
-        return existingRecord ? "updated" : "added";
+    public addAndApplyRating(
+        questionNumber: string,
+        rating: ReviewRating,
+        snapshot?: Partial<ReviewProblemSnapshot>,
+    ): Promise<{ result: "added" | "updated"; dueAt: string }> {
+        const now = this.options.clock();
+        return this.options.storage.transaction((state) => {
+            const existing = state.reviews[questionNumber];
+            const record = existing
+                ? { ...existing, problem: this.options.resolveProblem(questionNumber, snapshot, existing.problem) }
+                : this.createRecord(questionNumber, now, snapshot);
+            const rated = this.rateRecord(record, rating, now);
+            state.reviews[questionNumber] = rated;
+            return { result: existing ? "updated" : "added", dueAt: rated.fsrsCard.due };
+        });
     }
 
     public async getSchedulingOptions(questionNumber: string): Promise<ReviewSchedulingOption[]> {
         const record = await this.getRecord(questionNumber);
-        const now = new Date();
-        const preview = scheduler.repeat(this.deserializeCard(record.fsrsCard), now);
-
-        return reviewRatingOrder.map(option => {
-            const nextDue = preview[option.fsrsRating].card.due;
-
+        const now = this.options.clock();
+        const preview = this.options.scheduler.repeat(this.deserializeCard(record.fsrsCard), now);
+        return reviewRatingOrder.map((option) => {
+            const nextDue = preview[ratingValues[option.rating]].card.due;
             return {
                 rating: option.rating,
                 label: option.label,
@@ -103,118 +167,119 @@ class ReviewService {
         });
     }
 
-    public async applyRating(questionNumber: string, rating: ReviewRating): Promise<string> {
-        const state = await reviewStorage.load();
-        const record = state.reviews[questionNumber];
-        if (!record) {
-            throw new Error(`Review record ${questionNumber} was not found.`);
+    public applyRating(questionNumber: string, rating: ReviewRating): Promise<string> {
+        const now = this.options.clock();
+        return this.options.storage.transaction((state) => {
+            const record = state.reviews[questionNumber];
+            if (!record) {
+                throw new Error(`Review record ${questionNumber} was not found.`);
+            }
+            const rated = this.rateRecord(record, rating, now);
+            state.reviews[questionNumber] = rated;
+            return rated.fsrsCard.due;
+        });
+    }
+
+    public scheduleAt(questionNumber: string, dueDate: Date): Promise<void> {
+        if (Number.isNaN(dueDate.getTime())) {
+            return Promise.reject(new Error("Review due date must be valid."));
         }
+        const now = this.options.clock();
+        return this.options.storage.transaction((state) => {
+            const record = state.reviews[questionNumber];
+            if (!record) {
+                throw new Error(`Review record ${questionNumber} was not found.`);
+            }
+            const card = this.deserializeCard(record.fsrsCard);
+            card.due = dueDate;
+            state.reviews[questionNumber] = {
+                ...record,
+                problem: this.options.resolveProblem(questionNumber, undefined, record.problem),
+                fsrsCard: this.serializeCard(card),
+                updatedAt: now.toISOString(),
+            };
+        });
+    }
 
-        const now = new Date();
+    public snoozeReview(questionNumber: string, dueDate: Date): Promise<void> {
+        return this.scheduleAt(questionNumber, dueDate);
+    }
+
+    public removeProblem(questionNumber: string): Promise<void> {
+        return this.options.storage.transaction((state) => {
+            delete state.reviews[questionNumber];
+        });
+    }
+
+    private createRecord(
+        questionNumber: string,
+        now: Date,
+        snapshot?: Partial<ReviewProblemSnapshot>,
+    ): ReviewRecord {
         const nowIso = now.toISOString();
-        const result = scheduler.next(this.deserializeCard(record.fsrsCard), now, this.toFsrsRating(rating));
+        const card = this.options.createEmptyCard(now);
+        card.due = now;
+        return {
+            questionNumber,
+            problem: this.options.resolveProblem(questionNumber, snapshot),
+            fsrsCard: this.serializeCard(card),
+            createdAt: nowIso,
+            updatedAt: nowIso,
+        };
+    }
 
-        state.reviews[questionNumber] = {
+    private rateRecord(record: ReviewRecord, rating: ReviewRating, now: Date): ReviewRecord {
+        const result = this.options.scheduler.next(this.deserializeCard(record.fsrsCard), now, ratingValues[rating]);
+        const nowIso = now.toISOString();
+        return {
             ...record,
-            problem: this.resolveProblemSnapshot(questionNumber, undefined, record.problem),
+            problem: this.options.resolveProblem(record.questionNumber, undefined, record.problem),
             fsrsCard: this.serializeCard(result.card),
             updatedAt: nowIso,
             lastReviewedAt: nowIso,
             lastRating: rating,
         };
-
-        await reviewStorage.save(state);
-        return result.card.due.toISOString();
-    }
-
-    public async snoozeReview(questionNumber: string, dueDate: Date): Promise<void> {
-        const state = await reviewStorage.load();
-        const record = state.reviews[questionNumber];
-        if (!record) {
-            throw new Error(`Review record ${questionNumber} was not found.`);
-        }
-
-        const card = this.deserializeCard(record.fsrsCard);
-        card.due = dueDate;
-
-        state.reviews[questionNumber] = {
-            ...record,
-            problem: this.resolveProblemSnapshot(questionNumber, undefined, record.problem),
-            fsrsCard: this.serializeCard(card),
-            updatedAt: new Date().toISOString(),
-        };
-
-        await reviewStorage.save(state);
     }
 
     private async getReviewData(): Promise<{ dueItems: ReviewItem[]; sections: ReviewSection[] }> {
-        const state = await reviewStorage.load();
+        const state = await this.options.storage.read();
         const dueItems: ReviewItem[] = [];
         const upcomingItems: ReviewItem[] = [];
-        const now = new Date();
+        const now = this.options.clock();
         const filterSummary = this.getActiveReviewFilters();
-
         for (const record of Object.values(state.reviews)) {
             if (!this.matchesActiveFilters(record.questionNumber, filterSummary)) {
                 continue;
             }
-
             const review = this.toReviewItem(record, now);
-
-            if (review.status === "upcoming") {
-                upcomingItems.push(review);
-            } else {
-                dueItems.push(review);
-            }
+            (review.status === "upcoming" ? upcomingItems : dueItems).push(review);
         }
-
-        const sortByDate = (left: ReviewItem, right: ReviewItem) => {
-            if (left.dueAt === right.dueAt) {
-                return Number(left.questionNumber) - Number(right.questionNumber);
-            }
-
-            return left.dueAt.localeCompare(right.dueAt);
-        };
-
+        const sortByDate = (left: ReviewItem, right: ReviewItem) => left.dueAt === right.dueAt
+            ? Number(left.questionNumber) - Number(right.questionNumber)
+            : left.dueAt.localeCompare(right.dueAt);
         dueItems.sort(sortByDate);
         upcomingItems.sort(sortByDate);
-
         return {
             dueItems,
             sections: [
-                {
-                    id: ReviewSectionId.Due,
-                    label: "Due",
-                    emptyLabel: filterSummary.length > 0 ? "No due reviews for current filter" : "No due reviews",
-                    items: dueItems,
-                    overdueCount: dueItems.filter(review => review.status === "overdue").length,
-                },
-                {
-                    id: ReviewSectionId.Upcoming,
-                    label: "Upcoming",
-                    emptyLabel: filterSummary.length > 0 ? "No upcoming reviews for current filter" : "No upcoming reviews",
-                    items: upcomingItems,
-                    overdueCount: 0,
-                },
+                { id: ReviewSectionId.Due, label: "Due", emptyLabel: filterSummary.length > 0 ? "No due reviews for current filter" : "No due reviews", items: dueItems, overdueCount: dueItems.filter((review) => review.status === "overdue").length },
+                { id: ReviewSectionId.Upcoming, label: "Upcoming", emptyLabel: filterSummary.length > 0 ? "No upcoming reviews for current filter" : "No upcoming reviews", items: upcomingItems, overdueCount: 0 },
             ],
         };
     }
 
     private async getRecord(questionNumber: string): Promise<ReviewRecord> {
-        const state = await reviewStorage.load();
-        const record = state.reviews[questionNumber];
+        const record = (await this.options.storage.read()).reviews[questionNumber];
         if (!record) {
             throw new Error(`Review record ${questionNumber} was not found.`);
         }
-
         return record;
     }
 
     private toReviewItem(record: ReviewRecord, now: Date): ReviewItem {
         const dueDate = this.parseDate(record.fsrsCard.due);
         const status = this.getStatus(dueDate, now);
-        const snapshot = this.resolveProblemSnapshot(record.questionNumber, undefined, record.problem);
-
+        const snapshot = this.options.resolveProblem(record.questionNumber, undefined, record.problem);
         return {
             id: record.questionNumber,
             questionNumber: record.questionNumber,
@@ -228,7 +293,7 @@ class ReviewService {
             scheduledDays: record.fsrsCard.scheduled_days,
             stability: record.fsrsCard.stability,
             memoryDifficulty: record.fsrsCard.difficulty,
-            retrievability: this.getRetrievability(record.fsrsCard, now),
+            retrievability: this.options.scheduler.get_retrievability(this.deserializeCard(record.fsrsCard), now, false),
             reps: record.fsrsCard.reps,
             lapses: record.fsrsCard.lapses,
             lastReviewedAt: record.lastReviewedAt,
@@ -240,28 +305,23 @@ class ReviewService {
         if (reviewDate.getTime() > now.getTime()) {
             return "upcoming";
         }
-
-        if (reviewDate < this.startOfDay(now)) {
-            return "overdue";
-        }
-
-        return "due-today";
+        return reviewDate < this.startOfDay(now) ? "overdue" : "due-today";
     }
 
     private getDayDifference(startDate: Date, endDate: Date): number {
-        const millisecondsPerDay = 24 * 60 * 60 * 1000;
-        return Math.round((this.startOfDay(endDate).getTime() - this.startOfDay(startDate).getTime()) / millisecondsPerDay);
+        return Math.round((this.startOfDay(endDate).getTime() - this.startOfDay(startDate).getTime()) / 86400000);
     }
 
     private startOfDay(date: Date): Date {
         return new Date(date.getFullYear(), date.getMonth(), date.getDate());
     }
 
-    private resolveProblemSnapshot(
+    private resolveProblemFromExtension(
         questionNumber: string,
         snapshot?: Partial<ReviewProblemSnapshot>,
         existingSnapshot?: ReviewProblemSnapshot,
     ): ReviewProblemSnapshot {
+        const { explorerNodeManager } = require("../explorer/explorerNodeManager");
         const problem = explorerNodeManager.getNodeById(questionNumber);
         return {
             name: snapshot?.name ?? problem?.name ?? existingSnapshot?.name ?? `Problem ${questionNumber}`,
@@ -271,41 +331,27 @@ class ReviewService {
     }
 
     private getProblemUrl(questionNumber: string): string {
+        const { globalState } = require("../globalState");
+        const { getUrl } = require("../shared");
         const mapping = globalState.getTitleSlugQuestionNumberMapping();
-        if (!mapping) {
-            return "";
-        }
-
-        const titleSlug = Object.keys(mapping).find((slug) => mapping[slug] === questionNumber);
+        const titleSlug = mapping && Object.keys(mapping).find((slug) => mapping[slug] === questionNumber);
         return titleSlug ? `${getUrl("base")}/problems/${titleSlug}` : "";
     }
 
     private serializeCard(card: FsrsCard): SerializedFsrsCard {
         return {
-            due: card.due.toISOString(),
-            stability: card.stability,
-            difficulty: card.difficulty,
-            elapsed_days: card.elapsed_days,
-            scheduled_days: card.scheduled_days,
-            learning_steps: card.learning_steps,
-            reps: card.reps,
-            lapses: card.lapses,
-            state: card.state,
+            due: card.due.toISOString(), stability: card.stability, difficulty: card.difficulty,
+            elapsed_days: card.elapsed_days, scheduled_days: card.scheduled_days,
+            learning_steps: card.learning_steps, reps: card.reps, lapses: card.lapses, state: card.state,
             last_review: card.last_review ? card.last_review.toISOString() : null,
         };
     }
 
     private deserializeCard(card: SerializedFsrsCard): FsrsCard {
         return {
-            due: this.parseDate(card.due),
-            stability: card.stability,
-            difficulty: card.difficulty,
-            elapsed_days: card.elapsed_days,
-            scheduled_days: card.scheduled_days,
-            learning_steps: card.learning_steps,
-            reps: card.reps,
-            lapses: card.lapses,
-            state: card.state,
+            due: this.parseDate(card.due), stability: card.stability, difficulty: card.difficulty,
+            elapsed_days: card.elapsed_days, scheduled_days: card.scheduled_days,
+            learning_steps: card.learning_steps, reps: card.reps, lapses: card.lapses, state: card.state,
             last_review: card.last_review ? this.parseDate(card.last_review) : undefined,
         };
     }
@@ -315,65 +361,41 @@ class ReviewService {
         if (Number.isNaN(parsed.getTime())) {
             throw new Error(`Invalid review date: ${value}`);
         }
-
         return parsed;
     }
 
-    private toFsrsRating(rating: ReviewRating): number {
-        return reviewRatingOrder.find((option) => option.rating === rating)?.fsrsRating ?? Rating.Good;
-    }
-
     private formatRelativeInterval(now: Date, dueDate: Date): string {
-        const diffMs = Math.max(0, dueDate.getTime() - now.getTime());
-        const diffMinutes = Math.ceil(diffMs / (60 * 1000));
-        if (diffMinutes <= 1) {
-            return "due now";
-        }
-
-        if (diffMinutes < 60) {
-            return `in ${diffMinutes}m`;
-        }
-
-        const diffHours = Math.ceil(diffMinutes / 60);
-        if (diffHours < 24) {
-            return `in ${diffHours}h`;
-        }
-
-        return `in ${Math.ceil(diffHours / 24)}d`;
+        const minutes = Math.ceil(Math.max(0, dueDate.getTime() - now.getTime()) / 60000);
+        if (minutes <= 1) { return "due now"; }
+        if (minutes < 60) { return `in ${minutes}m`; }
+        const hours = Math.ceil(minutes / 60);
+        return hours < 24 ? `in ${hours}h` : `in ${Math.ceil(hours / 24)}d`;
     }
 
     private formatAbsoluteDue(dueDate: Date, now: Date): string {
         const dateLabel = this.formatDate(dueDate);
         const timeLabel = dueDate.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
-
-        if (this.formatDate(now) === dateLabel) {
-            return `today at ${timeLabel}`;
-        }
-
-        return `${dateLabel} at ${timeLabel}`;
-    }
-
-    private getRetrievability(card: SerializedFsrsCard, now: Date): number {
-        return scheduler.get_retrievability(this.deserializeCard(card), now, false);
+        return this.formatDate(now) === dateLabel ? `today at ${timeLabel}` : `${dateLabel} at ${timeLabel}`;
     }
 
     private matchesActiveFilters(questionNumber: string, filters: string[]): boolean {
-        if (filters.length === 0) {
-            return true;
-        }
-
+        if (filters.length === 0) { return true; }
+        const { extractArrayElements, getSheets } = require("../utils/dataUtils");
         const sheets = getSheets();
-        return filters.some((filter) => {
-            const sheet = sheets[filter];
-            return sheet ? extractArrayElements(sheet).includes(questionNumber) : false;
-        });
+        return filters.some((filter) => sheets[filter] && extractArrayElements(sheets[filter]).includes(questionNumber));
+    }
+
+    private getConfiguredFilters(): string[] {
+        const { getSheets } = require("../utils/dataUtils");
+        const { getReviewSheetFilters } = require("../utils/settingUtils");
+        const availableFilters = new Set(Object.keys(getSheets()));
+        return getReviewSheetFilters().filter((filter) => availableFilters.has(filter));
     }
 
     private formatDate(date: Date): string {
-        const year = date.getFullYear();
         const month = `${date.getMonth() + 1}`.padStart(2, "0");
         const day = `${date.getDate()}`.padStart(2, "0");
-        return `${year}-${month}-${day}`;
+        return `${date.getFullYear()}-${month}-${day}`;
     }
 }
 

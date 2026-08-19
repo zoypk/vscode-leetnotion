@@ -10,8 +10,6 @@ export interface StudyStateStorage {
     isConfigured(): boolean;
     read(): Promise<StudyStateFile>;
     transaction<R>(mutator: (state: StudyStateFile) => R | Promise<R>): Promise<R>;
-    load(): Promise<StudyStateFile>;
-    save(state: StudyStateFile): Promise<void>;
 }
 
 export class StudyStorage implements StudyStateStorage {
@@ -35,18 +33,6 @@ export class StudyStorage implements StudyStateStorage {
 
     public transaction<R>(mutator: (state: StudyStateFile) => R | Promise<R>): Promise<R> {
         return this.store.transaction(mutator);
-    }
-
-    public load(): Promise<StudyStateFile> {
-        return this.read();
-    }
-
-    public save(nextState: StudyStateFile): Promise<void> {
-        return this.transaction((state) => {
-            state.version = nextState.version;
-            state.backlog = nextState.backlog;
-            state.dailyPlans = nextState.dailyPlans;
-        });
     }
 
     public getStudyFilePath(): string {

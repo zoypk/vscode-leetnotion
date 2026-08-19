@@ -41,11 +41,13 @@ export async function setStudyTopicFilters(filters: string[]): Promise<void> {
 }
 
 export function getStudyNewProblemsPerDay(): number {
-    return getWorkspaceConfiguration().get<number>("study.newProblemsPerDay", 3);
+    const value = getWorkspaceConfiguration().get<number>("study.newProblemsPerDay", 3);
+    return Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0;
 }
 
 export async function setStudyNewProblemsPerDay(value: number): Promise<void> {
-    await getWorkspaceConfiguration().update("study.newProblemsPerDay", value, true);
+    const normalized = Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0;
+    await getWorkspaceConfiguration().update("study.newProblemsPerDay", normalized, true);
 }
 
 export function shouldUseStudyWeekdaysOnly(): boolean {

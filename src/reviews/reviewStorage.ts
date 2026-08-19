@@ -10,8 +10,6 @@ export interface ReviewStateStorage {
     isConfigured(): boolean;
     read(): Promise<ReviewStateFile>;
     transaction<R>(mutator: (state: ReviewStateFile) => R | Promise<R>): Promise<R>;
-    load(): Promise<ReviewStateFile>;
-    save(state: ReviewStateFile): Promise<void>;
 }
 
 export class ReviewStorage implements ReviewStateStorage {
@@ -35,17 +33,6 @@ export class ReviewStorage implements ReviewStateStorage {
 
     public transaction<R>(mutator: (state: ReviewStateFile) => R | Promise<R>): Promise<R> {
         return this.store.transaction(mutator);
-    }
-
-    public load(): Promise<ReviewStateFile> {
-        return this.read();
-    }
-
-    public save(nextState: ReviewStateFile): Promise<void> {
-        return this.transaction((state) => {
-            state.version = nextState.version;
-            state.reviews = nextState.reviews;
-        });
     }
 
     public getReviewFilePath(): string {

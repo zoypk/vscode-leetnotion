@@ -16,7 +16,7 @@ export class StudyTreeDataProvider implements vscode.TreeDataProvider<StudyNode>
     public async refresh(): Promise<void> {
         this.hasLoaded = true;
         try {
-            this.sections = studyService.isConfigured() ? await studyService.getSections() : [];
+            this.sections = studyService.isConfigured() ? await studyService.refresh() : [];
             this.errorMessage = undefined;
         } catch (error) {
             this.sections = [];
