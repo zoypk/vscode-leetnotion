@@ -39,6 +39,9 @@ test("rejects executable, local, protocol-relative, encoded, and malformed URLs"
         "javascript:alert(1)",
         "JaVaScRiPt:alert(1)",
         "jav&#x61;script&colon;alert(1)",
+        "&#106;&#97;&#118;&#97;&#115;&#99;&#114;&#105;&#112;&#116;&#58;alert(1)",
+        "&#x6a;&#x61;&#x76;&#x61;&#x73;&#x63;&#x72;&#x69;&#x70;&#x74;&#x3a;alert(1)",
+        "java&Tab;script&colon;alert(1)",
         "java&#9;script:alert(1)",
         "command:leetnotion.signin",
         "file:///etc/passwd",
@@ -53,6 +56,19 @@ test("rejects executable, local, protocol-relative, encoded, and malformed URLs"
     }
     assert.equal(security.allowWebviewUrl("#description"), "#description");
     assert.equal(security.allowWebviewUrl("https://example.com/a"), "https://example.com/a");
+    assert.equal(security.allowWebviewUrl("https&colon;&sol;&sol;example.com/a"), "https://example.com/a");
+    assert.equal(security.allowWebviewUrl("https&#58;&#47;&#x2f;example.com/a"), "https://example.com/a");
+});
+
+test("decodes the complete HTML named-reference set before safe reconstruction", () => {
+    const sanitized = security.sanitizeHtml(
+        '<p title="turn &CounterClockwiseContourIntegral; and divide &frac13;">'
+        + 'turn &CounterClockwiseContourIntegral; and divide &frac13;</p>',
+    );
+    assert.equal(
+        sanitized,
+        '<p title="turn ∳ and divide ⅓">turn ∳ and divide ⅓</p>',
+    );
 });
 
 test("handles broken nesting, quotes, NULs, duplicate attributes, and entity attacks", () => {

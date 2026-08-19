@@ -105,7 +105,7 @@ export function renderSolutionPreviewHtml(model: SolutionPreviewHtmlModel): stri
     ${model.stylesHtml}
     <style nonce="${escapeAttribute(model.nonce)}">${previewStyles()}</style>
 </head>
-<body style="tab-size:4">
+<body>
     <section id="overview">${sanitizeHtml(model.titleHtml)}${sanitizeHtml(model.infoHtml)}</section>
     <main class="reading-column">${sanitizeHtml(model.bodyHtml)}</main>
 </body>
@@ -149,6 +149,7 @@ function quickNavLink(fragment: string, label: string): string {
 function previewStyles(): string {
     return `
 html { scroll-behavior: smooth; }
+body { tab-size: 4; }
 section { scroll-margin-top: 4rem; }
 .reading-column { width: min(100%, 68ch); margin-inline: auto; }
 .reading-column h1, .reading-column h2, .reading-column h3,

@@ -74,6 +74,7 @@ test("binds all executable and style content to the matching nonce and strict CS
     assert.equal((html.match(/<style nonce="previewNonce123">/g) || []).length, 1);
     assert.equal((html.match(/<script nonce="previewNonce123"/g) || []).length, 1);
     assert.doesNotMatch(html, /unsafe-inline|unsafe-eval|command:|file:/);
+    assert.doesNotMatch(html, /\sstyle=/i);
 });
 
 test("sanitizes solution HTML and constrains it to the reading column", () => {
@@ -87,4 +88,6 @@ test("sanitizes solution HTML and constrains it to the reading column", () => {
     });
     assert.match(html, /<main class="reading-column"><p>safe<\/p><\/main>/);
     assert.doesNotMatch(html, /javascript:|alert\(1\)|unsafe-inline|unsafe-eval/);
+    assert.doesNotMatch(html, /\sstyle=/i);
+    assert.match(html, /body \{ tab-size: 4; \}/);
 });

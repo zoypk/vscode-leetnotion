@@ -1,4 +1,5 @@
 import { randomBytes } from "crypto";
+import MarkdownIt from "markdown-it";
 
 const VOID_ELEMENTS: ReadonlySet<string> = new Set([
     "br", "hr", "img",
@@ -32,17 +33,8 @@ const ELEMENT_ATTRIBUTES: Readonly<Record<string, ReadonlySet<string>>> = {
 
 const BOOLEAN_ATTRIBUTES: ReadonlySet<string> = new Set(["open", "reversed"]);
 const URL_ATTRIBUTES: ReadonlySet<string> = new Set(["cite", "href", "src"]);
-const NAMED_REFERENCES: Readonly<Record<string, string>> = {
-    amp: "&",
-    apos: "'",
-    colon: ":",
-    gt: ">",
-    lt: "<",
-    newline: "\n",
-    nbsp: "\u00a0",
-    quot: "\"",
-    tab: "\t",
-};
+const ENTITY_REFERENCE = /&(?:#[0-9]+|#x[0-9a-f]+|[a-z][a-z0-9]+);/gi;
+const decodeMarkdownEntity = new MarkdownIt().utils.unescapeAll;
 
 interface HtmlAttribute {
     name: string;
@@ -360,44 +352,7 @@ function findTagBoundary(input: string, start: number): number {
 }
 
 function decodeCharacterReferences(value: string): string {
-    let output = "";
-    let cursor = 0;
-    while (cursor < value.length) {
-        if (value[cursor] !== "&") {
-            output += value[cursor];
-            cursor += 1;
-            continue;
-        }
-        const semicolon = value.indexOf(";", cursor + 1);
-        if (semicolon === -1 || semicolon - cursor > 32) {
-            output += "&";
-            cursor += 1;
-            continue;
-        }
-        const reference = value.slice(cursor + 1, semicolon);
-        let decoded: string | undefined;
-        if (/^#[0-9]+$/.test(reference)) {
-            decoded = decodeCodePoint(Number(reference.slice(1)));
-        } else if (/^#x[0-9a-f]+$/i.test(reference)) {
-            decoded = decodeCodePoint(parseInt(reference.slice(2), 16));
-        } else {
-            decoded = NAMED_REFERENCES[reference.toLowerCase()];
-        }
-        if (decoded === undefined) {
-            output += value.slice(cursor, semicolon + 1);
-        } else {
-            output += decoded;
-        }
-        cursor = semicolon + 1;
-    }
-    return output;
-}
-
-function decodeCodePoint(codePoint: number): string {
-    if (!Number.isFinite(codePoint) || codePoint <= 0 || codePoint > 0x10ffff || (codePoint >= 0xd800 && codePoint <= 0xdfff)) {
-        return "\ufffd";
-    }
-    return String.fromCodePoint(codePoint);
+    return value.replace(ENTITY_REFERENCE, (reference) => decodeMarkdownEntity(reference));
 }
 
 function isWhitespace(character: string | undefined): boolean {
