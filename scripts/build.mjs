@@ -49,6 +49,24 @@ const buildTargets = [
         ],
         outputFile: "public/scripts/vscode-components.js",
     },
+    {
+        label: "preview actions",
+        args: [
+            "src/webview/webviewActions.mts",
+            "-o",
+            "public/scripts/webview-actions.js",
+            "-f",
+            "esm",
+            "-p",
+            "browser",
+            "-m",
+            "--transform.target",
+            "es2020",
+            "--tsconfig",
+            "tsconfig.json",
+        ],
+        outputFile: "public/scripts/webview-actions.js",
+    },
 ];
 
 async function main() {

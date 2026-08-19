@@ -62,7 +62,7 @@ test("handles broken nesting, quotes, NULs, duplicate attributes, and entity att
         + '<p class="ok bad! also_ok\u0000" title="x\u0000y">end</div>';
     const sanitized = security.sanitizeHtml(input);
 
-    assert.doesNotMatch(sanitized, /javascript|srcset|onclick/i);
+    assert.doesNotMatch(sanitized, /javascript|srcset|onclick|unterminated/i);
     assert.match(sanitized, /<a href="https:\/\/good\.test\/">good<\/a>/);
     assert.match(sanitized, /class="ok also_ok"/);
     assert.equal((sanitized.match(/<div/g) || []).length, (sanitized.match(/<\/div>/g) || []).length);

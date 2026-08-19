@@ -298,8 +298,11 @@ function readTag(input: string, start: number): HtmlTag | undefined {
             if (quote) {
                 cursor += 1;
                 const valueStart = cursor;
-                while (cursor < input.length && input[cursor] !== quote) {
+                while (cursor < input.length && input[cursor] !== quote && input[cursor] !== ">") {
                     cursor += 1;
+                }
+                if (input[cursor] === ">") {
+                    return { attributes, closing, end: cursor + 1, name, selfClosing };
                 }
                 if (cursor >= input.length) {
                     return undefined;

@@ -1,0 +1,1 @@
+const e=acquireVsCodeApi();document.addEventListener(`click`,t=>{let n=t.target;if(!(n instanceof Element))return;let r=n.closest(`[data-action-id]`)?.dataset.actionId;r&&(t.preventDefault(),e.postMessage({action:`invoke`,id:r}))});

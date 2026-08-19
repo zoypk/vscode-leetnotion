@@ -5,6 +5,8 @@ import { ViewColumn } from "vscode";
 import { leetCodePreviewProvider } from "./leetCodePreviewProvider";
 import { ILeetCodeWebviewOption, LeetCodeWebview } from "./LeetCodeWebview";
 import { markdownEngine } from "./markdownEngine";
+import { renderSolutionPreviewHtml } from "./previewHtml";
+import { createNonce } from "./webviewSecurity";
 
 class LeetCodeSolutionProvider extends LeetCodeWebview {
 
@@ -33,7 +35,9 @@ class LeetCodeSolutionProvider extends LeetCodeWebview {
     }
 
     protected getWebviewContent(): string {
-        const styles: string = markdownEngine.getStyles(this.getPanel().webview);
+        const webview = this.getPanel().webview;
+        const nonce = createNonce();
+        const styles: string = markdownEngine.getStyles(webview, nonce);
         const { title, url, lang, author, votes } = this.solution;
         const head: string = markdownEngine.render(`# [${title}](${url})`);
         const auth: string = `[${author}](https://leetcode.com/${author}/)`;
@@ -46,20 +50,14 @@ class LeetCodeSolutionProvider extends LeetCodeWebview {
             lang: this.solution.lang,
             host: "https://discuss.leetcode.com/",
         });
-        return `
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src https:; script-src vscode-resource:; style-src vscode-resource:;"/>
-                ${styles}
-            </head>
-            <body class="vscode-body 'scrollBeyondLastLine' 'wordWrap' 'showEditorSelection'" style="tab-size:4">
-                ${head}
-                ${info}
-                ${body}
-            </body>
-            </html>
-        `;
+        return renderSolutionPreviewHtml({
+            bodyHtml: body,
+            cspSource: webview.cspSource,
+            infoHtml: info,
+            nonce,
+            stylesHtml: styles,
+            titleHtml: head,
+        });
     }
 
     protected onDidDisposeWebview(): void {

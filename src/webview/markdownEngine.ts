@@ -78,10 +78,11 @@ class MarkdownEngine implements vscode.Disposable {
     }
 
     private getSettingsStyles(nonce?: string): string {
+        const fontFamily = this.config.fontFamily.replace(/[<>;{}]/g, "");
         return [
             `<style${nonce ? ` nonce="${escapeAttribute(nonce)}"` : ""}>`,
             `body {`,
-            `    ${this.config.fontFamily ? `font-family: ${this.config.fontFamily};` : ``}`,
+            `    ${fontFamily ? `font-family: ${fontFamily};` : ``}`,
             `    ${isNaN(this.config.fontSize) ? `` : `font-size: ${this.config.fontSize}px;`}`,
             `    ${isNaN(this.config.lineHeight) ? `` : `line-height: ${this.config.lineHeight};`}`,
             `}`,
