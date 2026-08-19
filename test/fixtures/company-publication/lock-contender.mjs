@@ -36,11 +36,6 @@ signal(config.readyPath);
 waitFor(config.startPath);
 const lock = acquirePublicationLock(config.outputDirectory, {
     waitTimeoutMs: 10_000,
-    staleLockMs: config.staleLockMs,
-    onBeforeQuarantineRename: () => {
-        signal(config.quarantineReadyPath);
-        waitFor(config.quarantineReleasePath);
-    },
     onExclusiveCreate: () => {
         signal(config.exclusiveReadyPath);
         waitFor(config.exclusiveReleasePath);

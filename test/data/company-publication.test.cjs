@@ -124,7 +124,7 @@ test("published-data validation rejects sidecars from a different generation", a
     }
 });
 
-test("two interleaved publishers serialize journal ownership and finish on one generation", async () => {
+test("owner release lets a waiting publisher proceed to one coherent final generation", async () => {
     const { publication } = await modules();
     const temporaryRoot = fs.mkdtempSync(path.join(tmpdir(), "company-concurrent-publication-"));
     const outputDirectory = path.join(temporaryRoot, "data");
@@ -204,7 +204,7 @@ test("two interleaved publishers serialize journal ownership and finish on one g
     }
 });
 
-test("publication lock records ownership and recovers a dead-owner lock", async () => {
+test("publication lock records ownership and token-checked release removes only its lock", async () => {
     const { publication } = await modules();
     const outputDirectory = fs.mkdtempSync(path.join(tmpdir(), "company-stale-lock-"));
     const lockPath = path.join(outputDirectory, publication.COMPANY_PUBLICATION_LOCK_FILE);
@@ -216,124 +216,87 @@ test("publication lock records ownership and recovers a dead-owner lock", async 
         publication.releasePublicationLock(lock);
         assert.equal(fs.existsSync(lockPath), false);
 
-        fs.writeFileSync(lockPath, JSON.stringify({
+        const replaced = publication.acquirePublicationLock(outputDirectory, { waitTimeoutMs: 100 });
+        const replacementOwner = {
             schemaVersion: 1,
-            token: "00000000-0000-4000-8000-000000000000",
-            pid: 2_147_483_647,
-            createdAt: "2020-01-01T00:00:00.000Z",
-            processStartedAt: "2019-12-31T23:59:59.000Z",
-        }));
-        const old = new Date(Date.now() - 1_000);
-        fs.utimesSync(lockPath, old, old);
-        const recovered = publication.acquirePublicationLock(outputDirectory, {
-            waitTimeoutMs: 100,
-            staleLockMs: 50,
-        });
-        assert.equal(recovered.owner.pid, process.pid);
-        publication.releasePublicationLock(recovered);
-        assert.equal(fs.existsSync(lockPath), false);
+            token: "99999999-9999-4999-8999-999999999999",
+            pid: process.pid,
+            createdAt: new Date().toISOString(),
+            processStartedAt: new Date(Date.now() - process.uptime() * 1_000).toISOString(),
+        };
+        fs.writeFileSync(lockPath, JSON.stringify(replacementOwner));
+        publication.releasePublicationLock(replaced);
+        assert.deepEqual(JSON.parse(fs.readFileSync(lockPath, "utf8")), replacementOwner);
+        fs.rmSync(lockPath, { force: true });
+
     } finally {
         fs.rmSync(outputDirectory, { recursive: true, force: true });
     }
 });
 
-test("stale malformed locks are restored for manual inspection instead of deleted", async () => {
+test("dead and stale existing locks are never automatically removed", async () => {
     const { publication } = await modules();
-    const outputDirectory = fs.mkdtempSync(path.join(tmpdir(), "company-malformed-lock-"));
+    const outputDirectory = fs.mkdtempSync(path.join(tmpdir(), "company-dead-lock-"));
     const lockPath = path.join(outputDirectory, publication.COMPANY_PUBLICATION_LOCK_FILE);
+    const old = new Date(Date.now() - 86_400_000);
+    const owner = {
+        schemaVersion: 1,
+        token: "00000000-0000-4000-8000-000000000000",
+        pid: 2_147_483_647,
+        createdAt: old.toISOString(),
+        processStartedAt: new Date(old.getTime() - 1_000).toISOString(),
+    };
     try {
-        fs.writeFileSync(lockPath, "partially-written-owner");
-        const old = new Date(Date.now() - 1_000);
+        fs.writeFileSync(lockPath, JSON.stringify(owner));
         fs.utimesSync(lockPath, old, old);
         assert.throws(
             () => publication.acquirePublicationLock(outputDirectory, {
-                waitTimeoutMs: 100,
-                staleLockMs: 50,
+                waitTimeoutMs: 50,
+                pollIntervalMs: 5,
             }),
-            /Cannot verify the quarantined publication-lock owner/,
+            (error) => error.message.includes(lockPath)
+                && /PID 2147483647/.test(error.message)
+                && /token 00000000-0000-4000-8000-000000000000/.test(error.message)
+                && /manually remove this exact lock file/.test(error.message),
         );
-        assert.equal(fs.readFileSync(lockPath, "utf8"), "partially-written-owner");
-        assert.deepEqual(
-            fs.readdirSync(outputDirectory).filter((name) => name.includes(".quarantine-")),
-            [],
-        );
+        assert.deepEqual(JSON.parse(fs.readFileSync(lockPath, "utf8")), owner);
     } finally {
         fs.rmSync(outputDirectory, { recursive: true, force: true });
     }
 });
 
-test("a fresh replacement installed before quarantine is restored without overwrite", async () => {
+test("timeout diagnostic names an incomplete lock and manual fail-closed recovery", async () => {
     const { publication } = await modules();
-    const outputDirectory = fs.mkdtempSync(path.join(tmpdir(), "company-fresh-lock-"));
+    const outputDirectory = fs.mkdtempSync(path.join(tmpdir(), "company-incomplete-lock-"));
     const lockPath = path.join(outputDirectory, publication.COMPANY_PUBLICATION_LOCK_FILE);
-    const old = new Date(Date.now() - 1_000);
-    fs.writeFileSync(lockPath, JSON.stringify({
-        schemaVersion: 1,
-        token: "00000000-0000-4000-8000-000000000000",
-        pid: 2_147_483_647,
-        createdAt: old.toISOString(),
-        processStartedAt: new Date(old.getTime() - 1_000).toISOString(),
-    }));
-    fs.utimesSync(lockPath, old, old);
-    let replaced = false;
     try {
+        fs.writeFileSync(lockPath, "partially-written-owner");
         assert.throws(() => publication.acquirePublicationLock(outputDirectory, {
-            waitTimeoutMs: 75,
+            waitTimeoutMs: 50,
             pollIntervalMs: 5,
-            staleLockMs: 50,
-            onBeforeQuarantineRename: () => {
-                if (replaced) { return; }
-                replaced = true;
-                const now = new Date();
-                fs.writeFileSync(lockPath, JSON.stringify({
-                    schemaVersion: 1,
-                    token: "11111111-1111-4111-8111-111111111111",
-                    pid: process.pid,
-                    createdAt: now.toISOString(),
-                    processStartedAt: new Date(Date.now() - process.uptime() * 1_000).toISOString(),
-                }));
-                fs.utimesSync(lockPath, now, now);
-            },
-        }), /Timed out waiting for company publication lock/);
-        assert.match(fs.readFileSync(lockPath, "utf8"), /11111111-1111/);
-        assert.deepEqual(
-            fs.readdirSync(outputDirectory).filter((name) => name.includes(".quarantine-")),
-            [],
-        );
+        }), (error) => error.message.includes(lockPath)
+            && /recorded owner unavailable or incomplete/.test(error.message)
+            && /Verify that no company-data sync process is running/.test(error.message)
+            && /manually remove this exact lock file/.test(error.message));
+        assert.equal(fs.readFileSync(lockPath, "utf8"), "partially-written-owner");
     } finally {
         fs.rmSync(outputDirectory, { recursive: true, force: true });
     }
 });
 
-test("two children racing to recover one dead lock quarantine only the observed occupant", async () => {
-    const { publication } = await modules();
-    const temporaryRoot = fs.mkdtempSync(path.join(tmpdir(), "company-quarantine-race-"));
+test("three simultaneous contenders never overlap and all proceed after owner release", async () => {
+    const temporaryRoot = fs.mkdtempSync(path.join(tmpdir(), "company-three-contenders-"));
     const outputDirectory = path.join(temporaryRoot, "data");
-    fs.mkdirSync(outputDirectory);
-    const lockPath = path.join(outputDirectory, publication.COMPANY_PUBLICATION_LOCK_FILE);
-    const old = new Date(Date.now() - 2_000);
-    fs.writeFileSync(lockPath, JSON.stringify({
-        schemaVersion: 1,
-        token: "00000000-0000-4000-8000-000000000000",
-        pid: 2_147_483_647,
-        createdAt: old.toISOString(),
-        processStartedAt: new Date(old.getTime() - 1_000).toISOString(),
-    }));
-    fs.utimesSync(lockPath, old, old);
     const startPath = path.join(temporaryRoot, "start");
-    const quarantineReleasePath = path.join(temporaryRoot, "quarantine-release");
     const criticalPath = path.join(temporaryRoot, "critical");
     const violationPath = path.join(temporaryRoot, "violation");
     const contenderScript = path.join(
         repositoryRoot, "test", "fixtures", "company-publication", "lock-contender.mjs",
     );
-    const configs = ["first", "second"].map((name) => ({
+    const configs = ["first", "second", "third"].map((name) => ({
         outputDirectory,
         readyPath: path.join(temporaryRoot, `${name}-ready`),
         startPath,
-        staleLockMs: 50,
-        quarantineReadyPath: path.join(temporaryRoot, `${name}-quarantine-ready`),
-        quarantineReleasePath,
         criticalPath,
         violationPath,
         holdMs: 100,
@@ -342,18 +305,12 @@ test("two children racing to recover one dead lock quarantine only the observed 
         const contenders = configs.map((config) => spawnPublisher(contenderScript, [JSON.stringify(config)]));
         await Promise.all(configs.map((config) => waitForFile(config.readyPath)));
         fs.writeFileSync(startPath, "start\n");
-        await Promise.all(configs.map((config) => waitForFile(config.quarantineReadyPath)));
-        fs.writeFileSync(quarantineReleasePath, "release\n");
         const results = await Promise.all(contenders.map((contender) => contender.completed));
         for (const result of results) {
             assert.equal(result.code, 0, result.output);
         }
-        assert.equal(fs.existsSync(violationPath), false, "two processes entered the critical section");
-        assert.equal(fs.existsSync(lockPath), false);
-        assert.deepEqual(
-            fs.readdirSync(outputDirectory).filter((name) => name.includes(".quarantine-")),
-            [],
-        );
+        assert.equal(fs.existsSync(violationPath), false, "multiple processes entered the critical section");
+        assert.deepEqual(fs.readdirSync(outputDirectory), []);
     } finally {
         fs.rmSync(temporaryRoot, { recursive: true, force: true });
     }
@@ -374,7 +331,6 @@ test("a paused exclusive creator cannot be deleted or overtaken before writing i
         outputDirectory,
         readyPath: path.join(temporaryRoot, "first-ready"),
         startPath,
-        staleLockMs: 5_000,
         exclusiveReadyPath: path.join(temporaryRoot, "exclusive-ready"),
         exclusiveReleasePath,
         criticalPath,
@@ -385,7 +341,6 @@ test("a paused exclusive creator cannot be deleted or overtaken before writing i
         outputDirectory,
         readyPath: path.join(temporaryRoot, "second-ready"),
         startPath,
-        staleLockMs: 5_000,
         waitingPath: path.join(temporaryRoot, "second-waiting"),
         criticalPath,
         violationPath,
@@ -402,10 +357,7 @@ test("a paused exclusive creator cannot be deleted or overtaken before writing i
 
         const lockPath = path.join(outputDirectory, publication.COMPANY_PUBLICATION_LOCK_FILE);
         assert.equal(fs.statSync(lockPath).size, 0, "paused creator should still own its empty exclusive file");
-        assert.deepEqual(
-            fs.readdirSync(outputDirectory).filter((name) => name.includes(".quarantine-")),
-            [],
-        );
+        assert.deepEqual(fs.readdirSync(outputDirectory), [publication.COMPANY_PUBLICATION_LOCK_FILE]);
         fs.writeFileSync(exclusiveReleasePath, "release\n");
         const results = await Promise.all([first.completed, second.completed]);
         for (const result of results) {
@@ -413,10 +365,7 @@ test("a paused exclusive creator cannot be deleted or overtaken before writing i
         }
         assert.equal(fs.existsSync(violationPath), false, "paused creator was overtaken");
         assert.equal(fs.existsSync(lockPath), false);
-        assert.deepEqual(
-            fs.readdirSync(outputDirectory).filter((name) => name.includes(".quarantine-")),
-            [],
-        );
+        assert.deepEqual(fs.readdirSync(outputDirectory), []);
     } finally {
         fs.rmSync(temporaryRoot, { recursive: true, force: true });
     }

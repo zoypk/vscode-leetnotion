@@ -3,11 +3,9 @@ import {
     existsSync,
     fstatSync,
     fsyncSync,
-    linkSync,
     mkdirSync,
     openSync,
     readFileSync,
-    renameSync,
     rmSync,
     statSync,
     writeFileSync,
@@ -23,7 +21,6 @@ export const COMPANY_PUBLICATION_LOCK_FILE = ".company-data-publication.lock";
 
 const DEFAULT_LOCK_WAIT_MS = 30_000;
 const DEFAULT_LOCK_POLL_MS = 25;
-const DEFAULT_LOCK_STALE_MS = 30_000;
 const lockWaitBuffer = new Int32Array(new SharedArrayBuffer(4));
 const processStartedAtMs = Date.now() - process.uptime() * 1_000;
 
@@ -150,9 +147,7 @@ export function acquirePublicationLock(outputDirectory, options = {}) {
     const lockPath = join(outputDirectory, COMPANY_PUBLICATION_LOCK_FILE);
     const waitTimeoutMs = options.waitTimeoutMs ?? DEFAULT_LOCK_WAIT_MS;
     const pollIntervalMs = options.pollIntervalMs ?? DEFAULT_LOCK_POLL_MS;
-    const staleLockMs = options.staleLockMs ?? DEFAULT_LOCK_STALE_MS;
     const deadline = Date.now() + waitTimeoutMs;
-    let quarantineDeferred = false;
     while (true) {
         const owner = {
             schemaVersion: 1,
@@ -185,18 +180,8 @@ export function acquirePublicationLock(outputDirectory, options = {}) {
             if (error.code !== "EEXIST") {
                 throw error;
             }
-            if (!quarantineDeferred) {
-                const quarantine = quarantineStaleCandidate(lockPath, staleLockMs, options);
-                if (quarantine.status === "recovered") {
-                    continue;
-                }
-                if (quarantine.status === "unsafe") {
-                    throw new Error(quarantine.message);
-                }
-                quarantineDeferred = true;
-            }
             if (Date.now() >= deadline) {
-                throw new Error(`Timed out waiting for company publication lock: ${lockPath}`);
+                throw new Error(publicationLockTimeoutMessage(lockPath));
             }
             options.onWait?.(readLockOwner(lockPath));
             Atomics.wait(lockWaitBuffer, 0, 0, Math.min(pollIntervalMs, Math.max(1, deadline - Date.now())));
@@ -206,29 +191,13 @@ export function acquirePublicationLock(outputDirectory, options = {}) {
 
 export function releasePublicationLock(lock) {
     try { closeSync(lock.fileDescriptor); } catch (_closeError) { /* best effort */ }
-    const quarantinePath = `${lock.lockPath}.quarantine-release-${process.pid}-${Date.now()}-${randomUUID()}`;
     try {
-        renameSync(lock.lockPath, quarantinePath);
-    } catch (error) {
-        if (error.code !== "ENOENT") {
-            // A stale lock is recoverable by the next publisher after this process exits.
+        const currentOwner = readLockOwner(lock.lockPath);
+        if (currentOwner?.token === lock.owner.token) {
+            rmSync(lock.lockPath, { force: true });
         }
-        return;
-    }
-    const quarantinedOwner = readLockOwner(quarantinePath);
-    if (quarantinedOwner?.token === lock.owner.token) {
-        rmSync(quarantinePath, { force: true });
-        return;
-    }
-    try {
-        restoreQuarantinedLock(
-            lock.lockPath,
-            quarantinePath,
-            "Release quarantined a lock owned by a different publication process",
-            true,
-        );
     } catch (_error) {
-        // Never delete an occupant whose fencing token does not match this owner.
+        // A matching lock remains fail-closed and is named by the next timeout diagnostic.
     }
 }
 
@@ -293,104 +262,17 @@ function readLockOwner(lockPath) {
     }
 }
 
-function quarantineStaleCandidate(lockPath, staleLockMs, options) {
-    if (!isLockStale(lockPath, staleLockMs)) {
-        return { status: "busy" };
-    }
-    options.onBeforeQuarantineRename?.(lockPath);
-    const quarantinePath = `${lockPath}.quarantine-${process.pid}-${Date.now()}-${randomUUID()}`;
+function publicationLockTimeoutMessage(lockPath) {
+    const owner = readLockOwner(lockPath);
+    let ageDescription = "unknown age";
     try {
-        renameSync(lockPath, quarantinePath);
-    } catch (error) {
-        if (error.code === "ENOENT") {
-            return { status: "recovered" };
-        }
-        throw error;
-    }
-    try {
-        options.onLockQuarantined?.(quarantinePath);
-        if (!isLockStale(quarantinePath, staleLockMs)) {
-            return restoreQuarantinedLock(
-                lockPath,
-                quarantinePath,
-                "A fresh company publication lock was replaced immediately before quarantine",
-            );
-        }
-        const owner = readLockOwner(quarantinePath);
-        if (!owner) {
-            return restoreQuarantinedLock(
-                lockPath,
-                quarantinePath,
-                `Cannot verify the quarantined publication-lock owner; manually inspect ${lockPath}`,
-                true,
-            );
-        }
-        const liveness = getLockOwnerLiveness(owner);
-        if (liveness === "dead") {
-            rmSync(quarantinePath, { force: true });
-            return { status: "recovered" };
-        }
-        if (liveness === "unknown") {
-            return restoreQuarantinedLock(
-                lockPath,
-                quarantinePath,
-                `Cannot safely verify whether PID ${owner.pid} still owns the company publication lock`,
-                true,
-            );
-        }
-        return restoreQuarantinedLock(
-            lockPath,
-            quarantinePath,
-            "The stale-looking company publication lock owner is still alive",
-        );
-    } catch (error) {
-        try { restoreQuarantinedLock(lockPath, quarantinePath, String(error)); } catch (_restoreError) { /* best effort */ }
-        throw error;
-    }
-}
-
-function restoreQuarantinedLock(lockPath, quarantinePath, reason, unsafe = false) {
-    try {
-        linkSync(quarantinePath, lockPath);
-        rmSync(quarantinePath, { force: true });
-        return unsafe ? { status: "unsafe", message: reason } : { status: "busy" };
-    } catch (error) {
-        if (error.code === "EEXIST") {
-            return {
-                status: "unsafe",
-                message: `${reason}. A new owner claimed ${lockPath}; prior lock remains at ${quarantinePath}`,
-            };
-        }
-        if (error.code === "ENOENT") {
-            return { status: "busy" };
-        }
-        throw error;
-    }
-}
-
-function isLockStale(lockPath, staleLockMs) {
-    try {
-        return Date.now() - statSync(lockPath).mtimeMs > staleLockMs;
-    } catch (error) {
-        if (error.code === "ENOENT") {
-            return false;
-        }
-        throw error;
-    }
-}
-
-function getLockOwnerLiveness(owner) {
-    if (owner.pid === process.pid) {
-        return Math.abs(Date.parse(owner.processStartedAt) - processStartedAtMs) < 5_000
-            ? "alive"
-            : "dead";
-    }
-    try {
-        process.kill(owner.pid, 0);
-        return "unknown";
-    } catch (error) {
-        return error.code === "ESRCH" ? "dead" : "unknown";
-    }
+        ageDescription = `${Math.max(0, Date.now() - statSync(lockPath).mtimeMs)}ms old`;
+    } catch (_error) { /* retain unknown age */ }
+    const ownerDescription = owner
+        ? `recorded owner PID ${owner.pid}, token ${owner.token}, ${ageDescription}`
+        : `recorded owner unavailable or incomplete, ${ageDescription}`;
+    return `Timed out waiting for company publication lock ${lockPath}; ${ownerDescription}. `
+        + "Verify that no company-data sync process is running, then manually remove this exact lock file before retrying.";
 }
 
 function removeCreatedLockIfSameFile(lockPath, openedStats) {
