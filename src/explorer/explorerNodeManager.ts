@@ -1,38 +1,61 @@
 import * as _ from "lodash";
-import { Disposable } from "vscode";
+import { Disposable, Event, EventEmitter } from "vscode";
 import * as list from "../commands/list";
 import { getSortingStrategy } from "../commands/plugin";
-import { Category, CompanySortingStrategy, defaultProblem, ProblemRating, ProblemState, SortingStrategy } from "../shared";
+import { Category, CompanySortingStrategy, defaultProblem, ProblemRating, ProblemState, SortingStrategy, UserStatus } from "../shared";
 import { getCompaniesSortingStrategy, shouldHideSolvedProblem } from "../utils/settingUtils";
 import { LeetCodeNode } from "./LeetCodeNode";
 import { globalState } from "../globalState";
 import { getCompanyPopularity, getCompanyTags, getContests, getLists, getListsWithQuestions, getSheets, getTopicTags } from "../utils/dataUtils";
-import { LeetnotionTree } from "@/types";
-import { leetcodeTreeView } from "@/extension";
+import { LeetnotionTree } from "../types";
+import { leetcodeTreeView } from "../extension";
+import { leetCodeChannel } from "../leetCodeChannel";
+import { leetCodeManager } from "../leetCodeManager";
+import { RefreshCoordinator } from "./refreshCoordinator";
+
+interface ExplorerSnapshot {
+    dataTree: LeetnotionTree;
+    nodeMap: Map<string, LeetCodeNode>;
+}
 
 class ExplorerNodeManager implements Disposable {
     private explorerNodeMap: Map<string, LeetCodeNode> = new Map<string, LeetCodeNode>();
     private dataTree: LeetnotionTree = {};
+    private onDidRefreshEvent: EventEmitter<void> = new EventEmitter<void>();
+    private refreshCoordinator: RefreshCoordinator<ExplorerSnapshot> = new RefreshCoordinator<ExplorerSnapshot>({
+        buildSnapshot: () => this.buildSnapshot(),
+        installSnapshot: (snapshot) => this.installSnapshot(snapshot),
+        reportError: (error) => this.reportRefreshError(error),
+    });
+
+    public readonly onDidRefresh: Event<void> = this.onDidRefreshEvent.event;
 
     public getSheetNodeId(sheetName: string): string {
         return `${this.hasPinnedSheet(sheetName) ? Category.PinnedSheets : Category.Sheets}#${sheetName}`;
     }
 
     public async refreshCache(): Promise<void> {
-        this.dispose();
+        await this.refreshCoordinator.requestRefresh();
+    }
+
+    private async buildSnapshot(): Promise<ExplorerSnapshot> {
         const shouldHideSolved: boolean = shouldHideSolvedProblem();
         const dailyProblem = globalState.getDailyProblem();
         const allSheets = getSheets();
         const pinnedSheets = this.getPinnedSheetsData(allSheets);
         const unpinnedSheets = this.getUnpinnedSheetsData(allSheets);
+        const nodeMap: Map<string, LeetCodeNode> = new Map<string, LeetCodeNode>();
 
         let problems = await list.listProblems()
+        if (leetCodeManager.getStatus() === UserStatus.SignedIn && problems.length === 0) {
+            throw new Error("The LeetCode problem list was empty while signed in.");
+        }
         problems = problems.filter(item => !shouldHideSolved || item.state !== ProblemState.AC)
 
         for (const problem of problems) {
-            this.explorerNodeMap.set(problem.id, new LeetCodeNode(problem));
+            nodeMap.set(problem.id, new LeetCodeNode(problem));
         }
-        this.dataTree = {
+        const dataTree: LeetnotionTree = {
             [Category.All]: problems.map(problem => problem.id),
             [Category.Difficulty]: {
                 Easy: problems.filter(({ difficulty }) => difficulty === "Easy").map(problem => problem.id),
@@ -48,7 +71,19 @@ class ExplorerNodeManager implements Disposable {
             [Category.Sheets]: unpinnedSheets,
             [Category.Lists]: await getListsWithQuestions(),
         }
-        this.storeLeetCodeNodes();
+        this.storeLeetCodeNodes(dataTree, nodeMap);
+        return { dataTree, nodeMap };
+    }
+
+    private installSnapshot(snapshot: ExplorerSnapshot): void {
+        this.explorerNodeMap = snapshot.nodeMap;
+        this.dataTree = snapshot.dataTree;
+        this.onDidRefreshEvent.fire();
+    }
+
+    private reportRefreshError(error: unknown): void {
+        const message = error instanceof Error ? error.message : String(error);
+        leetCodeChannel.appendLine(`Failed to refresh the Explorer: ${message}`);
     }
 
     public getRootNodes(): LeetCodeNode[] {
@@ -107,6 +142,7 @@ class ExplorerNodeManager implements Disposable {
     public dispose(): void {
         this.explorerNodeMap.clear();
         this.dataTree = {};
+        this.onDidRefreshEvent.dispose();
     }
 
     public getParentNode(childId: string): LeetCodeNode | undefined {
@@ -220,7 +256,7 @@ class ExplorerNodeManager implements Disposable {
         }, {});
     }
 
-    private storeLeetCodeNodes() {
+    private storeLeetCodeNodes(dataTree: LeetnotionTree, nodeMap: Map<string, LeetCodeNode>): void {
         function dfs(data, curr, map: Map<string, LeetCodeNode>) {
             if(!data || Array.isArray(data)) {
                 return;
@@ -241,7 +277,7 @@ class ExplorerNodeManager implements Disposable {
                 }
             }
         }
-        dfs(this.dataTree, "", this.explorerNodeMap);
+        dfs(dataTree, "", nodeMap);
     }
 }
 

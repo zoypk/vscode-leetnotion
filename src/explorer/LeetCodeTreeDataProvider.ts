@@ -9,7 +9,7 @@ import { Category, defaultProblem, ProblemState } from "../shared";
 import { explorerNodeManager } from "./explorerNodeManager";
 import { LeetCodeNode } from "./LeetCodeNode";
 import { globalState } from "../globalState";
-import { extractArrayElements } from "@/utils/dataUtils";
+import { extractArrayElements } from "../utils/dataUtils";
 
 export class LeetCodeTreeDataProvider implements vscode.TreeDataProvider<LeetCodeNode> {
     private context: vscode.ExtensionContext;
@@ -22,11 +22,13 @@ export class LeetCodeTreeDataProvider implements vscode.TreeDataProvider<LeetCod
 
     public initialize(context: vscode.ExtensionContext): void {
         this.context = context;
+        context.subscriptions.push(explorerNodeManager.onDidRefresh(() => {
+            this.onDidChangeTreeDataEvent.fire(null);
+        }));
     }
 
     public async refresh(): Promise<void> {
         await explorerNodeManager.refreshCache();
-        this.onDidChangeTreeDataEvent.fire(null);
     }
 
     public getTreeItem(element: LeetCodeNode): vscode.TreeItem | Thenable<vscode.TreeItem> {
