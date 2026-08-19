@@ -36,9 +36,7 @@ import { globalState } from "../globalState";
 import { extractArrayElements, getCompanyTags, getLists, getSheets, getTopicTags } from "@/utils/dataUtils";
 import { CompanyTags, Lists, Sheets, TopicTags } from "@/types";
 import TrackData from "../utils/trackingUtils";
-import { SubmissionDetailRequestGuard } from "../submissions/submissionHistory";
-
-const submissionDetailRequestGuard = new SubmissionDetailRequestGuard();
+import { submissionNavigationGuard } from "../submissions/submissionHistory";
 
 export async function previewProblem(input: IProblem | vscode.Uri, isSideMode: boolean = false): Promise<void> {
     let node: IProblem;
@@ -231,6 +229,7 @@ export async function showSolution(input: LeetCodeNode | vscode.Uri): Promise<vo
 }
 
 export async function showPastSubmissions(input?: LeetCodeNode | IProblem | vscode.Uri): Promise<void> {
+    const requestGeneration = submissionNavigationGuard.begin();
     if (!leetCodeManager.getUser()) {
         await promptForSignIn();
         return;
@@ -238,24 +237,35 @@ export async function showPastSubmissions(input?: LeetCodeNode | IProblem | vsco
 
     try {
         const { questionNumber, title } = await resolveProblemForSubmissionHistory(input);
+        if (!submissionNavigationGuard.isCurrent(requestGeneration)) {
+            return;
+        }
         if (!questionNumber) {
             vscode.window.showErrorMessage("Invalid input to fetch past submissions.");
             return;
         }
 
-        await showPastSubmissionsByQuestionNumber(questionNumber, title);
+        await loadPastSubmissions(questionNumber, title, requestGeneration);
     } catch (error) {
+        if (!submissionNavigationGuard.isCurrent(requestGeneration)) {
+            return;
+        }
         leetCodeChannel.appendLine(`Failed to fetch past submissions: ${error}`);
         await promptForOpenOutputChannel("Failed to fetch past submissions. Please open the output channel for details.", DialogType.error);
     }
 }
 
 export async function showPastSubmissionsByQuestionNumber(questionNumber: string, title?: string): Promise<void> {
+    const requestGeneration = submissionNavigationGuard.begin();
     if (!leetCodeManager.getUser()) {
         await promptForSignIn();
         return;
     }
 
+    await loadPastSubmissions(questionNumber, title, requestGeneration);
+}
+
+async function loadPastSubmissions(questionNumber: string, title: string | undefined, requestGeneration: number): Promise<void> {
     try {
         const submissions = await vscode.window.withProgress(
             {
@@ -265,10 +275,16 @@ export async function showPastSubmissionsByQuestionNumber(questionNumber: string
             },
             async () => leetcodeClient.getProblemSubmissions(questionNumber)
         );
+        if (!submissionNavigationGuard.isCurrent(requestGeneration)) {
+            return;
+        }
 
         const problemTitle = title || submissions[0]?.title || `Problem ${questionNumber}`;
         leetCodePastSubmissionsProvider.show(problemTitle, questionNumber, submissions);
     } catch (error) {
+        if (!submissionNavigationGuard.isCurrent(requestGeneration)) {
+            return;
+        }
         if (isUnauthorizedLeetCodeError(error)) {
             await promptForSignIn();
             return;
@@ -280,13 +296,13 @@ export async function showPastSubmissionsByQuestionNumber(questionNumber: string
 }
 
 export async function showSubmissionDetail(submissionId: number): Promise<void> {
+    const requestGeneration = submissionNavigationGuard.begin();
     const context = leetCodePastSubmissionsProvider.getSubmissionContext(submissionId);
     if (!context) {
         leetCodeChannel.appendLine(`Ignored submission detail request for unknown submission ID: ${submissionId}`);
         return;
     }
 
-    const requestGeneration = submissionDetailRequestGuard.begin();
     try {
         const detail = await vscode.window.withProgress(
             {
@@ -296,7 +312,7 @@ export async function showSubmissionDetail(submissionId: number): Promise<void> 
             },
             async () => leetcodeClient.getSubmissionDetail(submissionId)
         );
-        if (!submissionDetailRequestGuard.isCurrent(requestGeneration)) {
+        if (!submissionNavigationGuard.isCurrent(requestGeneration)) {
             return;
         }
         leetCodeSubmissionDetailProvider.show(
@@ -306,7 +322,7 @@ export async function showSubmissionDetail(submissionId: number): Promise<void> 
             detail
         );
     } catch (error) {
-        if (!submissionDetailRequestGuard.isCurrent(requestGeneration)) {
+        if (!submissionNavigationGuard.isCurrent(requestGeneration)) {
             return;
         }
         if (isUnauthorizedLeetCodeError(error)) {

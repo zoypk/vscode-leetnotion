@@ -6,7 +6,7 @@ import { commands, ViewColumn } from "vscode";
 import { SubmissionDetailView, SubmissionHistoryItem } from "../types";
 import { openUrl } from "../utils/uiUtils";
 import { getUrl } from "../shared";
-import { resolveLeetCodeUrl, returnToSubmissionHistory } from "../submissions/submissionHistory";
+import { resolveLeetCodeUrl, returnToSubmissionHistory, submissionNavigationGuard } from "../submissions/submissionHistory";
 import { ILeetCodeWebviewOption, LeetCodeWebview } from "./LeetCodeWebview";
 import { renderSubmissionDetailHtml, resolveSubmissionDetailMessage } from "./submissionDetailHtml";
 import { leetCodePastSubmissionsProvider } from "./leetCodePastSubmissionsProvider";
@@ -56,6 +56,7 @@ class LeetCodeSubmissionDetailProvider extends LeetCodeWebview {
 
         if (message.action === "back") {
             await returnToSubmissionHistory(
+                submissionNavigationGuard,
                 () => leetCodePastSubmissionsProvider.revealExisting(this.questionNumber),
                 async () => commands.executeCommand(
                     "leetnotion.showPastSubmissionsByQuestionNumber",

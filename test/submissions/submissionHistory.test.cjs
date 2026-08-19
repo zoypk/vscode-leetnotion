@@ -6,7 +6,7 @@ const {
     keepTrustedSubmissionUrls,
     resolveLeetCodeUrl,
     returnToSubmissionHistory,
-    SubmissionDetailRequestGuard,
+    SubmissionNavigationGuard,
 } = require("../../out-test/submissions/submissionHistory.js");
 
 function row(id, timestamp = id) {
@@ -79,7 +79,7 @@ test("ignores invalid identifiers and supports an empty partial page", async () 
 });
 
 test("prevents an older detail request from replacing a newer result", async () => {
-    const guard = new SubmissionDetailRequestGuard();
+    const guard = new SubmissionNavigationGuard();
     const first = deferred();
     const second = deferred();
     const shown = [];
@@ -102,9 +102,44 @@ test("prevents an older detail request from replacing a newer result", async () 
     assert.deepEqual(shown, [[2, "second detail"]]);
 });
 
+test("prevents an older detail completion from replacing newly opened history", async () => {
+    const guard = new SubmissionNavigationGuard();
+    const detail = deferred();
+    const history = deferred();
+    const shown = [];
+
+    const loadingDetail = navigate(guard, "detail A", detail.promise, shown);
+    const loadingHistory = navigate(guard, "history B", history.promise, shown);
+    history.resolve("history result");
+    await loadingHistory;
+    detail.resolve("stale detail result");
+    await loadingDetail;
+
+    assert.deepEqual(shown, [["history B", "history result"]]);
+});
+
+test("makes concurrent history navigations latest-request-wins", async () => {
+    const guard = new SubmissionNavigationGuard();
+    const first = deferred();
+    const second = deferred();
+    const shown = [];
+
+    const loadingFirst = navigate(guard, "history A", first.promise, shown);
+    const loadingSecond = navigate(guard, "history B", second.promise, shown);
+    second.resolve("newer history");
+    await loadingSecond;
+    first.resolve("older history");
+    await loadingFirst;
+
+    assert.deepEqual(shown, [["history B", "newer history"]]);
+});
+
 test("returns to an existing retained history panel without a network reload", async () => {
+    const guard = new SubmissionNavigationGuard();
+    const inFlightDetail = guard.begin();
     let reloads = 0;
     const result = await returnToSubmissionHistory(
+        guard,
         () => true,
         async () => {
             reloads += 1;
@@ -114,11 +149,14 @@ test("returns to an existing retained history panel without a network reload", a
 
     assert.equal(result, "revealed");
     assert.equal(reloads, 0);
+    assert.equal(guard.isCurrent(inFlightDetail), false);
 });
 
 test("reloads history only when no matching retained panel exists", async () => {
+    const guard = new SubmissionNavigationGuard();
     let reloads = 0;
     const result = await returnToSubmissionHistory(
+        guard,
         () => false,
         async () => { reloads += 1; },
     );
@@ -158,4 +196,12 @@ function deferred() {
     let resolve;
     const promise = new Promise((resolvePromise) => { resolve = resolvePromise; });
     return { promise, resolve };
+}
+
+async function navigate(guard, label, resultPromise, shown) {
+    const generation = guard.begin();
+    const result = await resultPromise;
+    if (guard.isCurrent(generation)) {
+        shown.push([label, result]);
+    }
 }

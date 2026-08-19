@@ -13,7 +13,7 @@ export interface SubmissionHistoryOptions {
     cap?: number;
 }
 
-export class SubmissionDetailRequestGuard {
+export class SubmissionNavigationGuard {
     private generation = 0;
 
     public begin(): number {
@@ -25,6 +25,8 @@ export class SubmissionDetailRequestGuard {
         return requestGeneration === this.generation;
     }
 }
+
+export const submissionNavigationGuard = new SubmissionNavigationGuard();
 
 export async function collectSubmissionHistory<T extends SubmissionHistoryPageItem>(
     fetchPage: SubmissionHistoryPageFetcher<T>,
@@ -94,9 +96,11 @@ export function keepTrustedSubmissionUrls<T extends { url: string }>(
 }
 
 export async function returnToSubmissionHistory(
+    navigationGuard: SubmissionNavigationGuard,
     revealExisting: () => boolean,
     reload: () => Promise<void>
 ): Promise<"revealed" | "reloaded"> {
+    navigationGuard.begin();
     if (revealExisting()) {
         return "revealed";
     }
