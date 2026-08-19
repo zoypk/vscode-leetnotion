@@ -21,6 +21,7 @@ import { leetCodeManager } from "./leetCodeManager";
 import * as reviewCommands from "./reviews/commands";
 import { ReviewNode } from "./reviews/reviewNode";
 import { reviewTreeDataProvider } from "./reviews/reviewTreeDataProvider";
+import { sessionState } from "./sessions/sessionState";
 import * as studyCommands from "./study/commands";
 import { StudyNode } from "./study/studyNode";
 import { studyTreeDataProvider } from "./study/studyTreeDataProvider";
@@ -70,6 +71,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         globalState.initialize(context);
         leetcodeClient.initialize();
         leetnotionClient.initialize();
+        await sessionState.initialize((key, value) => vscode.commands.executeCommand("setContext", key, value));
 
         const status = leetCodeManager.getStatus();
         if (status === UserStatus.SignedIn) {
@@ -117,6 +119,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
             vscode.commands.registerCommand("leetnotion.addToBacklog", (input?: LeetCodeNode | vscode.Uri) => studyCommands.addProblemToBacklog(input)),
             vscode.commands.registerCommand("leetnotion.startReviewSession", () => reviewCommands.startReviewSession()),
             vscode.commands.registerCommand("leetnotion.startStudySession", () => studyCommands.startStudySession()),
+            vscode.commands.registerCommand("leetnotion.stopSession", async () => {
+                const stopped = await sessionState.stop();
+                if (stopped) {
+                    void vscode.window.showInformationMessage("Leetnotion session stopped.");
+                }
+            }),
             vscode.commands.registerCommand("leetnotion.setReviewFilters", () => reviewCommands.setReviewFilters()),
             vscode.commands.registerCommand("leetnotion.setStudyFilters", () => studyCommands.setStudyFilters()),
             vscode.commands.registerCommand("leetnotion.setDailyNewProblemLimit", () => studyCommands.setDailyNewProblemLimit()),
@@ -194,13 +202,15 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         await leetCodeManager.getLoginStatus();
         vscode.window.registerUriHandler({ handleUri: leetCodeManager.handleUriSignIn });
     } catch (error) {
+        await sessionState.dispose();
         leetCodeChannel.appendLine(error.toString());
         promptForOpenOutputChannel("Extension initialization failed. Please open output channel for details.", DialogType.error);
     }
 }
 
-export function deactivate(): void {
+export async function deactivate(): Promise<void> {
     intervals = clearIntervals(intervals);
+    await sessionState.dispose();
 }
 
 function startRecurringTasks() {

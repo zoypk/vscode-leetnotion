@@ -3,39 +3,38 @@ import * as show from "../commands/show";
 import { explorerNodeManager } from "../explorer/explorerNodeManager";
 import { defaultProblem, IProblem } from "../shared";
 import { ReviewItem } from "../reviews/types";
+import { sessionState } from "../sessions/sessionState";
 import { StudyBacklogItem } from "./types";
 import { studyService } from "./studyService";
-
-let studySessionActive = false;
-
-export function isStudySessionActive(): boolean {
-    return studySessionActive;
-}
-
-export function stopStudySession(): void {
-    studySessionActive = false;
-}
 
 export async function startStudySession(): Promise<void> {
     const nextItem = await studyService.getNextTodayItem();
     if (!nextItem) {
-        studySessionActive = false;
+        await sessionState.complete("study");
         void vscode.window.showInformationMessage("No study items for today.");
         return;
     }
 
-    studySessionActive = true;
-    await openStudyTarget(nextItem.kind === "review" ? nextItem.review : nextItem);
+    await sessionState.start("study");
+    try {
+        await openStudyTarget(nextItem.kind === "review" ? nextItem.review : nextItem);
+    } catch (error) {
+        await sessionState.cancel("study");
+        throw error;
+    }
 }
 
 export async function continueStudySession(): Promise<void> {
-    if (!studySessionActive) {
+    if (!sessionState.isActive("study")) {
         return;
     }
 
     const nextItem = await studyService.getNextTodayItem();
+    if (!sessionState.isActive("study")) {
+        return;
+    }
     if (!nextItem) {
-        studySessionActive = false;
+        await sessionState.complete("study");
         void vscode.window.showInformationMessage("Study session complete.");
         return;
     }

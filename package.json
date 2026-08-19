@@ -134,13 +134,22 @@
                 "command": "leetnotion.startReviewSession",
                 "title": "Start Review Session",
                 "category": "Leetnotion",
-                "icon": "$(play)"
+                "icon": "$(play)",
+                "enablement": "!leetnotion.sessionActive"
             },
             {
                 "command": "leetnotion.startStudySession",
                 "title": "Start Study Session",
                 "category": "Leetnotion",
-                "icon": "$(play)"
+                "icon": "$(play)",
+                "enablement": "!leetnotion.sessionActive"
+            },
+            {
+                "command": "leetnotion.stopSession",
+                "title": "Stop Session",
+                "category": "Leetnotion",
+                "icon": "$(debug-stop)",
+                "enablement": "leetnotion.sessionActive"
             },
             {
                 "command": "leetnotion.setReviewFilters",
@@ -386,7 +395,12 @@
                 },
                 {
                     "command": "leetnotion.startReviewSession",
-                    "when": "view == leetnotionReviews",
+                    "when": "view == leetnotionReviews && !leetnotion.sessionActive",
+                    "group": "navigation@0"
+                },
+                {
+                    "command": "leetnotion.stopSession",
+                    "when": "view == leetnotionReviews && leetnotion.sessionActive",
                     "group": "navigation@0"
                 },
                 {
@@ -401,7 +415,12 @@
                 },
                 {
                     "command": "leetnotion.startStudySession",
-                    "when": "view == leetnotionStudy",
+                    "when": "view == leetnotionStudy && !leetnotion.sessionActive",
+                    "group": "navigation@0"
+                },
+                {
+                    "command": "leetnotion.stopSession",
+                    "when": "view == leetnotionStudy && leetnotion.sessionActive",
                     "group": "navigation@0"
                 },
                 {

@@ -3,6 +3,7 @@ import { LeetCodeNode } from "../explorer/LeetCodeNode";
 import { explorerNodeManager } from "../explorer/explorerNodeManager";
 import { ReviewItem } from "../reviews/types";
 import { reviewService } from "../reviews/reviewService";
+import { sessionState } from "../sessions/sessionState";
 import { getSheets, getTopicTags } from "../utils/dataUtils";
 import {
     getStudyNewProblemsPerDay,
@@ -113,6 +114,7 @@ export async function markStudyProblemDone(item: StudyBacklogItem | StudyNode): 
         matchOnDescription: true,
     });
     if (!choice) {
+        await sessionState.cancel("study");
         return;
     }
 
@@ -251,6 +253,7 @@ export async function startStudySession(): Promise<void> {
     try {
         await startStudySessionRunner();
     } catch (error) {
+        await sessionState.cancel("study");
         await promptForOpenOutputChannel(`Failed to start study session: ${error}`, DialogType.error);
     }
 }
