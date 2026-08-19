@@ -120,7 +120,7 @@ export async function runTests(requestedTests = []) {
         return 1;
     }
 
-    const testRun = run(["--test", ...runnerOptions, ...tests]);
+    const testRun = run(["--test", "--test-concurrency=1", ...runnerOptions, ...tests]);
     if (testRun.error) {
         throw testRun.error;
     }

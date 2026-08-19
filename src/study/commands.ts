@@ -3,7 +3,7 @@ import { LeetCodeNode } from "../explorer/LeetCodeNode";
 import { explorerNodeManager } from "../explorer/explorerNodeManager";
 import { ReviewItem } from "../reviews/types";
 import { reviewService } from "../reviews/reviewService";
-import { sessionState } from "../sessions/sessionState";
+import { SessionToken, sessionState } from "../sessions/sessionState";
 import { getSheets, getTopicTags } from "../utils/dataUtils";
 import {
     getStudyNewProblemsPerDay,
@@ -82,6 +82,7 @@ export async function removeProblemFromBacklog(item: StudyBacklogItem | StudyNod
 }
 
 export async function markStudyProblemDone(item: StudyBacklogItem | StudyNode): Promise<void> {
+    const sessionToken = sessionState.token;
     const backlogItem = resolveBacklogItem(item);
     if (!backlogItem) {
         return;
@@ -114,7 +115,9 @@ export async function markStudyProblemDone(item: StudyBacklogItem | StudyNode): 
         matchOnDescription: true,
     });
     if (!choice) {
-        await sessionState.cancel("study");
+        if (sessionToken?.kind === "study") {
+            await sessionState.cancel(sessionToken);
+        }
         return;
     }
 
@@ -140,8 +143,13 @@ export async function markStudyProblemDone(item: StudyBacklogItem | StudyNode): 
         }
 
         await studyTreeDataProvider.refresh();
-        await continueStudySession();
+        if (sessionToken?.kind === "study") {
+            await continueStudySession(sessionToken);
+        }
     } catch (error) {
+        if (sessionToken?.kind === "study") {
+            await sessionState.cancel(sessionToken);
+        }
         await promptForOpenOutputChannel(`Failed to update study problem: ${error}`, DialogType.error);
     }
 }
@@ -246,14 +254,26 @@ export async function setDailyNewProblemLimit(): Promise<void> {
 }
 
 export async function startStudySession(): Promise<void> {
-    if (!await ensureStudyWorkspaceConfigured()) {
-        return;
-    }
-
+    let sessionToken: SessionToken | undefined;
     try {
-        await startStudySessionRunner();
+        sessionToken = await sessionState.acquire("study");
+        if (!sessionToken) {
+            if (sessionState.isActive()) {
+                void vscode.window.showInformationMessage("A Leetnotion session is already active.");
+            }
+            return;
+        }
+
+        if (!await ensureStudyWorkspaceConfigured()) {
+            await sessionState.cancel(sessionToken);
+            return;
+        }
+
+        await startStudySessionRunner(sessionToken);
     } catch (error) {
-        await sessionState.cancel("study");
+        if (sessionToken) {
+            await sessionState.cancel(sessionToken);
+        }
         await promptForOpenOutputChannel(`Failed to start study session: ${error}`, DialogType.error);
     }
 }

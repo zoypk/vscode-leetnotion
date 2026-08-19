@@ -3,43 +3,53 @@ import * as show from "../commands/show";
 import { explorerNodeManager } from "../explorer/explorerNodeManager";
 import { defaultProblem, IProblem } from "../shared";
 import { ReviewItem } from "../reviews/types";
-import { sessionState } from "../sessions/sessionState";
+import { SessionToken, sessionState } from "../sessions/sessionState";
 import { StudyBacklogItem } from "./types";
 import { studyService } from "./studyService";
 
-export async function startStudySession(): Promise<void> {
+export async function startStudySession(sessionToken: SessionToken): Promise<void> {
+    if (!sessionState.owns(sessionToken) || sessionToken.kind !== "study") {
+        return;
+    }
+
     const nextItem = await studyService.getNextTodayItem();
+    if (!sessionState.owns(sessionToken)) {
+        return;
+    }
     if (!nextItem) {
-        await sessionState.complete("study");
+        await sessionState.complete(sessionToken);
         void vscode.window.showInformationMessage("No study items for today.");
         return;
     }
 
-    await sessionState.start("study");
     try {
-        await openStudyTarget(nextItem.kind === "review" ? nextItem.review : nextItem);
+        if (sessionState.owns(sessionToken)) {
+            await openStudyTarget(nextItem.kind === "review" ? nextItem.review : nextItem);
+        }
     } catch (error) {
-        await sessionState.cancel("study");
+        await sessionState.cancel(sessionToken);
         throw error;
     }
 }
 
-export async function continueStudySession(): Promise<void> {
-    if (!sessionState.isActive("study")) {
+export async function continueStudySession(sessionToken: SessionToken): Promise<void> {
+    if (!sessionState.owns(sessionToken) || sessionToken.kind !== "study") {
         return;
     }
 
     const nextItem = await studyService.getNextTodayItem();
-    if (!sessionState.isActive("study")) {
+    if (!sessionState.owns(sessionToken)) {
         return;
     }
     if (!nextItem) {
-        await sessionState.complete("study");
+        await sessionState.complete(sessionToken);
         void vscode.window.showInformationMessage("Study session complete.");
         return;
     }
 
-    await openStudyTarget(nextItem.kind === "review" ? nextItem.review : nextItem);
+    if (sessionState.owns(sessionToken)) {
+        await openStudyTarget(nextItem.kind === "review" ? nextItem.review : nextItem);
+    }
 }
 
 export async function openStudyTarget(target: ReviewItem | StudyBacklogItem): Promise<void> {

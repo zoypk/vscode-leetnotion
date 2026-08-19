@@ -9,7 +9,7 @@ import { getReviewSheetFilters, setReviewSheetFilters } from "../utils/settingUt
 import { getQuestionNumber } from "../utils/toolUtils";
 import { DialogType, promptForOpenOutputChannel } from "../utils/uiUtils";
 import { getActiveFilePath, selectWorkspaceFolder } from "../utils/workspaceUtils";
-import { sessionState } from "../sessions/sessionState";
+import { SessionToken, sessionState } from "../sessions/sessionState";
 import { continueStudySession } from "../study/session";
 import { studyTreeDataProvider } from "../study/studyTreeDataProvider";
 import { reviewService } from "./reviewService";
@@ -69,6 +69,7 @@ export async function openReviewProblem(review: ReviewItem | ReviewNode | StudyN
 }
 
 export async function markReviewReviewed(review: ReviewItem | ReviewNode | StudyNode): Promise<void> {
+    const sessionToken = sessionState.token;
     const reviewItem = resolveReviewItem(review);
     if (!reviewItem) {
         return;
@@ -76,7 +77,9 @@ export async function markReviewReviewed(review: ReviewItem | ReviewNode | Study
 
     const option = await pickReviewOption(reviewItem);
     if (!option) {
-        await sessionState.stop();
+        if (sessionToken) {
+            await sessionState.cancel(sessionToken);
+        }
         return;
     }
 
@@ -84,13 +87,17 @@ export async function markReviewReviewed(review: ReviewItem | ReviewNode | Study
         await reviewService.applyRating(reviewItem.questionNumber, option.rating);
         await reviewTreeDataProvider.refresh();
         await studyTreeDataProvider.refresh();
-        await continueActiveSession();
+        await continueActiveSession(sessionToken);
     } catch (error) {
+        if (sessionToken) {
+            await sessionState.cancel(sessionToken);
+        }
         await promptForOpenOutputChannel(`Failed to update review: ${error}`, DialogType.error);
     }
 }
 
 export async function snoozeReview(review: ReviewItem | ReviewNode | StudyNode): Promise<void> {
+    const sessionToken = sessionState.token;
     const reviewItem = resolveReviewItem(review);
     if (!reviewItem) {
         return;
@@ -98,7 +105,9 @@ export async function snoozeReview(review: ReviewItem | ReviewNode | StudyNode):
 
     const preset = await pickReviewPreset(reviewItem, "Snooze");
     if (!preset) {
-        await sessionState.stop();
+        if (sessionToken) {
+            await sessionState.cancel(sessionToken);
+        }
         return;
     }
 
@@ -106,29 +115,49 @@ export async function snoozeReview(review: ReviewItem | ReviewNode | StudyNode):
         await reviewService.snoozeReview(reviewItem.questionNumber, addDays(new Date(), preset.days));
         await reviewTreeDataProvider.refresh();
         await studyTreeDataProvider.refresh();
-        await continueActiveSession();
+        await continueActiveSession(sessionToken);
     } catch (error) {
+        if (sessionToken) {
+            await sessionState.cancel(sessionToken);
+        }
         await promptForOpenOutputChannel(`Failed to snooze review: ${error}`, DialogType.error);
     }
 }
 
 export async function startReviewSession(): Promise<void> {
-    if (!await ensureReviewWorkspaceConfigured()) {
-        return;
-    }
-
+    let sessionToken: SessionToken | undefined;
     try {
+        sessionToken = await sessionState.acquire("review");
+        if (!sessionToken) {
+            if (sessionState.isActive()) {
+                void vscode.window.showInformationMessage("A Leetnotion session is already active.");
+            }
+            return;
+        }
+
+        if (!await ensureReviewWorkspaceConfigured()) {
+            await sessionState.cancel(sessionToken);
+            return;
+        }
+
         const dueItems = await reviewService.getDueItems();
+        if (!sessionState.owns(sessionToken)) {
+            return;
+        }
         if (dueItems.length === 0) {
-            await sessionState.complete("review");
+            await sessionState.complete(sessionToken);
             void vscode.window.showInformationMessage("No due reviews right now.");
             return;
         }
 
-        await sessionState.start("review");
+        if (!sessionState.owns(sessionToken)) {
+            return;
+        }
         await openReviewProblem(dueItems[0]);
     } catch (error) {
-        await sessionState.cancel("review");
+        if (sessionToken) {
+            await sessionState.cancel(sessionToken);
+        }
         await promptForOpenOutputChannel(`Failed to start review session: ${error}`, DialogType.error);
     }
 }
@@ -269,26 +298,28 @@ async function pickInitialReviewRating(review: ReviewTarget): Promise<ReviewRati
     return selection?.value;
 }
 
-async function continueReviewSession(): Promise<void> {
-    if (!sessionState.isActive("review")) {
+async function continueReviewSession(sessionToken: SessionToken): Promise<void> {
+    if (!sessionState.owns(sessionToken) || sessionToken.kind !== "review") {
         return;
     }
 
     const dueItems = await reviewService.getDueItems();
-    if (!sessionState.isActive("review")) {
+    if (!sessionState.owns(sessionToken)) {
         return;
     }
     if (dueItems.length === 0) {
-        await sessionState.complete("review");
+        await sessionState.complete(sessionToken);
         void vscode.window.showInformationMessage("Review session complete.");
         return;
     }
 
-    await openReviewProblem(dueItems[0]);
+    if (sessionState.owns(sessionToken)) {
+        await openReviewProblem(dueItems[0]);
+    }
 }
 
-async function continueActiveSession(): Promise<void> {
-    await sessionState.continueWith({
+async function continueActiveSession(sessionToken: SessionToken | undefined): Promise<void> {
+    await sessionState.continueWith(sessionToken, {
         review: continueReviewSession,
         study: continueStudySession,
     });
