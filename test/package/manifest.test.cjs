@@ -1,6 +1,7 @@
 const assert = require("node:assert/strict");
 const { readFile } = require("node:fs/promises");
 const path = require("node:path");
+const { pathToFileURL } = require("node:url");
 const test = require("node:test");
 
 const repositoryRoot = path.resolve(__dirname, "..", "..");
@@ -21,8 +22,17 @@ test("manifest preserves identity and publishes the fork metadata", async () => 
     });
     assert.equal(manifest.homepage, "https://github.com/zoypk/vscode-leetnotion#readme");
     assert.equal(manifest.engines.vscode, "^1.74.0");
-    assert.equal(Object.hasOwn(manifest, "activationEvents"), false,
-        "VS Code 1.74 derives activation from contributed commands and views");
+    const contributionEvents = [
+        ...manifest.contributes.commands.map((command) => `onCommand:${command.command}`),
+        ...Object.values(manifest.contributes.views).flat().map((view) => `onView:${view.id}`),
+    ];
+    assert.deepEqual(
+        [...manifest.activationEvents].sort(),
+        [...contributionEvents, "onUri"].sort(),
+        "activation must be derived from every contributed command/view plus the registered URI handler",
+    );
+    assert.equal(new Set(manifest.activationEvents).size, manifest.activationEvents.length);
+    assert.equal(manifest.activationEvents.includes("*"), false);
 });
 
 test("release identity is consistent across manifest, lockfile, and documented artifact", async () => {
@@ -33,14 +43,52 @@ test("release identity is consistent across manifest, lockfile, and documented a
     ]);
     const expectedTag = `v${manifest.version}`;
     const expectedArtifact = `${manifest.name}-${manifest.version}.vsix`;
-    const expectedInstalled = `${manifest.publisher}.${manifest.name}@${manifest.version}`;
 
     assert.equal(lockfile.version, manifest.version);
     assert.equal(lockfile.packages[""].version, manifest.version);
     assert.equal(lockfile.packages[""].engines.vscode, manifest.engines.vscode);
     assert.match(readme, new RegExp(expectedTag.replaceAll(".", "\\.")));
     assert.match(readme, new RegExp(expectedArtifact.replaceAll(".", "\\.")));
-    assert.equal(expectedInstalled, "Leetnotion.vscode-leetnotion@1.6.0");
+});
+
+test("built VSIX filename, manifests, installed identity, and release tag agree", async (context) => {
+    const manifest = await readJson("package.json");
+    const artifactName = `${manifest.name}-${manifest.version}.vsix`;
+    const artifactPath = path.join(repositoryRoot, artifactName);
+    let archive;
+    try {
+        archive = await readFile(artifactPath);
+    } catch (error) {
+        if (error && error.code === "ENOENT") {
+            context.skip("run npm run package to exercise the built-artifact contract");
+            return;
+        }
+        throw error;
+    }
+
+    const verifier = await import(pathToFileURL(path.join(repositoryRoot, "scripts", "verify-vsix.mjs")));
+    const entries = verifier.parseZipEntries(archive);
+    const entryByName = new Map(entries.map((entry) => [entry.name, entry]));
+    const packagedManifest = JSON.parse(
+        verifier.readZipEntry(archive, entryByName.get("extension/package.json")).toString("utf8"),
+    );
+    const vsixManifestText = verifier.readZipEntry(
+        archive,
+        entryByName.get("extension.vsixmanifest"),
+    ).toString("utf8");
+
+    verifier.validateManifestAgreement({
+        artifactFileName: artifactName,
+        packagedManifest,
+        repositoryManifest: manifest,
+        vsixManifestText,
+    });
+    assert.equal(
+        `${packagedManifest.publisher}.${packagedManifest.name}@${packagedManifest.version}`,
+        `${manifest.publisher}.${manifest.name}@${manifest.version}`,
+        "the identity VS Code installs must match the repository extension version",
+    );
+    assert.equal(`v${packagedManifest.version}`, `v${manifest.version}`);
 });
 
 test("VS Code tasks and launch documents reference existing development scripts", async () => {

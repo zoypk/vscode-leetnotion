@@ -69,7 +69,7 @@ npm run compile
 
 Automated tests and release validation must not make live LeetCode submissions or write to a real Notion workspace. They use fixtures, mocks, temporary storage, and non-mutating checks. Live account mutations require an explicit manual action by the user.
 
-Release artifacts are versioned from `package.json`: package `1.6.0`, tag `v1.6.0`, and file `vscode-leetnotion-1.6.0.vsix` must agree.
+Release artifacts derive their package version, semantic tag, installed extension identity, and VSIX filename from `package.json`. Release validation rejects any disagreement.
 
 ## License
 
