@@ -6,6 +6,7 @@ import {
     ActivationResources,
     ExtensionCommandHandlers,
     initializeDurableMapping,
+    ownTreeViews,
     registerCoreActivationResources,
     registerExtensionResources,
     registerNodeEvent,
@@ -64,6 +65,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     activeResources?.dispose();
     activeResources = new ActivationResources();
     context.subscriptions.push(activeResources);
+    const recurringWork = {
+        dispose: () => { intervals = clearIntervals(intervals); },
+    };
     activeResources.add(registerCoreActivationResources({
         statusBar: leetCodeStatusBarController,
         channel: leetCodeChannel,
@@ -82,6 +86,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         reviewTreeProvider: reviewTreeDataProvider,
         studyTreeProvider: studyTreeDataProvider,
         explorerNodeManager,
+        recurringWork,
     }));
     const activationSucceeded = await runActivationGuard(activeResources, async () => {
         if (!(await leetCodeExecutor.meetRequirements(context))) {
@@ -124,6 +129,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         leetcodeTreeView = vscode.window.createTreeView("leetnotionExplorer", { treeDataProvider: leetCodeTreeDataProvider, showCollapseAll: true });
         reviewTreeView = vscode.window.createTreeView("leetnotionReviews", { treeDataProvider: reviewTreeDataProvider, showCollapseAll: true });
         studyTreeView = vscode.window.createTreeView("leetnotionStudy", { treeDataProvider: studyTreeDataProvider, showCollapseAll: true });
+        ownTreeViews(activeResources!, [leetcodeTreeView, reviewTreeView, studyTreeView]);
 
         const commandHandlers: ExtensionCommandHandlers = {
             "leetnotion.deleteCache": () => cache.deleteCache(),
@@ -221,12 +227,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
                 profileDashboardProvider,
                 { webviewOptions: { retainContextWhenHidden: true } },
             ),
-            treeViews: [leetcodeTreeView, reviewTreeView, studyTreeView],
             registerStatusListener: () => registerNodeEvent(leetCodeManager, "statusChanged", handleStatusChanged),
             registerUriHandler: () => vscode.window.registerUriHandler({ handleUri: leetCodeManager.handleUriSignIn }),
-            recurringWork: {
-                dispose: () => { intervals = clearIntervals(intervals); },
-            },
         }));
 
         await leetCodeExecutor.switchEndpoint(plugin.getLeetCodeEndpoint());

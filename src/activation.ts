@@ -1,3 +1,7 @@
+import { ActivationDisposalError } from "./activationErrors";
+
+export { ActivationDisposalError } from "./activationErrors";
+
 export interface DisposableLike {
     dispose(): void;
 }
@@ -11,7 +15,7 @@ export const CORE_RESOURCE_KEYS = [
     "statusBar", "channel", "previewProvider", "pastSubmissionsProvider", "submissionProvider",
     "submissionDetailProvider", "solutionProvider", "executor", "markdownEngine", "leetnotionEngine",
     "codeLensController", "tracking", "profileDashboardProvider", "leetcodeTreeProvider",
-    "reviewTreeProvider", "studyTreeProvider", "explorerNodeManager",
+    "reviewTreeProvider", "studyTreeProvider", "explorerNodeManager", "recurringWork",
 ] as const;
 
 export type CoreResourceKey = typeof CORE_RESOURCE_KEYS[number];
@@ -84,10 +88,8 @@ export interface ExtensionRegistrationDependencies {
     registerStopSession(): DisposableLike;
     registerFileDecorationProvider(): DisposableLike;
     registerWebviewViewProvider(): DisposableLike;
-    treeViews: readonly [DisposableLike, DisposableLike, DisposableLike];
     registerStatusListener(): DisposableLike;
     registerUriHandler(): DisposableLike;
-    recurringWork: DisposableLike;
 }
 
 export async function initializeDurableMapping(initialize: () => Promise<unknown>): Promise<void> {
@@ -118,9 +120,7 @@ export class ActivationResources implements DisposableLike {
 
     public add(...resources: DisposableLike[]): DisposableLike[] {
         if (this.disposed) {
-            for (const resource of resources) {
-                resource.dispose();
-            }
+            this.disposeResources(resources);
             return resources;
         }
         this.resources.push(...resources);
@@ -132,8 +132,20 @@ export class ActivationResources implements DisposableLike {
             return;
         }
         this.disposed = true;
-        for (const resource of this.resources.splice(0).reverse()) {
-            resource.dispose();
+        this.disposeResources(this.resources.splice(0).reverse());
+    }
+
+    private disposeResources(resources: DisposableLike[]): void {
+        const errors: unknown[] = [];
+        for (const resource of resources) {
+            try {
+                resource.dispose();
+            } catch (error) {
+                errors.push(error);
+            }
+        }
+        if (errors.length > 0) {
+            throw new ActivationDisposalError(errors);
         }
     }
 }
@@ -148,19 +160,24 @@ export function registerCoreActivationResources(resources: CoreActivationResourc
     return registerActivationResources(() => CORE_RESOURCE_KEYS.map((key) => resources[key]));
 }
 
+export function ownTreeViews(
+    owner: ActivationResources,
+    treeViews: readonly [DisposableLike, DisposableLike, DisposableLike],
+): void {
+    owner.add(...treeViews);
+}
+
 export function registerExtensionResources(dependencies: ExtensionRegistrationDependencies): ActivationResources {
     const resources = new ActivationResources();
     try {
         resources.add(dependencies.registerFileDecorationProvider());
         resources.add(dependencies.registerWebviewViewProvider());
-        resources.add(...dependencies.treeViews);
         resources.add(dependencies.registerStatusListener());
         resources.add(dependencies.registerUriHandler());
         for (const command of EXTENSION_COMMAND_IDS) {
             resources.add(dependencies.registerCommand(command, dependencies.commandHandlers[command]));
         }
         resources.add(dependencies.registerStopSession());
-        resources.add(dependencies.recurringWork);
         return resources;
     } catch (error) {
         resources.dispose();

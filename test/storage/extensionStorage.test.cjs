@@ -6,6 +6,7 @@ const test = require("node:test");
 
 const {
     CACHE_VALIDATORS,
+    CACHE_KEY_INDEX,
     COOKIE_SECRET_KEY,
     ExtensionStorage,
     LARGE_CACHE_KEYS,
@@ -272,4 +273,75 @@ test("new empty or non-string secret writes are rejected", async (t) => {
     await assert.rejects(storage.update(NOTION_TOKEN_SECRET_KEY, { token: "invalid" }), /must be a non-empty string/);
     assert.equal(storage.get(COOKIE_SECRET_KEY), undefined);
     assert.equal(storage.get(NOTION_TOKEN_SECRET_KEY), undefined);
+});
+
+test("VS Code 1.57 reloads indexed dynamic file caches without Memento.keys", async (t) => {
+    const fake = await context();
+    t.after(() => rm(fake.root, { recursive: true, force: true }));
+    delete fake.globalState.keys;
+    const first = new ExtensionStorage();
+    await first.initialize(fake);
+    await first.update("session-999.customPayload", ["persisted"]);
+
+    assert.deepEqual(fake.globalState.values.get(CACHE_KEY_INDEX), ["session-999.customPayload"]);
+    assert.equal(fake.globalState.values.has("session-999.customPayload"), false);
+
+    const second = new ExtensionStorage();
+    await second.initialize(fake);
+    assert.deepEqual(second.get("session-999.customPayload"), ["persisted"]);
+
+    await second.update("session-999.customPayload", undefined);
+    assert.equal(fake.globalState.values.has(CACHE_KEY_INDEX), false);
+    const third = new ExtensionStorage();
+    await third.initialize(fake);
+    assert.equal(third.get("session-999.customPayload"), undefined);
+});
+
+test("VS Code 1.57 derives and indexes pre-registry pending-session cache keys", async (t) => {
+    const sessionId = "session-123";
+    const fake = await context({
+        "leetnotion-template-update-pending-session": { id: sessionId, createdTime: "2026-08-19" },
+        [`${sessionId}.isProblemsRetrieved`]: true,
+        [`${sessionId}.updatedPages`]: { "1": "page" },
+        [`${sessionId}.leetcodeProblems`]: [{ id: "1" }],
+    });
+    t.after(() => rm(fake.root, { recursive: true, force: true }));
+    delete fake.globalState.keys;
+    const storage = new ExtensionStorage();
+
+    await storage.initialize(fake);
+
+    assert.equal(storage.get(`${sessionId}.isProblemsRetrieved`), true);
+    assert.deepEqual(storage.get(`${sessionId}.updatedPages`), { "1": "page" });
+    assert.deepEqual(storage.get(`${sessionId}.leetcodeProblems`), [{ id: "1" }]);
+    assert.deepEqual(fake.globalState.values.get(CACHE_KEY_INDEX), [
+        `${sessionId}.isProblemsRetrieved`,
+        `${sessionId}.leetcodeProblems`,
+        `${sessionId}.updatedPages`,
+    ]);
+});
+
+test("reinitialization clears snapshots and cannot resurrect backing-store deletions", async (t) => {
+    const fake = await context({
+        "leetcode-user-status": { username: "deleted-user" },
+    }, {
+        [COOKIE_SECRET_KEY]: "deleted-cookie",
+    });
+    t.after(() => rm(fake.root, { recursive: true, force: true }));
+    const storage = new ExtensionStorage();
+    await storage.initialize(fake);
+    await storage.update("leetcode-topic-tags", { "two-sum": ["array"] });
+    const topicFile = storage.getCacheStore().getFilePath("leetcode-topic-tags");
+    assert.notEqual(storage.get("leetcode-user-status"), undefined);
+    assert.equal(storage.get(COOKIE_SECRET_KEY), "deleted-cookie");
+    assert.notEqual(storage.get("leetcode-topic-tags"), undefined);
+
+    fake.globalState.values.delete("leetcode-user-status");
+    fake.secrets.values.delete(COOKIE_SECRET_KEY);
+    await require("node:fs/promises").unlink(topicFile);
+    await storage.initialize(fake);
+
+    assert.equal(storage.get("leetcode-user-status"), undefined);
+    assert.equal(storage.get(COOKIE_SECRET_KEY), undefined);
+    assert.equal(storage.get("leetcode-topic-tags"), undefined);
 });

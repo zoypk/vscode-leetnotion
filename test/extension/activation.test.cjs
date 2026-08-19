@@ -4,10 +4,12 @@ const test = require("node:test");
 
 const {
     ActivationResources,
+    ActivationDisposalError,
     CORE_RESOURCE_KEYS,
     EXTENSION_COMMAND_IDS,
     INTERNAL_COMMAND_IDS,
     initializeDurableMapping,
+    ownTreeViews,
     registerCoreActivationResources,
     registerActivationResources,
     registerExtensionResources,
@@ -76,10 +78,8 @@ test("the real activation inventory disposes every command, provider, handler, e
         registerStopSession: () => disposable("handler:stop-session"),
         registerFileDecorationProvider: () => disposable("provider:file-decoration"),
         registerWebviewViewProvider: () => disposable("provider:home-webview"),
-        treeViews: [disposable("view:explorer"), disposable("view:reviews"), disposable("view:study")],
         registerStatusListener: () => disposable("handler:status-listener"),
         registerUriHandler: () => disposable("handler:uri"),
-        recurringWork: disposable("timer:recurring-work"),
     });
 
     coreResources.dispose();
@@ -91,7 +91,7 @@ test("the real activation inventory disposes every command, provider, handler, e
     for (const command of EXTENSION_COMMAND_IDS) {
         assert.equal(registeredHandlers.get(command), handlers[command]);
     }
-    assert.equal(registrations.length, CORE_RESOURCE_KEYS.length + EXTENSION_COMMAND_IDS.length + 9);
+    assert.equal(registrations.length, CORE_RESOURCE_KEYS.length + EXTENSION_COMMAND_IDS.length + 5);
     for (const label of registrations) {
         assert.equal(disposalCounts.get(label), 1, `${label} was not disposed exactly once`);
     }
@@ -122,22 +122,27 @@ test("a failed real registration disposes everything registered before the failu
         registerStopSession: () => disposable("stop"),
         registerFileDecorationProvider: () => disposable("decoration"),
         registerWebviewViewProvider: () => disposable("webview"),
-        treeViews: [disposable("explorer"), disposable("reviews"), disposable("study")],
         registerStatusListener: () => disposable("status"),
         registerUriHandler: () => disposable("uri"),
-        recurringWork: disposable("timer"),
     }), /injected registration failure/);
 
     assert.deepEqual(disposed, [
-        EXTENSION_COMMAND_IDS[1], EXTENSION_COMMAND_IDS[0], "uri", "status",
-        "study", "reviews", "explorer", "webview", "decoration",
+        EXTENSION_COMMAND_IDS[1], EXTENSION_COMMAND_IDS[0], "uri", "status", "webview", "decoration",
     ]);
 });
 
 test("durable mapping rejection is handled, stops later initialization, and cleans activation resources", async () => {
     const events = [];
-    let disposeCount = 0;
-    const resources = { dispose() { disposeCount += 1; events.push("dispose"); } };
+    let timerActive = true;
+    let timerDisposeCount = 0;
+    const resources = new ActivationResources();
+    resources.add({
+        dispose() {
+            timerActive = false;
+            timerDisposeCount += 1;
+            events.push("dispose:timer");
+        },
+    });
 
     const succeeded = await runActivationGuard(resources, async () => {
         events.push("mapping:start");
@@ -150,8 +155,9 @@ test("durable mapping rejection is handled, stops later initialization, and clea
     });
 
     assert.equal(succeeded, false);
-    assert.equal(disposeCount, 1);
-    assert.deepEqual(events, ["mapping:start", "handled:mapping write failed", "dispose"]);
+    assert.equal(timerActive, false);
+    assert.equal(timerDisposeCount, 1);
+    assert.deepEqual(events, ["mapping:start", "handled:mapping write failed", "dispose:timer"]);
 });
 
 test("durable mapping completes before later activation work", async () => {
@@ -173,4 +179,44 @@ test("durable mapping completes before later activation work", async () => {
 
     assert.equal(await activation, true);
     assert.deepEqual(events, ["mapping:start", "mapping:stored", "later-initialization"]);
+});
+
+test("tree views owned before provider registration are disposed after a partial provider failure", () => {
+    const disposed = [];
+    const owner = new ActivationResources();
+    const disposable = (label) => ({ dispose() { disposed.push(label); } });
+    ownTreeViews(owner, [disposable("explorer"), disposable("reviews"), disposable("study")]);
+    const handlers = Object.fromEntries(EXTENSION_COMMAND_IDS.map((command) => [command, () => undefined]));
+
+    assert.throws(() => registerExtensionResources({
+        commandHandlers: handlers,
+        registerCommand: (command) => disposable(command),
+        registerStopSession: () => disposable("stop"),
+        registerFileDecorationProvider: () => disposable("decoration"),
+        registerWebviewViewProvider: () => { throw new Error("provider registration failed"); },
+        registerStatusListener: () => disposable("status"),
+        registerUriHandler: () => disposable("uri"),
+    }), /provider registration failed/);
+    owner.dispose();
+
+    assert.deepEqual(disposed, ["decoration", "study", "reviews", "explorer"]);
+});
+
+test("throwing disposers do not prevent remaining resources from being cleaned exactly once", () => {
+    const calls = [];
+    const resources = new ActivationResources();
+    resources.add(
+        { dispose() { calls.push("first"); throw new Error("first failed"); } },
+        { dispose() { calls.push("second"); } },
+        { dispose() { calls.push("third"); throw new Error("third failed"); } },
+    );
+
+    assert.throws(() => resources.dispose(), (error) => {
+        assert.ok(error instanceof ActivationDisposalError);
+        assert.equal(error.errors.length, 2);
+        return true;
+    });
+    resources.dispose();
+
+    assert.deepEqual(calls, ["third", "second", "first"]);
 });
