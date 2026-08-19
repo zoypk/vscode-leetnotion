@@ -46,6 +46,7 @@ test("uses dedicated clean, pinned package, and VSIX verification commands", () 
     const manifest = JSON.parse(fs.readFileSync(path.join(repositoryRoot, "package.json"), "utf8"));
     const packageScript = fs.readFileSync(path.join(repositoryRoot, "scripts/package-extension.mjs"), "utf8");
     const buildScript = fs.readFileSync(path.join(repositoryRoot, "scripts/build.mjs"), "utf8");
+    const verifierScript = fs.readFileSync(path.join(repositoryRoot, "scripts/verify-vsix.mjs"), "utf8");
 
     assert.equal(manifest.scripts.clean, "node ./scripts/clean.mjs");
     assert.equal(manifest.scripts.package, "node ./scripts/package-extension.mjs");
@@ -53,6 +54,7 @@ test("uses dedicated clean, pinned package, and VSIX verification commands", () 
     assert.match(packageScript, /VSCE_VERSION = "2\.15\.0"/);
     assert.match(packageScript, /@vscode\/vsce@\$\{VSCE_VERSION\}/);
     assert.match(buildScript, /await cleanGeneratedTargets\(rootDir\)/);
+    assert.match(verifierScript, /await smokePackagedRuntime\(archive, entries\)/);
     assert.equal(fs.existsSync(path.join(repositoryRoot, "esbuild.js")), false);
 });
 
@@ -165,6 +167,153 @@ test("VSIX contract rejects missing, forbidden, oversized, and over-count artifa
     assert.throws(
         () => validateVsixEntries(tooMany, { requiredPaths: [], vsixSize: 1 }),
         /file count/,
+    );
+});
+
+test("validates Windows-canonical paths for files and directory entries", async () => {
+    const { validateVsixEntries } = await import(verifierUrl);
+    const validate = (entries) => validateVsixEntries(entries, { requiredPaths: [], vsixSize: 1 });
+    assert.doesNotThrow(() => validate([
+        { name: "extension/", uncompressedSize: 0 },
+        { name: "extension/data/", uncompressedSize: 0 },
+        { name: "extension/data/file.json", uncompressedSize: 1 },
+    ]));
+
+    for (const invalidDirectory of [
+        "C:/escape/",
+        "/absolute/",
+        "extension/../escape/",
+        "extension/./escape/",
+        "extension//escape/",
+        "extension/trailing./",
+        "extension/trailing /",
+        "extension/file:stream/",
+        "extension/NUL.txt/",
+        "extension/nul\0name/",
+    ]) {
+        assert.throws(() => validate([{ name: invalidDirectory, uncompressedSize: 0 }]), /archive path|Windows|ADS|device/i);
+    }
+    assert.throws(
+        () => validate([{ name: "extension/link", uncompressedSize: 0, isSymlink: true }]),
+        /symbolic links are forbidden/,
+    );
+    assert.throws(
+        () => validate([
+            { name: "extension/Foo.txt", uncompressedSize: 1 },
+            { name: "extension/foo.txt", uncompressedSize: 1 },
+        ]),
+        /case-insensitive archive collision/,
+    );
+    assert.throws(
+        () => validate([
+            { name: "extension/data", uncompressedSize: 1 },
+            { name: "extension/data/", uncompressedSize: 0 },
+        ]),
+        /file-directory collision/,
+    );
+    assert.throws(
+        () => validate([
+            { name: "extension/data", uncompressedSize: 1 },
+            { name: "extension/data/file.json", uncompressedSize: 1 },
+        ]),
+        /file-descendant collision/,
+    );
+});
+
+test("derives the non-optional runtime closure and requires every package main and bin", async () => {
+    const { productionDependencyClosure, validateProductionDependencies } = await import(verifierUrl);
+    const lockfile = {
+        packages: {
+            "": { dependencies: { vsc: "1.0.0" } },
+            "node_modules/vsc": {
+                version: "1.0.0",
+                dependencies: { underscore: "1.0.0" },
+                optionalDependencies: { jsdom: "1.0.0" },
+            },
+            "node_modules/underscore": { version: "1.0.0" },
+            "node_modules/jsdom": { version: "1.0.0", optional: true },
+        },
+    };
+    const manifests = {
+        "node_modules/vsc": {
+            name: "vsc",
+            version: "1.0.0",
+            main: "lib/index",
+            bin: { vsc: "bin/vsc" },
+        },
+        "node_modules/underscore": {
+            name: "underscore",
+            version: "1.0.0",
+            main: "underscore.js",
+        },
+    };
+    const files = new Set([
+        "extension/node_modules/vsc/package.json",
+        "extension/node_modules/vsc/lib/index.js",
+        "extension/node_modules/vsc/bin/vsc",
+        "extension/node_modules/underscore/package.json",
+        "extension/node_modules/underscore/underscore.js",
+    ]);
+    const options = {
+        hasFile: (file) => files.has(file),
+        readPackageManifest: (packagePath) => manifests[packagePath],
+    };
+
+    assert.deepEqual(productionDependencyClosure(lockfile), ["node_modules/underscore", "node_modules/vsc"]);
+    assert.deepEqual(validateProductionDependencies(lockfile, options), { packageCount: 2, entrypointCount: 3 });
+    files.delete("extension/node_modules/underscore/underscore.js");
+    assert.throws(
+        () => validateProductionDependencies(lockfile, options),
+        /required production package main is missing for underscore/,
+    );
+});
+
+test("requires repository, packaged manifest, VSIX identity, and filename agreement", async () => {
+    const { validateManifestAgreement } = await import(verifierUrl);
+    const repositoryManifest = { name: "vscode-leetnotion", publisher: "Leetnotion", version: "1.5.4" };
+    const packagedManifest = { ...repositoryManifest };
+    const vsixManifestText = '<PackageManifest><Identity Id="vscode-leetnotion" Publisher="Leetnotion" Version="1.5.4" /></PackageManifest>';
+    const valid = {
+        artifactFileName: "vscode-leetnotion-1.5.4.vsix",
+        packagedManifest,
+        repositoryManifest,
+        vsixManifestText,
+    };
+    assert.doesNotThrow(() => validateManifestAgreement(valid));
+    assert.throws(
+        () => validateManifestAgreement({ ...valid, packagedManifest: { ...packagedManifest, version: "9.9.9" } }),
+        /packaged package\.json version/,
+    );
+    assert.throws(
+        () => validateManifestAgreement({ ...valid, vsixManifestText: vsixManifestText.replace("Leetnotion", "Other") }),
+        /Identity Publisher/,
+    );
+    assert.throws(
+        () => validateManifestAgreement({ ...valid, artifactFileName: "wrong.vsix" }),
+        /VSIX filename/,
+    );
+});
+
+test("requires the packaged NeetCode index bytes and content set to match exactly", async () => {
+    const { validateNeetCodeSnapshot } = await import(verifierUrl);
+    const indexBytes = Buffer.from(JSON.stringify({
+        problems: {
+            "1": { contentFile: "neetcode-content/1.json" },
+            "2": {},
+        },
+    }));
+    const indexedEntries = [{ name: "extension/data/neetcode-content/1.json" }];
+    assert.doesNotThrow(() => validateNeetCodeSnapshot(indexBytes, Buffer.from(indexBytes), indexedEntries));
+    assert.throws(
+        () => validateNeetCodeSnapshot(indexBytes, Buffer.from(`${indexBytes.toString("utf8")}\n`), indexedEntries),
+        /does not exactly match/,
+    );
+    assert.throws(
+        () => validateNeetCodeSnapshot(indexBytes, Buffer.from(indexBytes), [
+            ...indexedEntries,
+            { name: "extension/data/neetcode-content/999.json" },
+        ]),
+        /extra: extension\/data\/neetcode-content\/999\.json/,
     );
 });
 
