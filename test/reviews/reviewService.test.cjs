@@ -21,10 +21,12 @@ class MemoryStorage {
         this.state = { version: 1, reviews: {} };
         this.queue = Promise.resolve();
         this.blocker = undefined;
+        this.transactions = 0;
     }
     isConfigured() { return true; }
     async read() { return structuredClone(this.state); }
     transaction(mutator) {
+        this.transactions += 1;
         const operation = this.queue.then(async () => {
             if (this.blocker) { await this.blocker; }
             const next = structuredClone(this.state);
@@ -84,6 +86,49 @@ test("addAndApplyRating creates and rates exactly once", async () => {
     await fixture.service.addAndApplyRating("2", "good", { name: "Two" });
     assert.equal(fixture.storage.state.reviews["2"].fsrsCard.reps, 1);
     assert.equal(fixture.getRatings(), 1);
+});
+
+test("addAndScheduleAt creates and schedules exactly once without applying a rating", async () => {
+    const fixture = createFixture();
+    const dueDate = new Date("2026-09-02T12:34:56.000Z");
+
+    const result = await fixture.service.addAndScheduleAt("6", dueDate, {
+        name: "Six",
+        difficulty: "Medium",
+    });
+
+    assert.deepEqual(result, { result: "added", dueAt: "2026-09-02T12:34:56.000Z" });
+    assert.equal(fixture.storage.transactions, 1);
+    assert.equal(fixture.getRatings(), 0);
+    assert.equal(fixture.storage.state.reviews["6"].fsrsCard.due, "2026-09-02T12:34:56.000Z");
+    assert.equal(fixture.storage.state.reviews["6"].fsrsCard.reps, 0);
+    assert.equal(fixture.storage.state.reviews["6"].lastRating, undefined);
+    assert.equal(fixture.storage.state.reviews["6"].problem.name, "Six");
+});
+
+test("addAndScheduleAt updates an existing snapshot and due date without losing card history", async () => {
+    const fixture = createFixture();
+    await fixture.service.ensureInitiallyScheduled("7", { name: "Before" }, "good");
+    const before = structuredClone(fixture.storage.state.reviews["7"]);
+    fixture.storage.transactions = 0;
+
+    const result = await fixture.service.addAndScheduleAt(
+        "7",
+        new Date("2026-09-03T08:00:00.000Z"),
+        { name: "After", difficulty: "Hard" },
+    );
+
+    assert.deepEqual(result, { result: "updated", dueAt: "2026-09-03T08:00:00.000Z" });
+    assert.equal(fixture.storage.transactions, 1);
+    assert.equal(fixture.getRatings(), 1);
+    assert.deepEqual(fixture.storage.state.reviews["7"].fsrsCard, {
+        ...before.fsrsCard,
+        due: "2026-09-03T08:00:00.000Z",
+    });
+    assert.equal(fixture.storage.state.reviews["7"].lastReviewedAt, before.lastReviewedAt);
+    assert.equal(fixture.storage.state.reviews["7"].lastRating, before.lastRating);
+    assert.equal(fixture.storage.state.reviews["7"].problem.name, "After");
+    assert.equal(fixture.storage.state.reviews["7"].problem.difficulty, "Hard");
 });
 
 test("unrelated snapshot updates and idempotent initial scheduling never re-rate or reschedule", async () => {

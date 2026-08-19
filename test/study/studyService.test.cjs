@@ -61,7 +61,7 @@ function createFixture(overrides = {}) {
         activeTopicFilters: () => settings.topicFilters,
         newProblemsPerDay: () => settings.limit,
         weekdaysOnly: () => settings.weekdaysOnly,
-        resolveProblem: (id, existing) => existing ?? { name: `P${id}`, difficulty: "Easy", url: `https://example/${id}`, tags: id === "2" ? ["Graph"] : ["Array"], sheets: id === "3" ? ["NC"] : ["Blind"] },
+        resolveProblem: (id, existing) => existing ?? { name: `P${id}`, difficulty: "Easy", url: `https://example/${id}`, tags: id === "2" ? ["Graph"] : ["Array"], sheets: id === "3" ? ["NC"] : ["Blind"], companies: [] },
     });
     return { service, settings, storage };
 }
@@ -90,6 +90,133 @@ test("refresh reapplies filters to existing items and refills deterministically"
     fixture.settings.topicFilters = ["Array"];
     await fixture.service.refresh();
     assert.deepEqual(fixture.storage.state.dailyPlans["2026-08-19"], ["1", "3"]);
+});
+
+test("refresh re-resolves changed snapshot membership before materializing the plan", async () => {
+    const storage = new MemoryStorage();
+    let now = new Date("2026-08-19T10:00:00.000Z");
+    let currentSnapshot = {
+        name: "Old name",
+        difficulty: "Easy",
+        url: "https://example/42",
+        tags: ["Array"],
+        sheets: ["Blind"],
+        companies: ["Old Company"],
+    };
+    const service = new StudyService({
+        storage,
+        clock: () => now,
+        getDueReviews: async () => [],
+        activeSheetFilters: () => ["NC"],
+        activeTopicFilters: () => ["Graph"],
+        newProblemsPerDay: () => 1,
+        weekdaysOnly: () => false,
+        resolveProblem: () => structuredClone(currentSnapshot),
+    });
+
+    await service.addProblem("42");
+    const original = structuredClone(storage.state.backlog["42"]);
+    storage.state.backlog["42"].deferredUntil = "2026-08-19";
+    currentSnapshot = {
+        name: "Updated name",
+        difficulty: "Medium",
+        url: "https://example/updated-42",
+        tags: ["Graph"],
+        sheets: ["NC"],
+        companies: ["Current Company"],
+    };
+    now = new Date("2026-08-20T10:00:00.000Z");
+
+    await service.refresh();
+
+    assert.deepEqual(storage.state.dailyPlans["2026-08-20"], ["42"]);
+    assert.deepEqual(storage.state.backlog["42"].problem, currentSnapshot);
+    assert.equal(storage.state.backlog["42"].addedAt, original.addedAt);
+    assert.equal(storage.state.backlog["42"].deferredUntil, "2026-08-19");
+    assert.equal(storage.state.backlog["42"].updatedAt, "2026-08-20T10:00:00.000Z");
+    const backlogSection = (await service.getSections()).find((section) => section.id === "backlog");
+    assert.deepEqual(backlogSection.items[0].companies, ["Current Company"]);
+});
+
+test("default resolver removes stale sheets and refreshes URL, tags, and companies from current metadata", async () => {
+    const storage = new MemoryStorage();
+    let now = new Date("2026-08-19T10:00:00.000Z");
+    let problem = { name: "Old name", difficulty: "Easy", tags: ["Array"], companies: ["Old Company"] };
+    let sheets = { "Legacy Sheet": ["42"] };
+    let titleSlugMapping = { "old-title": "42" };
+    const service = new StudyService({
+        storage,
+        clock: () => now,
+        getDueReviews: async () => [],
+        activeSheetFilters: () => [],
+        activeTopicFilters: () => [],
+        newProblemsPerDay: () => 1,
+        weekdaysOnly: () => false,
+    });
+    const originalLoadForResolver = Module._load;
+    Module._load = function(request, parent, isMain) {
+        if (request === "../explorer/explorerNodeManager") {
+            return { explorerNodeManager: { getNodeById: () => problem } };
+        }
+        if (request === "../utils/dataUtils") {
+            return { getSheets: () => sheets, extractArrayElements: (sheet) => sheet };
+        }
+        if (request === "../globalState") {
+            return { globalState: { getTitleSlugQuestionNumberMapping: () => titleSlugMapping } };
+        }
+        if (request === "../shared") {
+            return { getUrl: () => "https://leetcode.com" };
+        }
+        return originalLoadForResolver.call(this, request, parent, isMain);
+    };
+
+    try {
+        await service.addProblem("42");
+        assert.deepEqual(storage.state.backlog["42"].problem, {
+            name: "Old name",
+            difficulty: "Easy",
+            url: "https://leetcode.com/problems/old-title",
+            tags: ["Array"],
+            sheets: ["Legacy Sheet"],
+            companies: ["Old Company"],
+        });
+
+        problem = { name: "Current name", difficulty: "Medium", tags: ["Graph"], companies: ["Current Company"] };
+        sheets = {};
+        titleSlugMapping = { "current-title": "42" };
+        now = new Date("2026-08-20T10:00:00.000Z");
+        const sections = await service.refresh();
+
+        assert.deepEqual(storage.state.backlog["42"].problem, {
+            name: "Current name",
+            difficulty: "Medium",
+            url: "https://leetcode.com/problems/current-title",
+            tags: ["Graph"],
+            sheets: [],
+            companies: ["Current Company"],
+        });
+        const backlogItem = sections.find((section) => section.id === "backlog").items[0];
+        assert.deepEqual(backlogItem.companies, ["Current Company"]);
+
+        titleSlugMapping = {};
+        await service.refresh();
+        assert.equal(storage.state.backlog["42"].problem.url, "https://leetcode.com/problems/current-title");
+    } finally {
+        Module._load = originalLoadForResolver;
+    }
+});
+
+test("refresh does not write or change updatedAt when every resolved snapshot and plan are unchanged", async () => {
+    const fixture = createFixture();
+    await fixture.service.addProblem("1");
+    await fixture.service.refresh();
+    const writes = fixture.storage.writes;
+    const updatedAt = fixture.storage.state.backlog["1"].updatedAt;
+
+    await fixture.service.refresh();
+
+    assert.equal(fixture.storage.writes, writes);
+    assert.equal(fixture.storage.state.backlog["1"].updatedAt, updatedAt);
 });
 
 test("deferrals and removals purge planned entries", async () => {

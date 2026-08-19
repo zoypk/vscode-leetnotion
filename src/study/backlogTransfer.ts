@@ -15,16 +15,43 @@ export interface BacklogTransferDependencies {
     removeBacklog(questionNumber: string): Promise<void>;
 }
 
+const MAX_DELETION_ERROR_LENGTH = 200;
+const MAX_QUESTION_NUMBER_DIAGNOSTIC_LENGTH = 80;
+
 export class BacklogTransferError extends Error {
     public readonly reviewWasScheduled = true;
+    public readonly cause: unknown;
 
     constructor(
         public readonly questionNumber: string,
-        public readonly originalError: unknown,
+        cause: unknown,
     ) {
-        super(`Review ${questionNumber} was scheduled, but its backlog entry could not be removed. Retry is safe.`);
+        const diagnosticQuestionNumber = getBoundedDiagnosticValue(
+            questionNumber,
+            MAX_QUESTION_NUMBER_DIAGNOSTIC_LENGTH,
+            "Unknown question",
+        );
+        const deletionMessage = getBoundedDeletionMessage(cause);
+        super(`Review ${diagnosticQuestionNumber} was scheduled, but its backlog entry could not be removed. Retry is safe. Deletion error: ${deletionMessage}`);
         this.name = "BacklogTransferError";
+        Object.defineProperty(this, "cause", {
+            configurable: true,
+            value: cause,
+            writable: true,
+        });
     }
+}
+
+function getBoundedDeletionMessage(cause: unknown): string {
+    const rawMessage = cause instanceof Error ? cause.message : String(cause);
+    return getBoundedDiagnosticValue(rawMessage, MAX_DELETION_ERROR_LENGTH, "Unknown deletion failure");
+}
+
+function getBoundedDiagnosticValue(value: string, maxLength: number, fallback: string): string {
+    const normalized = value.replace(/\s+/g, " ").trim() || fallback;
+    return normalized.length <= maxLength
+        ? normalized
+        : `${normalized.slice(0, maxLength - 3)}...`;
 }
 
 export async function transferBacklogToReview(

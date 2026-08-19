@@ -151,6 +151,32 @@ export class ReviewService {
         });
     }
 
+    public addAndScheduleAt(
+        questionNumber: string,
+        dueDate: Date,
+        snapshot?: Partial<ReviewProblemSnapshot>,
+    ): Promise<{ result: "added" | "updated"; dueAt: string }> {
+        if (Number.isNaN(dueDate.getTime())) {
+            return Promise.reject(new Error("Review due date must be valid."));
+        }
+        const now = this.options.clock();
+        const dueAt = dueDate.toISOString();
+        return this.options.storage.transaction((state) => {
+            const existing = state.reviews[questionNumber];
+            const record = existing
+                ? { ...existing, problem: this.options.resolveProblem(questionNumber, snapshot, existing.problem) }
+                : this.createRecord(questionNumber, now, snapshot);
+            const card = this.deserializeCard(record.fsrsCard);
+            card.due = new Date(dueAt);
+            state.reviews[questionNumber] = {
+                ...record,
+                fsrsCard: this.serializeCard(card),
+                updatedAt: now.toISOString(),
+            };
+            return { result: existing ? "updated" : "added", dueAt };
+        });
+    }
+
     public async getSchedulingOptions(questionNumber: string): Promise<ReviewSchedulingOption[]> {
         const record = await this.getRecord(questionNumber);
         const now = this.options.clock();

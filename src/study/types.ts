@@ -6,6 +6,7 @@ export interface StudyProblemSnapshot {
     url: string;
     tags: string[];
     sheets: string[];
+    companies: string[];
 }
 
 export interface StudyBacklogRecord {
@@ -43,6 +44,9 @@ export function parseStudyStateFile(value: unknown, sourcePath: string = "study 
                 url: requireString(problem.url, `${recordPath}.problem.url`),
                 tags: requireStringArray(problem.tags, `${recordPath}.problem.tags`),
                 sheets: requireStringArray(problem.sheets, `${recordPath}.problem.sheets`),
+                companies: problem.companies === undefined
+                    ? []
+                    : requireStringArray(problem.companies, `${recordPath}.problem.companies`),
             },
             addedAt: requireDateString(record.addedAt, `${recordPath}.addedAt`),
             updatedAt: requireDateString(record.updatedAt, `${recordPath}.updatedAt`),
@@ -106,6 +110,7 @@ export interface StudyBacklogItem {
     url: string;
     tags: string[];
     sheets: string[];
+    companies: string[];
     addedAt: string;
     plannedForToday: boolean;
     matchesActiveFilters: boolean;

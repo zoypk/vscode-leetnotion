@@ -249,6 +249,7 @@ export class StudyTreeDataProvider implements vscode.TreeDataProvider<StudyNode>
             `Difficulty: ${item.difficulty || "Unknown"}`,
             item.sheets.length > 0 ? `Sheets: ${item.sheets.join(", ")}` : "Sheets: None",
             item.tags.length > 0 ? `Topics: ${item.tags.join(", ")}` : "Topics: None",
+            item.companies.length > 0 ? `Companies: ${item.companies.join(", ")}` : "Companies: None",
             `Matches active filters: ${item.matchesActiveFilters ? "Yes" : "No"}`,
         ].join("\n");
     }

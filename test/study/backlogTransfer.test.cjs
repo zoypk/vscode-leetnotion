@@ -40,6 +40,8 @@ test("backlog deletion failure leaves a recoverable duplicate and retry does not
         assert.ok(error instanceof BacklogTransferError);
         assert.equal(error.questionNumber, "42");
         assert.equal(error.reviewWasScheduled, true);
+        assert.equal(error.cause.message, "disk full");
+        assert.equal("originalError" in error, false);
         return true;
     });
     assert.equal(reviewExists, true);
@@ -62,4 +64,41 @@ test("schedules the review before removing the backlog", async () => {
         removeBacklog: async () => { order.push("backlog"); },
     });
     assert.deepEqual(order, ["review:Trapping Rain Water:again", "backlog"]);
+});
+
+test("deletion diagnostics normalize whitespace and bound the underlying message", async () => {
+    const detail = `  could not   delete\nbacklog\tentry ${"x".repeat(1000)}  `;
+
+    await assert.rejects(() => transferBacklogToReview(target, "hard", {
+        ensureReview: async () => "added",
+        removeBacklog: async () => { throw new Error(detail); },
+    }), (error) => {
+        assert.ok(error instanceof BacklogTransferError);
+        assert.match(error.message, /could not delete backlog entry/);
+        assert.doesNotMatch(error.message, /\s{2,}|[\r\n\t]/);
+        assert.ok(error.message.length <= 400, `message had ${error.message.length} characters`);
+        assert.equal(error.cause.message, detail);
+        return true;
+    });
+});
+
+test("question diagnostics are normalized and bounded without changing the recovery identifier", async () => {
+    const questionNumber = `  42\n\t${"q".repeat(1000)}  `;
+    const hostileTarget = { ...target, questionNumber };
+
+    await assert.rejects(() => transferBacklogToReview(hostileTarget, "hard", {
+        ensureReview: async () => "added",
+        removeBacklog: async () => { throw new Error("disk full"); },
+    }), (error) => {
+        assert.ok(error instanceof BacklogTransferError);
+        assert.equal(error.questionNumber, questionNumber);
+        assert.match(error.message, /Review 42 q+/);
+        assert.doesNotMatch(error.message, /\s{2,}|[\r\n\t]/);
+        assert.ok(error.message.length <= 400, `message had ${error.message.length} characters`);
+        return true;
+    });
+
+    const emptyQuestion = new BacklogTransferError(" \n\t ", new Error("disk full"));
+    assert.match(emptyQuestion.message, /Review Unknown question was scheduled/);
+    assert.equal(emptyQuestion.questionNumber, " \n\t ");
 });

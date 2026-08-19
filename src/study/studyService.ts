@@ -61,6 +61,7 @@ export class StudyService {
         const now = this.options.clock();
         const settings = this.getSettingsSnapshot(now);
         const state = await this.options.storage.transaction((draft) => {
+            this.refreshBacklogSnapshots(draft, now);
             this.materializeDailyPlan(draft, now, settings);
             return draft;
         });
@@ -165,6 +166,34 @@ export class StudyService {
         }
     }
 
+    private refreshBacklogSnapshots(state: StudyStateFile, now: Date): void {
+        const updatedAt = now.toISOString();
+        for (const record of Object.values(state.backlog)) {
+            const problem = this.options.resolveProblem(record.questionNumber, record.problem);
+            if (this.areProblemSnapshotsEqual(record.problem, problem)) {
+                continue;
+            }
+            state.backlog[record.questionNumber] = {
+                ...record,
+                problem,
+                updatedAt,
+            };
+        }
+    }
+
+    private areProblemSnapshotsEqual(left: StudyProblemSnapshot, right: StudyProblemSnapshot): boolean {
+        return left.name === right.name
+            && left.difficulty === right.difficulty
+            && left.url === right.url
+            && this.areStringArraysEqual(left.tags, right.tags)
+            && this.areStringArraysEqual(left.sheets, right.sheets)
+            && this.areStringArraysEqual(left.companies ?? [], right.companies ?? []);
+    }
+
+    private areStringArraysEqual(left: string[], right: string[]): boolean {
+        return left.length === right.length && left.every((value, index) => value === right[index]);
+    }
+
     private buildSections(
         state: StudyStateFile,
         reviewItems: ReviewItem[],
@@ -264,6 +293,7 @@ export class StudyService {
             url: record.problem.url,
             tags: record.problem.tags,
             sheets: record.problem.sheets,
+            companies: record.problem.companies ?? [],
             addedAt: record.addedAt,
             plannedForToday: todayPlan.has(record.questionNumber),
             matchesActiveFilters: this.matchesActiveFilters(record, settings),
@@ -274,21 +304,22 @@ export class StudyService {
     private resolveProblemFromExtension(questionNumber: string, existing?: StudyProblemSnapshot): StudyProblemSnapshot {
         const { explorerNodeManager } = require("../explorer/explorerNodeManager");
         const problem = explorerNodeManager.getNodeById(questionNumber);
+        const currentUrl = this.getProblemUrl(questionNumber);
         return {
             name: problem?.name ?? existing?.name ?? `Problem ${questionNumber}`,
             difficulty: problem?.difficulty ?? existing?.difficulty ?? "",
-            url: existing?.url ?? this.getProblemUrl(questionNumber),
+            url: currentUrl || existing?.url || "",
             tags: problem?.tags ?? existing?.tags ?? [],
-            sheets: this.getProblemSheets(questionNumber, existing?.sheets ?? []),
+            sheets: this.getProblemSheets(questionNumber),
+            companies: problem?.companies ?? existing?.companies ?? [],
         };
     }
 
-    private getProblemSheets(questionNumber: string, fallback: string[]): string[] {
+    private getProblemSheets(questionNumber: string): string[] {
         const { extractArrayElements, getSheets } = require("../utils/dataUtils");
-        const matchingSheets = Object.entries(getSheets())
+        return Object.entries(getSheets())
             .filter(([, sheet]) => extractArrayElements(sheet as Record<string, string[]>).includes(questionNumber))
             .map(([sheetName]) => sheetName);
-        return matchingSheets.length > 0 ? matchingSheets : fallback;
     }
 
     private getProblemUrl(questionNumber: string): string {

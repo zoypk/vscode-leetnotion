@@ -4,9 +4,8 @@ import { explorerNodeManager } from "../explorer/explorerNodeManager";
 import { defaultProblem, IProblem } from "../shared";
 import { ReviewItem } from "../reviews/types";
 import { SessionToken, sessionState } from "../sessions/sessionState";
-import { StudyBacklogItem } from "./types";
+import { StudyBacklogItem, StudySectionId, StudyTodayItem } from "./types";
 import { studyService } from "./studyService";
-import { selectNextStudySessionItem } from "./sessionSelection";
 import { selectNextStudySessionItem } from "./sessionSelection";
 
 export async function startStudySession(sessionToken: SessionToken): Promise<void> {
@@ -14,10 +13,12 @@ export async function startStudySession(sessionToken: SessionToken): Promise<voi
         return;
     }
 
-    const nextItem = await studyService.getNextTodayItem();
+    const sections = await studyService.refresh();
     if (!sessionState.owns(sessionToken)) {
         return;
     }
+    const todaySection = sections.find((section) => section.id === StudySectionId.Today);
+    const nextItem = selectNextStudySessionItem((todaySection?.items ?? []) as StudyTodayItem[]);
     if (!nextItem) {
         await sessionState.complete(sessionToken);
         void vscode.window.showInformationMessage("No study items for today.");
@@ -75,11 +76,13 @@ function getProblem(target: ReviewItem | StudyBacklogItem): IProblem {
     }
 
     const tags = "tags" in target ? target.tags : [];
+    const companies = "companies" in target ? target.companies : [];
     return {
         ...defaultProblem,
         id: target.questionNumber,
         name: target.name,
         difficulty: target.difficulty,
         tags,
+        companies,
     };
 }
