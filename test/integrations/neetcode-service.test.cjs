@@ -5,7 +5,10 @@ const path = require("node:path");
 const test = require("node:test");
 
 const compiledRoot = path.resolve(__dirname, "../../out-test");
-const { NeetCodeDataStore } = require(path.join(compiledRoot, "integrations/neetcode/dataStore.js"));
+const {
+    installedNeetCodeDataStore,
+    NeetCodeDataStore,
+} = require(path.join(compiledRoot, "integrations/neetcode/dataStore.js"));
 
 function writeJson(root, relativePath, value) {
     const target = path.join(root, relativePath);
@@ -77,6 +80,12 @@ test("loads the metadata index once and lazily caches only selected content", ()
     } finally {
         fs.rmSync(root, { recursive: true, force: true });
     }
+});
+
+test("resolves checked-in installed data from unbundled test output", () => {
+    const index = installedNeetCodeDataStore.getIndex();
+    assert.equal(index.problemCount, 767);
+    assert.equal(index.source.revision, "62d62811315e676691c4b8fef58af73494d58b79");
 });
 
 test("reports actionable installed-data diagnostics for missing, malformed, and unsafe content", () => {

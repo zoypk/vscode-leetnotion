@@ -1,7 +1,11 @@
 import { readFileSync, readdirSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { COMPANY_PRODUCTION_MINIMUMS, validateNeetCodeDataset } from "./lib/data-validation.mjs";
+import {
+    COMPANY_PRODUCTION_MINIMUMS,
+    validateJitLearningDataset,
+    validateNeetCodeDataset,
+} from "./lib/data-validation.mjs";
 import { validatePublishedCompanyData } from "./lib/company-publication.mjs";
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -32,3 +36,9 @@ console.log(
     `NeetCode data valid: ${neetCodeStats.problemCount} problems, ${neetCodeStats.contentFileCount} content files, `
     + `${neetCodeStats.neetcode150Count} NeetCode 150 and ${neetCodeStats.blind75Count} Blind 75 entries.`,
 );
+
+const jitStats = validateJitLearningDataset(
+    readJson("data/jit-learning-resources.json"),
+    neetCodeStats.titleSlugs,
+);
+console.log(`JIT learning resources valid: ${jitStats.problemCount} problems with source-independent provenance.`);

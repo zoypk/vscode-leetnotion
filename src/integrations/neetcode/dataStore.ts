@@ -32,11 +32,12 @@ export class NeetCodeDataStore {
                 "jit-learning-resources.json",
                 "JIT learning-resource dataset",
             );
-            if (!this.learningDataset.problems
+            if (this.learningDataset.schemaVersion !== 1
+                || !this.learningDataset.problems
                 || typeof this.learningDataset.problems !== "object") {
                 throw this.invalidDataError(
                     "jit-learning-resources.json",
-                    "expected a problems object",
+                    "expected schemaVersion 1 with a problems object",
                 );
             }
         }
@@ -97,4 +98,12 @@ export class NeetCodeDataStore {
     }
 }
 
-export const installedNeetCodeDataStore = new NeetCodeDataStore(path.resolve(__dirname, "../../../data"));
+function resolveInstalledDataRoot(): string {
+    const bundledDataRoot = path.resolve(__dirname, "../../data");
+    const compiledModuleDataRoot = path.resolve(__dirname, "../../../data");
+    return fs.existsSync(path.join(bundledDataRoot, "neetcode-index.json"))
+        ? bundledDataRoot
+        : compiledModuleDataRoot;
+}
+
+export const installedNeetCodeDataStore = new NeetCodeDataStore(resolveInstalledDataRoot());

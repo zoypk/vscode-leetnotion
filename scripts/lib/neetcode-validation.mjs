@@ -1,4 +1,5 @@
 const SHA_PATTERN = /^[0-9a-f]{40}$/i;
+const SHA256_PATTERN = /^[0-9a-f]{64}$/i;
 const CONTENT_PATH_PATTERN = /^neetcode-content\/(\d+)\.json$/;
 const HTTPS_URL_PATTERN = /^https:\/\//;
 const FORBIDDEN_INDEX_FIELDS = ["articleMarkdown", "hintMarkdown", "learningMarkdown"];
@@ -141,5 +142,75 @@ export function validateNeetCodeDataset(index, contents) {
         blind75Count,
         titleSlugs,
     };
+}
+
+export function validateJitLearningDataset(dataset, knownTitleSlugs) {
+    const errors = [];
+    const problems = dataset?.problems && typeof dataset.problems === "object" && !Array.isArray(dataset.problems)
+        ? dataset.problems
+        : {};
+    const problemEntries = Object.entries(problems);
+    const sourceIndexes = new Set();
+
+    if (dataset?.schemaVersion !== 1) {
+        errors.push("schemaVersion must be 1");
+    }
+    if (!nonemptyString(dataset?.source?.name)
+        || dataset.source.name.includes("/")
+        || dataset.source.name.includes("\\")) {
+        errors.push("source.name must be a nonempty basename");
+    }
+    if (!SHA256_PATTERN.test(dataset?.source?.sha256 || "")) {
+        errors.push("source.sha256 must be a 64-character SHA-256 digest");
+    }
+    if (dataset?.problemCount !== 150 || problemEntries.length !== 150) {
+        errors.push(`problem count must be 150 (metadata ${dataset?.problemCount}, actual ${problemEntries.length})`);
+    }
+
+    for (const [titleSlug, problem] of problemEntries) {
+        const prefix = `JIT problem ${titleSlug}`;
+        if (!problem || typeof problem !== "object" || Array.isArray(problem)) {
+            errors.push(`${prefix} must be an object`);
+            continue;
+        }
+        if (problem.titleSlug !== titleSlug) {
+            errors.push(`${prefix} titleSlug does not match its record key`);
+        }
+        if (!knownTitleSlugs?.has(titleSlug)) {
+            errors.push(`${prefix} is not present in the NeetCode index`);
+        }
+        if (!Number.isInteger(problem.sourceIndex) || problem.sourceIndex < 1 || problem.sourceIndex > 150) {
+            errors.push(`${prefix} sourceIndex must be an integer from 1 through 150`);
+        } else if (sourceIndexes.has(problem.sourceIndex)) {
+            errors.push(`${prefix} duplicates sourceIndex ${problem.sourceIndex}`);
+        } else {
+            sourceIndexes.add(problem.sourceIndex);
+        }
+        for (const field of ["title", "titleSlug", "section", "difficulty", "markdown"]) {
+            if (!nonemptyString(problem[field])) {
+                errors.push(`${prefix} ${field} must be nonempty`);
+            }
+        }
+        if (!new Set(["Easy", "Medium", "Hard"]).has(problem.difficulty)) {
+            errors.push(`${prefix} difficulty must be Easy, Medium, or Hard`);
+        }
+        for (const link of (problem.markdown || "").matchAll(/\[[^\]]+\]\(([^)]+)\)/g)) {
+            if (!HTTPS_URL_PATTERN.test(link[1])) {
+                errors.push(`${prefix} contains non-HTTPS learning link ${link[1]}`);
+            }
+        }
+        if (/http:\/\//i.test(problem.markdown || "")) {
+            errors.push(`${prefix} contains an insecure HTTP URL`);
+        }
+    }
+
+    for (let index = 1; index <= 150; index += 1) {
+        if (!sourceIndexes.has(index)) {
+            errors.push(`sourceIndex ${index} is missing`);
+        }
+    }
+
+    fail("JIT learning resources", errors);
+    return { problemCount: problemEntries.length };
 }
 

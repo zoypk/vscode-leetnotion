@@ -50,7 +50,11 @@ export interface JitLearningProblemMetadata {
 }
 
 export interface JitLearningDataset {
-    source: string;
+    schemaVersion: 1;
+    source: {
+        name: string;
+        sha256: string;
+    };
     problemCount: number;
     problems: Record<string, JitLearningProblemMetadata>;
 }
