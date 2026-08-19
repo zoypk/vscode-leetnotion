@@ -72,6 +72,7 @@ function sectionsWithToday(items) {
 function loadSession(studyService) {
     const opened = [];
     const messages = [];
+    const token = { kind: "study", id: "study-test" };
     const originalLoad = Module._load;
     delete require.cache[sessionModulePath];
     Module._load = function(request, parent, isMain) {
@@ -90,13 +91,22 @@ function loadSession(studyService) {
         if (request === "../shared") {
             return { defaultProblem: {} };
         }
+        if (request === "../sessions/sessionState") {
+            return {
+                sessionState: {
+                    owns: (candidate) => candidate === token,
+                    complete: async () => undefined,
+                    cancel: async () => undefined,
+                },
+            };
+        }
         if (request === "./studyService") {
             return { studyService };
         }
         return originalLoad.call(this, request, parent, isMain);
     };
     try {
-        return { session: require(sessionModulePath), opened, messages };
+        return { session: require(sessionModulePath), opened, messages, token };
     } finally {
         Module._load = originalLoad;
     }
@@ -111,7 +121,7 @@ test("cold command-palette start materializes today's plan before selecting", as
         },
     });
 
-    await fixture.session.startStudySession();
+    await fixture.session.startStudySession(fixture.token);
 
     assert.equal(refreshes, 1);
     assert.deepEqual(fixture.opened, [{ id: "101" }]);
@@ -150,7 +160,7 @@ test("date-rollover start materializes today with real storage and selects from 
     storage.transactions = 0;
     const fixture = loadSession(service);
 
-    await fixture.session.startStudySession();
+    await fixture.session.startStudySession(fixture.token);
 
     assert.deepEqual(storage.state.dailyPlans["2026-08-20"], ["202"]);
     assert.equal(storage.transactions, 1);
