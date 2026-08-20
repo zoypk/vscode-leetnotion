@@ -187,6 +187,32 @@ export function validateJitLearningDataset(dataset, knownTitleSlugs) {
     if (!SHA256_PATTERN.test(dataset?.source?.sha256 || "")) {
         errors.push("source.sha256 must be a 64-character SHA-256 digest");
     }
+    const hasClassification = dataset?.classificationSource !== undefined
+        || dataset?.priorityLegend !== undefined
+        || dataset?.classifiedArtifactCount !== undefined
+        || dataset?.jitVideoUseCount !== undefined
+        || dataset?.takeUforwardCount !== undefined;
+    if (hasClassification) {
+        if (!nonemptyString(dataset?.classificationSource?.name)
+            || dataset.classificationSource.name.includes("/")
+            || dataset.classificationSource.name.includes("\\")) {
+            errors.push("classificationSource.name must be a nonempty basename");
+        }
+        if (!SHA256_PATTERN.test(dataset?.classificationSource?.sha256 || "")) {
+            errors.push("classificationSource.sha256 must be a 64-character SHA-256 digest");
+        }
+        for (const priority of ["M", "S", "C", "R"]) {
+            if (!nonemptyString(dataset?.priorityLegend?.[priority]?.meaning)
+                || !nonemptyString(dataset?.priorityLegend?.[priority]?.action)) {
+                errors.push(`priorityLegend.${priority} must contain nonempty meaning and action`);
+            }
+        }
+        for (const field of ["classifiedArtifactCount", "jitVideoUseCount", "takeUforwardCount"]) {
+            if (!Number.isInteger(dataset?.[field]) || dataset[field] < 0) {
+                errors.push(`${field} must be a nonnegative integer`);
+            }
+        }
+    }
     if (dataset?.problemCount !== 250 || problemEntries.length !== 250) {
         errors.push(`problem count must be 250 (metadata ${dataset?.problemCount}, actual ${problemEntries.length})`);
     }
@@ -231,6 +257,24 @@ export function validateJitLearningDataset(dataset, knownTitleSlugs) {
     for (let index = 1; index <= 250; index += 1) {
         if (!sourceIndexes.has(index)) {
             errors.push(`sourceIndex ${index} is missing`);
+        }
+    }
+
+    if (hasClassification) {
+        const allMarkdown = problemEntries.map(([, problem]) => problem?.markdown || "").join("\n");
+        const priorityLines = Array.from(allMarkdown.matchAll(/^`(?:M\*?|S|C|R|Direct attempt)`\s/gm)).length;
+        const takeUforwardLines = Array.from(allMarkdown.matchAll(/^`(?:M|S|C|R)`\s+🎬\s+\*\*takeUforward anchor\*\*/gm)).length;
+        if (takeUforwardLines !== dataset.takeUforwardCount) {
+            errors.push(`takeUforwardCount metadata ${dataset.takeUforwardCount} does not match ${takeUforwardLines} artifacts`);
+        }
+        if (priorityLines - takeUforwardLines !== dataset.classifiedArtifactCount) {
+            errors.push(`classifiedArtifactCount metadata ${dataset.classifiedArtifactCount} does not match ${priorityLines - takeUforwardLines} artifacts`);
+        }
+        if (dataset.takeUforwardCount !== 113) {
+            errors.push(`takeUforwardCount must be 113, found ${dataset.takeUforwardCount}`);
+        }
+        if (dataset.jitVideoUseCount !== 235) {
+            errors.push(`jitVideoUseCount must be 235, found ${dataset.jitVideoUseCount}`);
         }
     }
 

@@ -1212,6 +1212,7 @@
         "sync:companies": "node ./scripts/sync-company-data.mjs",
         "sync:neetcode": "tsc --module Node16 --moduleResolution Node16 --target ES2020 --esModuleInterop --skipLibCheck --allowJs --outDir ./out ./scripts/sync-neetcode-data.ts ./scripts/lib/sync-utils.mjs && node ./out/sync-neetcode-data.js",
         "import:jit-resources": "node ./scripts/import-jit-learning-resources.mjs",
+        "import:learning-priorities": "node ./scripts/apply-learning-priority-guide.mjs",
         "package": "node ./scripts/package-extension.mjs",
         "verify:vsix": "node ./scripts/verify-vsix.mjs",
         "build": "npm run package",

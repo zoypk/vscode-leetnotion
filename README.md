@@ -39,8 +39,11 @@ Maintainers can refresh and validate the snapshots with:
 npm run sync:companies
 npm run sync:neetcode
 npm run import:jit-resources -- "C:\path\to\resources.md"
+npm run import:learning-priorities -- "C:\path\to\combined-priority-guide.md"
 npm run validate:data
 ```
+
+The priority-guide import preserves each problem's existing JIT artifacts, classifies them as M/S/C/R, and maps the guide's takeUforward videos onto their NeetCode rows. In the problem preview, the attempt cue stays visible while the reveal and classified resources remain closed until requested.
 
 Generators validate complete outputs before publishing them. A failed refresh leaves the last valid installed generation in place.
 

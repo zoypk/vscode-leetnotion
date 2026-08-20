@@ -9,7 +9,9 @@ import { Category, IProblem } from "../shared";
 import { extractArrayElements, getSheets } from "../utils/dataUtils";
 import { ILeetCodeWebviewOption, LeetCodeWebview } from "./LeetCodeWebview";
 import { markdownEngine } from "./markdownEngine";
+import { parseLearningResources } from "./learningResources";
 import {
+    LearningResourcesPreviewContent,
     NeetCodePreviewContent,
     PreviewActionItem,
     PreviewDisclosure,
@@ -73,7 +75,7 @@ class LeetCodePreviewProvider extends LeetCodeWebview {
             cspSource: webview.cspSource,
             descriptionHtml: body,
             disclosures,
-            learningResourcesHtml: this.getLearningResourcesHtml(),
+            learningResources: this.getLearningResourcesContent(),
             linkActions: [linkAction],
             linksHtml: externalLinks,
             neetCode: this.getNeetCodeContent(),
@@ -211,9 +213,22 @@ class LeetCodePreviewProvider extends LeetCodeWebview {
             : undefined;
     }
 
-    private getLearningResourcesHtml(): string | undefined {
+    private getLearningResourcesContent(): LearningResourcesPreviewContent | undefined {
         const markdown = neetCodeService.getProblemMetadata(this.node)?.learningMarkdown;
-        return markdown ? markdownEngine.render(markdown) : undefined;
+        if (!markdown) {
+            return undefined;
+        }
+        const parsed = parseLearningResources(markdown);
+        return {
+            attemptHtml: markdownEngine.render(parsed.attemptMarkdown),
+            revealHtml: parsed.revealMarkdown ? markdownEngine.render(parsed.revealMarkdown) : undefined,
+            groups: parsed.groups.map((group) => ({
+                html: markdownEngine.render(group.markdown),
+                priority: group.priority,
+                title: group.title,
+            })),
+            returnHtml: parsed.returnMarkdown ? markdownEngine.render(parsed.returnMarkdown) : undefined,
+        };
     }
 
     private getSolutionsLink(url: string): string {

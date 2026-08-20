@@ -13,7 +13,12 @@ function problemModel(overrides = {}) {
             { title: "Companies", items: [{ id: "company-0", label: "Lowe's" }] },
             { title: "Sheets", items: [{ id: "sheet-0", label: "NeetCode 150" }] },
         ],
-        learningResourcesHtml: '<p><a href="https://example.com/learn">Guide</a></p>',
+        learningResources: {
+            attemptHtml: '<p><a href="https://example.com/attempt">Attempt cue</a></p>',
+            revealHtml: '<p><a href="https://example.com/reveal">Reveal</a></p>',
+            groups: [{ priority: "M", title: "Core anchor", html: '<p><a href="https://example.com/learn">Guide</a></p>' }],
+            returnHtml: "<p>Explain the invariant.</p>",
+        },
         linkActions: [{ id: "past-submissions", label: "Past Submissions" }],
         linksHtml: '<p><a href="https://leetcode.com/problems/two-sum/submissions/">Submissions</a></p>',
         neetCode: {
@@ -42,13 +47,13 @@ test("sanitizes every remote or imported preview fragment", () => {
     const payload = '<svg><script>alert(1)</script></svg><img src="javascript:alert(2)" onerror="alert(3)"><p>safe</p>';
     const html = renderProblemPreviewHtml(problemModel({
         descriptionHtml: payload,
-        learningResourcesHtml: payload,
+        learningResources: { attemptHtml: payload, revealHtml: payload, groups: [{ priority: "M", title: "Core", html: payload }], returnHtml: payload },
         linksHtml: payload,
         neetCode: { articleHtml: payload, hintHtml: payload, linksHtml: payload, metadataHtml: payload },
         overviewHtml: payload,
     }));
     assert.doesNotMatch(html, /<script>alert|<svg|javascript:|onerror=/i);
-    assert.equal((html.match(/<p>safe<\/p>/g) || []).length, 8);
+    assert.equal((html.match(/<p>safe<\/p>/g) || []).length, 11);
 });
 
 test("uses valid disclosures and covers each long-form region with the 68ch reading column", () => {
@@ -65,6 +70,10 @@ test("uses valid disclosures and covers each long-form region with the 68ch read
     }
     assert.match(html, /\.reading-column \{ width: min\(100%, 68ch\); margin-inline: auto; \}/);
     assert.match(html, /\.reading-column pre, \.reading-column table \{[^}]*overflow-x: auto;/);
+    assert.match(html, /<h3 id="attempt-first">Attempt first<\/h3>/);
+    assert.doesNotMatch(html, /<details[^>]*\sopen(?:\s|>)/);
+    assert.match(html, /<summary><strong>Reveal after an honest attempt<\/strong><\/summary>/);
+    assert.match(html, /<summary><strong>M — Core anchor<\/strong><\/summary>/);
 });
 
 test("binds all executable and style content to the matching nonce and strict CSP", () => {

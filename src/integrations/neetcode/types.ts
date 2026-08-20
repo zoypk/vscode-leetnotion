@@ -56,5 +56,13 @@ export interface JitLearningDataset {
         sha256: string;
     };
     problemCount: number;
+    classificationSource?: {
+        name: string;
+        sha256: string;
+    };
+    priorityLegend?: Record<"M" | "S" | "C" | "R", { meaning: string; action: string }>;
+    classifiedArtifactCount?: number;
+    jitVideoUseCount?: number;
+    takeUforwardCount?: number;
     problems: Record<string, JitLearningProblemMetadata>;
 }

@@ -38,14 +38,31 @@ test("checked-in JIT data carries independently verifiable provenance without th
     );
     assert.equal(dataset.problemCount, 250);
     assert.equal(Object.keys(dataset.problems).length, 250);
+    assert.equal(dataset.classificationSource.name, "NeetCode-250-combined-JIT-takeUforward-priority-guide.md");
+    assert.equal(dataset.classificationSource.sha256, "3E91C62CBC7B620055495291049932DAAA9151E85705928E7272BEB41A6B0347");
+    assert.equal(dataset.classifiedArtifactCount, 1089);
+    assert.equal(dataset.jitVideoUseCount, 235);
+    assert.equal(dataset.takeUforwardCount, 113);
+    assert.deepEqual(Object.keys(dataset.priorityLegend), ["M", "S", "C", "R"]);
     assert.ok(dataset.problems["concatenation-of-array"]);
     assert.equal(
         Object.values(dataset.problems).reduce(
             (count, problem) => count + Array.from(problem.markdown.matchAll(/\]\(https:\/\//g)).length,
             0,
         ),
-        1028,
+        1141,
     );
+    assert.equal(
+        Object.values(dataset.problems).filter((problem) => problem.markdown.includes("**takeUforward anchor**")).length,
+        113,
+    );
+    const priorityCounts = { M: 0, "M*": 0, S: 0, C: 0, R: 0, "Direct attempt": 0 };
+    for (const problem of Object.values(dataset.problems)) {
+        for (const match of problem.markdown.matchAll(/^`(M\*?|S|C|R|Direct attempt)`\s/gm)) {
+            priorityCounts[match[1]] += 1;
+        }
+    }
+    assert.deepEqual(priorityCounts, { M: 424, "M*": 8, S: 226, C: 515, R: 19, "Direct attempt": 10 });
 });
 
 test("source-independent validator accepts the checked-in records and rejects malformed provenance and content", async () => {

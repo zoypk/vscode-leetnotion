@@ -17,12 +17,25 @@ export interface NeetCodePreviewContent {
     readonly metadataHtml?: string;
 }
 
+export interface LearningResourcePreviewGroup {
+    readonly html: string;
+    readonly priority: "M" | "S" | "C" | "R";
+    readonly title: string;
+}
+
+export interface LearningResourcesPreviewContent {
+    readonly attemptHtml: string;
+    readonly groups: readonly LearningResourcePreviewGroup[];
+    readonly revealHtml?: string;
+    readonly returnHtml?: string;
+}
+
 export interface ProblemPreviewHtmlModel {
     readonly actionScriptUri: string;
     readonly cspSource: string;
     readonly descriptionHtml: string;
     readonly disclosures: readonly PreviewDisclosure[];
-    readonly learningResourcesHtml?: string;
+    readonly learningResources?: LearningResourcesPreviewContent;
     readonly linkActions?: readonly PreviewActionItem[];
     readonly linksHtml: string;
     readonly neetCode?: NeetCodePreviewContent;
@@ -47,7 +60,7 @@ export function renderProblemPreviewHtml(model: ProblemPreviewHtmlModel): string
     const quickNavItems = [
         quickNavLink("overview", "Overview"),
         quickNavLink("description", "Description"),
-        model.learningResourcesHtml ? quickNavLink("learning-resources", "Learning resources") : "",
+        model.learningResources ? quickNavLink("learning-resources", "Learning guide") : "",
         hasNeetCode ? quickNavLink("neetcode", "NeetCode") : "",
         quickNavLink("links", "Links"),
     ].filter(Boolean).join("");
@@ -76,7 +89,7 @@ export function renderProblemPreviewHtml(model: ProblemPreviewHtmlModel): string
         <hr>
         ${sanitizeHtml(model.descriptionHtml)}
     </section>
-    ${renderLearningResources(model.learningResourcesHtml)}
+    ${renderLearningResources(model.learningResources)}
     ${renderNeetCode(model.neetCode)}
     <section id="links"><hr>${sanitizeHtml(model.linksHtml)}${renderLinkActions(model.linkActions)}</section>
     ${solveButton}
@@ -120,11 +133,20 @@ function renderDisclosure(disclosure: PreviewDisclosure): string {
     return `<section id="${escapeAttribute(slug)}"><details><summary><strong>${escapeHtml(disclosure.title)}</strong></summary>${items}</details></section>`;
 }
 
-function renderLearningResources(html: string | undefined): string {
-    if (!html) {
+function renderLearningResources(content: LearningResourcesPreviewContent | undefined): string {
+    if (!content) {
         return "";
     }
-    return `<section id="learning-resources" class="reading-column"><hr><details open><summary><strong>Learning resources</strong></summary>${sanitizeHtml(html)}</details></section>`;
+    const reveal = content.revealHtml
+        ? `<details class="learning-stage"><summary><strong>Reveal after an honest attempt</strong></summary>${sanitizeHtml(content.revealHtml)}</details>`
+        : "";
+    const groups = content.groups.map((group) =>
+        `<details class="learning-stage learning-priority-${group.priority.toLowerCase()}"><summary><strong>${escapeHtml(group.priority)} — ${escapeHtml(group.title)}</strong></summary>${sanitizeHtml(group.html)}</details>`,
+    ).join("\n");
+    const returnCheckpoint = content.returnHtml
+        ? `<details class="learning-stage"><summary><strong>Return checkpoint</strong></summary>${sanitizeHtml(content.returnHtml)}</details>`
+        : "";
+    return `<section id="learning-resources" class="reading-column"><hr><h2>Learning guide</h2><section aria-labelledby="attempt-first"><h3 id="attempt-first">Attempt first</h3>${sanitizeHtml(content.attemptHtml)}</section>${reveal}${groups}${returnCheckpoint}</section>`;
 }
 
 function renderNeetCode(content: NeetCodePreviewContent | undefined): string {
@@ -162,6 +184,8 @@ section { scroll-margin-top: 4rem; }
 .quick-nav a:hover { background: var(--vscode-button-secondaryHoverBackground, rgba(128,128,128,.28)); }
 .action-link { appearance: none; border: 0; padding: 0; color: var(--vscode-textLink-foreground); background: transparent; cursor: pointer; font: inherit; }
 .action-link:hover { text-decoration: underline; }
+.learning-stage { margin-block: .6rem; }
+.learning-stage summary { cursor: pointer; }
 #solve { position: fixed; right: 1rem; bottom: 1rem; border: 0; margin: 1rem 0; padding: .3rem 1rem; color: var(--vscode-button-foreground); background: var(--vscode-button-background); }
 #solve:hover { background: var(--vscode-button-hoverBackground); }
 #neetcode-hints details.hint-accordion { margin-bottom: 0; }

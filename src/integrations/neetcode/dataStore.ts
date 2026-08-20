@@ -186,6 +186,29 @@ export class NeetCodeDataStore {
             throw this.invalidDataError(relativePath, "expected schemaVersion 1 with source name/hash and a problems object");
         }
 
+        if (value.classificationSource !== undefined
+            || value.priorityLegend !== undefined
+            || value.classifiedArtifactCount !== undefined
+            || value.jitVideoUseCount !== undefined
+            || value.takeUforwardCount !== undefined) {
+            if (!isRecord(value.classificationSource)
+                || !isNonemptyString(value.classificationSource.name)
+                || value.classificationSource.name.includes("/")
+                || value.classificationSource.name.includes("\\")
+                || !SHA256_PATTERN.test(String(value.classificationSource.sha256 || ""))
+                || !isRecord(value.priorityLegend)
+                || !["M", "S", "C", "R"].every((priority) => {
+                    const entry = value.priorityLegend[priority];
+                    return isRecord(entry) && isNonemptyString(entry.meaning) && isNonemptyString(entry.action);
+                })
+                || !Number.isInteger(value.classifiedArtifactCount)
+                || Number(value.classifiedArtifactCount) < 0
+                || value.jitVideoUseCount !== 235
+                || value.takeUforwardCount !== 113) {
+                throw this.invalidDataError(relativePath, "classification metadata is incomplete or malformed");
+            }
+        }
+
         const entries = Object.entries(value.problems);
         const sourceIndexes = new Set<number>();
         for (const [titleSlug, rawProblem] of entries) {
